@@ -12,13 +12,17 @@
 2. [Authentication](#2-authentication)
 3. [Public API Surface](#3-public-api-surface)
 4. [Event Model](#4-event-model)
-5. [Event Recorders](#5-event-recorders)
-6. [Ingestion API Endpoints](#6-ingestion-api-endpoints)
+5. [Event Types & Payload Schemas](#5-event-types--payload-schemas)
+6. [API Endpoints](#6-api-endpoints)
 7. [Delivery & Reliability](#7-delivery--reliability)
 8. [Error Handling](#8-error-handling)
 9. [Privacy & Compliance Defaults](#9-privacy--compliance-defaults)
 10. [Packaging & Distribution](#10-packaging--distribution)
-11. [Appendix: Full Event Catalogue](#appendix-full-event-catalogue)
+11. [Event Management](#11-event-management)
+12. [Patient Management](#12-patient-management)
+13. [Patient Token](#13-patient-token)
+14. [Future Features](#14-future-features)
+15. [Appendix: Full Event Catalogue](#appendix-full-event-catalogue)
 
 ---
 
@@ -58,12 +62,12 @@ Authentication reuses the existing API key infrastructure: keys are created via 
 ```python
 from enum import StrEnum
 
-class Environment(StrEnum):
+class OliraEnv(StrEnum):
     PRODUCTION  = "production"
     DEVELOPMENT = "development"
 ```
 
-`Environment.PRODUCTION` is the default. Use `Environment.DEVELOPMENT` for local development, CI, and staging systems — Olira will route these events away from live Patient State.
+`OliraEnv.PRODUCTION` is the default. Use `OliraEnv.DEVELOPMENT` for local development, CI, and staging systems — Olira will route these events away from live Patient State.
 
 ---
 
@@ -73,31 +77,62 @@ class Environment(StrEnum):
 
 ```python
 import olira
+from olira import OliraEventType, OliraTrace
 
 # Minimal — only the API key is required
 olira.init(api_key="olira_prod_...")   # or set OLIRA_API_KEY env var
 
-# All calls are typed — no raw event name strings
-olira.track_symptom_esas(subject_id="p_123", symptoms=[...])
-olira.track_lab_results(subject_id="p_456", results=[...])
+# Minimal log — payload is a free-form dict
+olira.log(
+    event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+    patient_id="p_123",
+    payload={"symptoms": [{"name": "pain", "score": 4}], "total_score": 4},
+)
+
+# With trace (links event to an internal Olira object)
+olira.log(
+    event_type=OliraEventType.CONVERSATION_COMPLETED,
+    patient_id="p_123",
+    trace=OliraTrace(object_type="conversation", object_id="conv_789"),
+    payload={"duration_seconds": 142},
+)
+
 olira.flush()
+```
+
+Pydantic helpers remain exported for customers who want structured payload construction with client-side validation:
+
+```python
+from olira import EsasItem
+
+payload = {
+    "symptoms": [EsasItem(name="pain", score=4).model_dump()],
+    "total_score": 4,
+}
+olira.log(event_type=OliraEventType.SYMPTOM_ESAS_REPORT, patient_id="p_123", payload=payload)
 ```
 
 Optional `init` parameters:
 
 | Parameter      | Default                       | Why you'd set it                                                                                                                                                                                        |
 | -------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `environment`  | `Environment.PRODUCTION`      | Set to `Environment.DEVELOPMENT` when sending from non-production systems. Olira routes events server-side based on this value — no URL change required.                                                |
+| `environment`  | `OliraEnv.PRODUCTION`         | Set to `OliraEnv.DEVELOPMENT` when sending from non-production systems. Olira routes events server-side based on this value — no URL change required.                                                   |
 | `service_name` | `None`                        | Name of the calling service (e.g. `"emr-integration"`, `"care-api"`). Useful for attribution and debugging when multiple services in your stack write to Olira. Single-backend customers can omit this. |
 | `base_url`     | `"https://api.prod.olira.ai"` | Override only if directed by Olira support (e.g. pointing at a sandbox). Most customers never set this.                                                                                                 |
-| `async_flush`  | `True`                        | Set to `False` to disable the background thread and flush synchronously on every `track_*` call. Use in serverless / Lambda environments where a background thread cannot persist between invocations.  |
+| `async_flush`  | `True`                        | Set to `False` to disable the background thread and flush synchronously on every `log()` call. Use in serverless / Lambda environments where a background thread cannot persist between invocations.    |
 
 ### Explicit class (multi-tenant / dependency injection)
 
-`OliraClient` is the primary class for multi-tenant apps (different API keys per tenant) and for dependency injection in tests. The module-level `olira.*` functions proxy to a singleton `OliraClient` created by `init()`.
+`olira.init()` creates a single `OliraClient` and stores it as a module-level singleton. Every `olira.log()` call proxies to it. This covers the common case: a single-tenant backend service with one API key shared across the whole process.
+
+Use `OliraClient` directly when you need more than one instance:
+
+- **Multi-tenant** — different customers have different API keys, so you need one client per key.
+- **Dependency injection / testing** — pass the client into a class constructor so it can be swapped for a mock in tests, without touching global state.
+- **Different configurations** — e.g. one client with `async_flush=False` for a Lambda handler and another with a longer timeout for a batch job.
 
 ```python
-from olira import OliraClient, Environment
+from olira import OliraClient, OliraEnv, OliraEventType
 
 # Minimal
 client = OliraClient(api_key="olira_prod_...")
@@ -105,7 +140,7 @@ client = OliraClient(api_key="olira_prod_...")
 # With optional parameters
 client = OliraClient(
     api_key="olira_prod_...",
-    environment=Environment.DEVELOPMENT,  # isolate non-prod data from Patient State
+    environment=OliraEnv.DEVELOPMENT,  # isolate non-prod data from Patient State
     service_name="emr-service",  # tag which service is writing events
     batch_size=50,
     flush_interval=1.5,
@@ -116,22 +151,141 @@ client = OliraClient(
     async_flush=True,  # set False for serverless / Lambda
 )
 
-# Only event recorders — no track() on OliraClient
-client.track_lab_results(subject_id="p_456", results=[...])
+# Single event via log()
+client.log(
+    event_type=OliraEventType.LAB_RESULTS_RECEIVED,
+    patient_id="p_456",
+    payload={"results": [{"loinc_code": "718-7", "unit": "g/dL", "value_numeric": 11.2}]},
+)
 client.flush()
 ```
 
 ### Async Client
 
 ```python
-from olira import AsyncOliraClient
+from olira import AsyncOliraClient, OliraEventType
 
 async with AsyncOliraClient(api_key=...) as client:
-    await client.track_symptom_esas(subject_id="p_789", symptoms=[...])
+    await client.log(
+        event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+        patient_id="p_789",
+        payload={"symptoms": [{"name": "pain", "score": 3}], "total_score": 3},
+    )
     await client.flush()
 ```
 
-`AsyncOliraClient` provides the same event recorders as `OliraClient` with `async def` signatures. Included in v1.
+`AsyncOliraClient` provides the same `log()` / `log_batch()` interface as `OliraClient` with `async def` signatures. Included in v1.
+
+### Explicit batch — `log_batch()`
+
+For bulk submissions where the caller already has a list of events. Sends a single `/v1/events/batch` request directly, **bypassing the background queue**, and returns a `BatchResult`.
+
+```python
+from olira import EventSpec, BatchResult, OliraEventType
+
+result: BatchResult = olira.log_batch([
+    EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
+    EventSpec(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_2",
+              payload={"results": [...]}),
+    EventSpec(event_type=OliraEventType.SYMPTOM_ESAS_REPORT, patient_id="p_3",
+              payload={"symptoms": [...], "total_score": 5}),
+])
+
+print(result.accepted)           # int
+print(result.failed)             # int
+for err in result.errors:
+    print(err.index, err.code, err.message)
+```
+
+**Exported types:**
+
+| Name               | Kind      | Description                                                           |
+| ------------------ | --------- | --------------------------------------------------------------------- |
+| `OliraEventType`   | StrEnum   | 41 customer-facing event types (string values match common-models)    |
+| `OliraTrace`       | BaseModel | Links event to an internal Olira object (`object_type` + `object_id`) |
+| `EventSpec`        | dataclass | Lightweight event spec for `log_batch()`                              |
+| `BatchResult`      | dataclass | Result of `log_batch()` — `accepted`, `failed`, `errors`              |
+| `BatchError`       | dataclass | Per-event error from a batch response                                 |
+| `EventRecord`      | dataclass | Single event returned by `get_events()`                               |
+| `EventQueryResult` | dataclass | Result of `get_events()` — `events`, `total`, `has_more`              |
+| `DeleteResult`     | dataclass | Result of `delete_events()` — `deleted_count`, `patient_id`           |
+| `EsasItem`         | BaseModel | Pydantic helper for ESAS-r symptom payload construction               |
+| `LabResultItem`    | BaseModel | Pydantic helper for lab results payload construction                  |
+| `PerformingLab`    | BaseModel | Pydantic helper for performing lab in lab results                     |
+| `TimePeriod`       | BaseModel | ISO 8601 time range (start/end)                                       |
+
+### Event Management — `get_events()` and `delete_events()`
+
+Query and delete events for a patient. Requires an API key with the `sdk:event-management` scope (separate from the `sdk:event-log` scope used for ingestion).
+
+```python
+import olira
+from olira import OliraEventType
+
+olira.init(api_key="olira_mgmt_...")
+
+# Step 1 — preview what will be deleted
+events = olira.get_events(
+    patient_id="p_abc",
+    event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
+    from_timestamp="2026-01-01T00:00:00Z",
+    to_timestamp="2026-01-31T23:59:59Z",
+)
+print(f"Found {events.total} events")
+for e in events.events:
+    print(f"  {e.event_type}  occurred={e.timestamp}  ingested={e.ingested_at}")
+
+# Step 2 — delete once confirmed
+result = olira.delete_events(
+    patient_id="p_abc",
+    event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
+    from_timestamp="2026-01-01T00:00:00Z",
+    to_timestamp="2026-01-31T23:59:59Z",
+)
+print(f"Deleted {result.deleted_count} events")
+```
+
+**`get_events()` signature:**
+
+```python
+def get_events(
+    *,
+    patient_id: str,
+    event_type: OliraEventType | None = None,
+    from_timestamp: str | None = None,    # ISO 8601 — event occurrence time, inclusive
+    to_timestamp: str | None = None,      # ISO 8601 — event occurrence time, inclusive
+    ingested_after: str | None = None,    # ISO 8601 — server ingestion time, inclusive
+    ingested_before: str | None = None,   # ISO 8601 — server ingestion time, inclusive
+    limit: int = 100,
+    offset: int = 0,
+) -> EventQueryResult
+```
+
+**`delete_events()` signature:**
+
+```python
+def delete_events(
+    *,
+    patient_id: str,
+    event_type: OliraEventType | None = None,
+    from_timestamp: str | None = None,
+    to_timestamp: str | None = None,
+    ingested_after: str | None = None,
+    ingested_before: str | None = None,
+    event_ids: list[str] | None = None,   # delete specific events by event_id UUID4
+) -> DeleteResult
+```
+
+**Validation rule:** at least one of `event_type`, a timestamp filter, or `event_ids` must be provided. Calling `delete_events(patient_id=...)` with no other arguments raises `ValidationError` — this prevents accidental deletion of an entire patient's event history.
+
+**Filter axes:**
+
+| Filter param                    | Filters on              | Use case                                      |
+| ------------------------------- | ----------------------- | --------------------------------------------- |
+| `from_timestamp` / `to_timestamp` | `EventLog.timestamp`  | Delete events where the thing *occurred* in a date range |
+| `ingested_after` / `ingested_before` | `EventLog.ingested_at` | Delete everything sent to Olira in a bad data-load window |
+
+When both axes are provided they are ANDed.
 
 ---
 
@@ -139,19 +293,48 @@ async with AsyncOliraClient(api_key=...) as client:
 
 ### Required Fields (every event)
 
-| Field        | Type  | Notes                                           |
-| ------------ | ----- | ----------------------------------------------- |
-| `event_name` | `str` | snake_case event type (see Appendix)            |
-| `subject_id` | `str` | Pseudonymous patient identifier — no direct PII |
+| Field        | Type             | Notes                                                                        |
+| ------------ | ---------------- | ---------------------------------------------------------------------------- |
+| `event_name` | `OliraEventType` | Derived from `OliraEventType.value`; customers pass `event_type=` to `log()` |
+| `patient_id` | `str`            | Your identifier for this patient — the `id` you supplied when creating the patient. See [Patient ID Resolution](#patient-id-resolution) below. |
 
 ### Optional Fields
 
-| Field             | Type              | Default              | Notes                                  |
-| ----------------- | ----------------- | -------------------- | -------------------------------------- |
-| `timestamp`       | ISO 8601 `str`    | Server time          | Client-provided timestamp              |
-| `properties`      | `dict[str, JSON]` | `{}`                 | Event payload                          |
-| `idempotency_key` | `str`             | Auto-generated UUID4 | Override to deduplicate retried events |
-| `event_id`        | `str`             | Auto-generated UUID4 | Client-generated event identifier      |
+| Field             | Type              | Default              | Notes                                   |
+| ----------------- | ----------------- | -------------------- | --------------------------------------- |
+| `timestamp`       | ISO 8601 `str`    | Server time          | Client-provided timestamp               |
+| `payload`         | `dict[str, JSON]` | `{}`                 | Free-form event payload                 |
+| `trace`           | `OliraTrace`      | `None`               | Links event to an internal Olira object |
+| `idempotency_key` | `str`             | Auto-generated UUID4 | See note below                          |
+| `event_id`        | `str`             | Auto-generated UUID4 | Client-generated event identifier       |
+
+#### `idempotency_key`
+
+The SDK auto-generates a UUID4 per event. **For `log()` users this field is invisible and irrelevant** — the background worker retries the same in-memory Event object (same key) automatically, so deduplication is handled transparently.
+
+**`log_batch()` callers must be mindful.** `log_batch()` bypasses the background queue — the caller owns the retry loop. If the process crashes after a failed send, the `EventSpec` objects are gone. Replaying from a persistent queue or DB constructs new `EventSpec` objects with new auto-generated keys, and the server will store duplicates.
+
+**Fix for replay scenarios:** derive a stable key from your source record so the same record always produces the same key across process restarts:
+
+```python
+client.log_batch([
+    EventSpec(
+        event_type=OliraEventType.LAB_RESULTS_RECEIVED,
+        patient_id="p_123",
+        payload={...},
+        idempotency_key=f"lab-result-{db_record.id}",  # stable, derived from source
+    ),
+])
+```
+
+Relevant for: outbox pattern, event replay pipeline, bulk historical backfill — any system that persists events to a queue or DB before sending and replays on failure. If you are not doing this, the auto-generated key is correct.
+
+### `OliraTrace` Fields
+
+| Field         | Type  | Notes                              |
+| ------------- | ----- | ---------------------------------- |
+| `object_type` | `str` | e.g. `"conversation"`, `"message"` |
+| `object_id`   | `str` | Internal Olira object ID           |
 
 ### Context Block (auto-injected by SDK)
 
@@ -168,22 +351,41 @@ async with AsyncOliraClient(api_key=...) as client:
 
 ### Wire Format (single event)
 
-> **Note:** Wire format is internal — SDK consumers use event recorders only. This section is documented for server implementers.
+**Minimal** — `olira.log(event_type=OliraEventType.USER_LOGIN, patient_id="p_abc")`:
 
 ```json
 {
-  "event_name": "symptom_esas_report",
-  "subject_id": "p_123_pseudo",
+  "event_name": "user_login",
+  "patient_id": "p_abc",
+  "event_id": "e1a2b3c4-...",
+  "idempotency_key": "c6f8b1...",
+  "payload": {},
+  "context": {
+    "environment": "production",
+    "service": "",
+    "sdk_version": "0.1.0",
+    "sdk_language": "python"
+  }
+}
+```
+
+`timestamp` is omitted when not supplied — the server uses ingestion time. `trace` is omitted when `None`.
+
+**With payload and trace** — `olira.log(event_type=OliraEventType.CONVERSATION_COMPLETED, patient_id="p_abc", payload={...}, trace=OliraTrace(...))`:
+
+```json
+{
+  "event_name": "conversation_completed",
+  "patient_id": "p_abc",
   "timestamp": "2026-02-26T08:15:00Z",
   "event_id": "e1a2b3c4-...",
   "idempotency_key": "c6f8b1...",
-  "properties": {
-    "symptoms": [
-      { "name": "pain", "score": 4 },
-      { "name": "nausea", "score": 2 }
-    ],
-    "total_score": 6,
-    "recall_period": "past_24h"
+  "payload": {
+    "duration_seconds": 142
+  },
+  "trace": {
+    "object_type": "conversation",
+    "object_id": "conv_789"
   },
   "context": {
     "environment": "production",
@@ -194,9 +396,44 @@ async with AsyncOliraClient(api_key=...) as client:
 }
 ```
 
-### subject_id Validation
+`payload` maps directly to the `payload` argument of `log()`. `event_id` and `idempotency_key` are auto-generated UUID4s.
 
-The SDK raises `olira.ValidationError` before any network call if `subject_id`:
+### How SDK events map to internal EventLog documents
+
+The ingestion endpoint translates wire fields into the internal `EventLog` document schema. The mapping is not 1-to-1:
+
+| SDK wire field    | `EventLog` field  | Notes                                                                                                                     |
+| ----------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `event_name`      | `type`            | Ingestion endpoint maps the string value to the `EventLogType` enum                                                       |
+| `patient_id`      | `user_id`         | Resolved server-side via `PatientUser._id` (ObjectId) lookup scoped to the calling organisation |
+| `payload`         | `payload`         | Direct pass-through                                                                                                       |
+| `trace`           | `trace`           | Direct; `object_type` string is mapped to `ObjectType` enum                                                               |
+| `timestamp`       | `timestamp`       | Event occurrence time. Client-provided; server substitutes ingestion time when absent (see caveat below)                  |
+| `event_id`        | `event_id`        | Customer-facing UUID4. Persisted by the ingestion endpoint. Stable identifier for targeted `delete_events(event_ids=...)` |
+| `idempotency_key` | _(not persisted)_ | `EventLogBase` currently has no `idempotency_key` field — server-side deduplication is not yet implemented                |
+| _(server-set)_    | `ingested_at`     | Server ingestion timestamp. Always set at insert time; never accepted from the wire payload                               |
+
+The `EventLog` document gets a MongoDB `_id` (ObjectId) assigned by Beanie on insert. This is the server's internal record identifier and is never exposed in the public SDK API. Use `event_id` to reference events externally.
+
+**`timestamp` caveat:** `timestamp` is the event occurrence time (when the thing happened in the real world). If the SDK caller does not provide it, the server falls back to ingestion time — so `timestamp` and `ingested_at` will be identical. Use `ingested_at` in `get_events()` / `delete_events()` filters when you want to target events by when they were *received*, not when they *occurred*.
+
+### Patient ID Resolution
+
+`patient_id` in every SDK method is **your own identifier for the patient** — the `id` you supplied when you created the patient via `create_patient()` (or the `id` field in the `Patient` model).
+
+Olira never exposes or accepts internal MongoDB ObjectIds through the SDK. The server resolves the supplied string as a customer identifier scoped to your organisation.
+
+```python
+# patient_id is always your own identifier:
+olira.log(event_type=OliraEventType.USER_LOGIN, patient_id="your-internal-id-8821")
+olira.log(event_type=OliraEventType.USER_LOGIN, patient_id="PRN-00042")
+```
+
+Patients must be created via `create_patient()` (or the Console) before events can be logged against them. When using `create_patient()`, the `id` you pass there is the same value you use in `log()`, `get_events()`, and all other calls.
+
+### patient_id Validation
+
+The SDK raises `olira.ValidationError` before any network call if `patient_id`:
 
 - Is empty or whitespace.
 - Matches a known PII pattern: email address (`@` domain), US phone (`\d{10}`), or US SSN (`\d{3}-\d{2}-\d{4}`).
@@ -205,341 +442,214 @@ Customers are responsible for pseudonymisation. The SDK documentation clearly wa
 
 ---
 
-## 5. Event Recorders
+## 5. Event Types & Payload Schemas
 
-The SDK ships pre-built event recorders for all event types, reducing the risk of malformed payloads. Each recorder:
+Customers call `olira.log(event_type=OliraEventType.X, patient_id=..., payload={...})` for all event types. The `payload` is a free-form `dict` — structure is defined per event type below and validated server-side (HTTP 422 on mismatch).
 
-- Validates required fields client-side.
-- Raises `olira.ValidationError` before any network call on malformed input (missing required fields, out-of-range scores, empty `subject_id`).
-- Serializes directly to the wire format.
+**Validation strategy:**
 
-All recorders share this signature pattern:
+- `patient_id` PII guard and 512 KB payload limit are enforced client-side (raise `ValidationError` before any network call).
+- `event_type` must be a valid `OliraEventType` — enforced by the enum type annotation.
+- Payload structure is **not** validated client-side. Customers who want pre-validation can use the exported Pydantic helper models (e.g. `EsasItem`, `LabResultItem`) to construct and validate payloads, then call `.model_dump()` before passing to `log()`.
 
-```python
-def track_<event>(self, subject_id: str, *, <required fields>, <optional fields with defaults>) -> None
-```
+**Schema source of truth:** Payload shapes align with `packages/common-models/src/olira_common_models/schemas/personalization/util.py`. The SDK does not depend on common-models so it remains public and PyPI-installable; it defines compatible Pydantic models locally.
 
 ### 5.1 Symptom Reports
 
-| Recorder                  | Required fields                                                                          | Optional fields                                                  |
-| ------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `track_symptom_ctcae`     | `subject_id`, `symptoms: list[CtcaeSymptom]`                                             | `instrument: 'ctcae'\|'pro_ctcae'`, `recall_period_days: int`    |
-| `track_symptom_esas`      | `subject_id`, `symptoms: list[EsasItem]`                                                 | `recall_period: 'now'\|'past_24h'` — `total_score` auto-computed |
-| `track_symptom_custom`    | `subject_id`, `symptoms: list[CustomSymptomItem]`                                        | `instrument: str`                                                |
-| `track_symptom_free_text` | `subject_id`, `text: str`                                                                | `associated_symptoms: list[str]`                                 |
-| `track_symptom_detail`    | `subject_id`, `symptom_type: str`, `detail_type: str`, `response: str`                   | `question: str`, `snomed_code: str`, `meddra_code: str`          |
-| `track_functional_class`  | `subject_id`, `instrument: 'nyha'\|'ccs'`, `functional_class: int` (1–4)                 | `reported_by: 'patient'\|'clinician'`, `change_from_prior: dict` |
-| `track_health_metric`     | `subject_id`, `metric_type: str`, `score: float`, `scale_min: float`, `scale_max: float` | `source: 'checkin'\|'spontaneous'\|'prompted'`                   |
-| `track_moods`             | `subject_id`, `moods: list[MoodItem]`                                                    | `source: str`                                                    |
+| Event type                  | Payload fields (required / optional)                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `SYMPTOM_CTCAE_GRADE`       | `symptoms: list[CtcaeItem]` — `instrument?: str`, `recall_period_days?: int`                                          |
+| `SYMPTOM_ESAS_REPORT`       | `symptoms: list[EsasItem]`, `total_score: int` — `recall_period?: str`                                                |
+| `SYMPTOM_CUSTOM_REPORT`     | `symptoms: list[CustomSymptomItem]` — `instrument?: str`                                                              |
+| `SYMPTOM_FREE_TEXT`         | `text: str` — `associated_symptoms?: list[str]`                                                                       |
+| `SYMPTOM_DETAIL`            | `symptom_type: str`, `detail_type: str`, `response: str` — `question?: str`, `snomed_code?: str`, `meddra_code?: str` |
+| `FUNCTIONAL_CLASS_REPORTED` | `instrument: str`, `functional_class: int` — `reported_by?: str`, `change_from_prior?: dict`                          |
+| `HEALTH_METRIC_REPORTED`    | `metric_type: str`, `score: float`, `scale_min: float`, `scale_max: float` — `source?: str`                           |
+| `MOODS_REPORT`              | `moods: list[MoodItem]` — `source?: str`                                                                              |
 
-**Schemas:**
+**Pydantic helpers (exported from `olira`):**
 
 ```python
-class CtcaeSymptom(TypedDict):
-    type: str                     # symptom name
-    grade: int                    # 0–5 (ctcae) or 0–4 (pro_ctcae per dimension)
-    frequency: NotRequired[int]   # pro_ctcae only
-    interference: NotRequired[int]
-    onset: NotRequired[str]       # ISO 8601
-    snomed_code: NotRequired[str]
-    meddra_code: NotRequired[str]
+from pydantic import BaseModel, Field
 
-class EsasItem(TypedDict):
-    name: str    # pain, tiredness, nausea, depression, anxiety, drowsiness,
-                 # appetite, wellbeing, shortness_of_breath, other
-    score: int   # 0–10
-
-class CustomSymptomItem(TypedDict):
-    type: str
-    name: str
-    score: float
-    scale_min: NotRequired[float]
-    scale_max: NotRequired[float]
-    snomed_code: NotRequired[str]
-    meddra_code: NotRequired[str]
-
-class MoodItem(TypedDict):
-    mood: str
-    intensity: NotRequired[int]   # 0–10
+class EsasItem(BaseModel):
+    """Shape matches EsasSymptomItem in common-models util.py."""
+    name: str                      # pain, tiredness, nausea, depression, anxiety, ...
+    score: int = Field(ge=0, le=10)
+    symptom_type: str | None = None  # for matching when snomed/meddra unset
+    snomed_code: str | None = None
+    meddra_code: str | None = None
 ```
 
 **Example:**
 
 ```python
-client.track_symptom_esas(
-    subject_id="p_abc123",
-    symptoms=[
-        {"name": "pain", "score": 4},
-        {"name": "nausea", "score": 2},
-        {"name": "anxiety", "score": 5},
-    ],
-    recall_period="past_24h",
-)
+from olira import EsasItem, OliraEventType
+
+items = [EsasItem(name="pain", score=4), EsasItem(name="nausea", score=2), EsasItem(name="anxiety", score=5)]
+payload = {"symptoms": [i.model_dump() for i in items], "total_score": sum(i.score for i in items), "recall_period": "past_24h"}
+
+client.log(event_type=OliraEventType.SYMPTOM_ESAS_REPORT, patient_id="p_abc123", payload=payload)
 ```
 
 ### 5.2 Lab & Clinical
 
-| Recorder              | Required fields                                                 | Optional fields                                                                                                                                                     |
-| --------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `track_lab_results`   | `subject_id`, `results: list[LabResultItem]`                    | `panel_name: str`, `panel_loinc_code: str`, `collection_datetime: str`, `ordered_by_npi: str`, `ordering_provider_name: str`, `performing_lab: dict`, `source: str` |
-| `track_vitals`        | `subject_id`, `measurements: VitalsMeasurements`, `source: str` | `context: dict`, `collection_datetime: str`                                                                                                                         |
-| `track_clinical_note` | `subject_id`, `note_type: str`, `source: str`                   | `text: str`, `sections: list[dict]`, `loinc_code: str`, `authored_by: dict`, `authored_date: str`, `encounter_id: str`                                              |
+| Event type               | Payload fields (required / optional)                                                                                                                                                                                 |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LAB_RESULTS_RECEIVED`   | `results: list[LabResultItem]` — `panel_name?: str`, `panel_loinc_code?: str`, `collection_datetime?: str`, `ordered_by_npi?: str`, `ordering_provider_name?: str`, `performing_lab?: PerformingLab`, `source?: str` |
+| `VITALS_MEASUREMENT`     | `measurements: VitalsMeasurements`, `source: str` — `collection_datetime?: str`                                                                                                                                      |
+| `CLINICAL_NOTE_RECEIVED` | `note_type: str`, `source: str` — `text?: str`, `sections?: list[dict]`, `loinc_code?: str`, `authored_by?: dict`, `authored_date?: str`, `encounter_id?: str`                                                       |
 
-**Schemas:**
+**Pydantic helpers:**
 
 ```python
-class LabResultItem(TypedDict):
-    # With LOINC (preferred)
-    loinc_code: NotRequired[str]
-    # Without LOINC (fallback — at least one of loinc_code or test_name required)
-    test_name: NotRequired[str]
-    specimen_type: NotRequired[str]
-    test_category: NotRequired[str]  # 'hematology'|'metabolic'|'lipid'|...
-    # Common
-    value_numeric: NotRequired[float]
-    value_string: NotRequired[str]   # at least one of value_numeric/value_string required
-    unit: str
-    abnormal_flag: NotRequired[str]  # 'H'|'L'|'N'|'HH'|'LL'
-    reference_range_low: NotRequired[float]
-    reference_range_high: NotRequired[float]
-    result_status: NotRequired[str]  # 'final'|'preliminary'|'corrected'
+class LabResultItem(BaseModel):
+    loinc_code: str | None = None
+    test_name: str | None = None       # required when loinc_code absent
+    specimen_type: str | None = None
+    test_category: str | None = None   # 'hematology'|'metabolic'|'lipid'|...
+    value_numeric: float | None = None
+    value_string: str | None = None    # at least one of value_numeric/value_string required
+    unit: str = ""
+    abnormal_flag: str | None = None   # 'H'|'L'|'N'|'HH'|'LL'
+    reference_range_low: float | None = None
+    reference_range_high: float | None = None
+    result_status: str | None = None   # 'final'|'preliminary'|'corrected'
 
-class VitalsMeasurements(TypedDict, total=False):
-    systolic_bp_mmhg: float
-    diastolic_bp_mmhg: float
-    heart_rate_bpm: float
-    spo2_percent: float
-    weight_kg: float
-    temperature_celsius: float
-    respiratory_rate_bpm: float
-    # At least one measurement required
+class PerformingLab(BaseModel):
+    name: str | None = None
+    clia_number: str | None = None
 ```
 
 **Example:**
 
 ```python
-client.track_lab_results(
-    subject_id="p_abc123",
-    results=[
-        {
-            "loinc_code": "718-7",
-            "test_name": "Hemoglobin",
-            "value_numeric": 11.2,
-            "unit": "g/dL",
-            "abnormal_flag": "L",
-            "reference_range_low": 12.0,
-            "reference_range_high": 16.0,
-        }
-    ],
-    panel_name="CBC",
-    collection_datetime="2026-02-26T07:30:00Z",
-)
+from olira import LabResultItem, PerformingLab, OliraEventType
+
+result = LabResultItem(loinc_code="718-7", test_name="Hemoglobin", value_numeric=11.2, unit="g/dL", abnormal_flag="L")
+payload = {
+    "results": [result.model_dump(exclude_none=True)],
+    "panel_name": "CBC",
+    "collection_datetime": "2026-02-26T07:30:00Z",
+    "performing_lab": PerformingLab(name="Acme Lab").model_dump(exclude_none=True),
+}
+client.log(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_abc123", payload=payload)
 ```
 
 ### 5.3 Questionnaires
 
-| Recorder                   | Required fields                                                                                                                               | Optional fields                                                                                                                            |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `track_questionnaire`      | `subject_id`, `instrument_id: str`, `instrument_type: 'validated'\|'custom'`, `items: list[QuestionnaireItem]`, `scores: QuestionnaireScores` | `instrument_version: str`, `recall_period_days: int`, `administration: QuestionnaireAdmin`                                                 |
-| `track_questionnaire_item` | `subject_id`, `question: str`, `response_value`                                                                                               | `response_scale_max`, `response_label: str`, `instrument_id: str`, `item_number: int`, `context: 'conversation'\|'check_in'\|'standalone'` |
-
-**Schemas:**
-
-```python
-class QuestionnaireItem(TypedDict):
-    item_number: int
-    response_value: float | str
-    item_text: NotRequired[str]       # required for custom instruments
-    response_label: NotRequired[str]
-    response_scale_max: NotRequired[float]
-
-class QuestionnaireScores(TypedDict):
-    total_score: float
-    total_score_max: NotRequired[float]
-    severity_category: NotRequired[str]
-    domain_scores: NotRequired[dict[str, float]]
-    clinically_significant: NotRequired[bool]
-    significance_threshold: NotRequired[float]
-
-class QuestionnaireAdmin(TypedDict, total=False):
-    administration_mode: str   # 'patient_self_report'|'clinician_administered'|'caregiver_proxy'
-    platform: str              # 'mobile_app'|'web'|'paper_transcribed'
-    language: str
-    completion_time_seconds: int
-    items_completed: int
-    items_skipped: int
-    administered_by: NotRequired[dict]  # { name?, npi?, role? }
-```
-
-**Example:**
-
-```python
-client.track_questionnaire(
-    subject_id="p_abc123",
-    instrument_id="PHQ-9",
-    instrument_type="validated",
-    items=[
-        {"item_number": i + 1, "response_value": v}
-        for i, v in enumerate([1, 0, 2, 1, 0, 1, 2, 1, 0])
-    ],
-    scores={"total_score": 8, "severity_category": "mild"},
-    administration={"administration_mode": "patient_self_report", "platform": "mobile_app"},
-)
-```
+| Event type                    | Payload fields (required / optional)                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QUESTIONNAIRE_RESPONSE`      | `instrument_id: str`, `instrument_type: str`, `items: list[dict]`, `scores: dict` — `instrument_version?: str`, `recall_period_days?: int`, `administration?: dict` |
+| `QUESTIONNAIRE_ITEM_RESPONSE` | `question: str`, `response_value` — `response_scale_max`, `response_label?: str`, `instrument_id?: str`, `item_number?: int`, `context?: str`                       |
 
 ### 5.4 Conversations
 
-| Recorder                       | Required fields                                                                            | Optional fields                                                                                                                                           |
-| ------------------------------ | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `track_conversation_completed` | `subject_id`                                                                               | `conversation_id: str`, `channel: str`, `duration_seconds: int`, `language: str`, `participants: list[dict]`, `transcript: str \| list[ConversationTurn]` |
-| `track_conversation_turn`      | `subject_id`, `conversation_id: str`, `turn_index: int`, `speaker_label: str`, `text: str` | `channel: str`                                                                                                                                            |
+| Event type                 | Payload fields (required / optional)                                                                                                                |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONVERSATION_COMPLETED`   | — `conversation_id?: str`, `channel?: str`, `duration_seconds?: int`, `language?: str`, `participants?: list[dict]`, `transcript?: str\|list[dict]` |
+| `CONVERSATION_TURN_LOGGED` | `conversation_id: str`, `turn_index: int`, `speaker_label: str`, `text: str` — `channel?: str`                                                      |
 
-**Note on transcript patterns:** Either (1) send full transcript in `track_conversation_completed`, or (2) send incremental turns via `track_conversation_turn` and call `track_conversation_completed` without a transcript. Do not mix patterns for the same conversation.
-
-```python
-class ConversationTurn(TypedDict):
-    speaker_label: str   # 'patient'|'agent'|'clinician'|'care_coordinator'
-    text: str
-    timestamp: NotRequired[str]
-    turn_index: NotRequired[int]
-```
+**Note on transcript patterns:** Either (1) send full transcript in `CONVERSATION_COMPLETED`, or (2) send incremental turns via `CONVERSATION_TURN_LOGGED` and then `CONVERSATION_COMPLETED` without a transcript. Do not mix patterns for the same conversation.
 
 **Example:**
 
 ```python
-client.track_conversation_completed(
-    subject_id="p_abc123",
-    conversation_id="conv_789",
-    channel="in_app_chat",
-    duration_seconds=142,
-    transcript=[
+from olira import OliraEventType, OliraTrace
+
+trace = OliraTrace(object_type="conversation", object_id="conv_789")
+payload = {
+    "channel": "in_app_chat",
+    "duration_seconds": 142,
+    "transcript": [
         {"speaker_label": "agent", "text": "How are you feeling today?", "turn_index": 0},
         {"speaker_label": "patient", "text": "A bit tired, pain is around a 4.", "turn_index": 1},
     ],
-)
+}
+client.log(event_type=OliraEventType.CONVERSATION_COMPLETED, patient_id="p_abc123", payload=payload, trace=trace)
 ```
 
 ### 5.5 Passive Data
 
-| Recorder            | Required fields                                                                       | Optional fields                                                                                                                                                                                                       |
-| ------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `track_heart_rate`  | `subject_id`, `period: TimePeriod`, `device_provider: str`                            | `resting_bpm`, `avg_bpm`, `min_bpm`, `max_bpm`, `avg_hrv_sdnn_ms`, `irregular_events_count`                                                                                                                           |
-| `track_sleep`       | `subject_id`, `period: TimePeriod`, `device_provider: str`                            | `total_sleep_minutes`, `deep_sleep_minutes`, `rem_sleep_minutes`, `light_sleep_minutes`, `awake_minutes`                                                                                                              |
-| `track_activity`    | `subject_id`, `period: TimePeriod`, `device_provider: str`                            | `steps`, `walking_minutes`, `active_minutes`, `sedentary_minutes`, `calories_total`, `calories_active`, `floors_climbed`, `distance_travelled_feet`, `walks`, `time_at_home_percent`, `exercise_sessions: list[dict]` |
-| `track_cgm_reading` | `subject_id`, `glucose_mg_dl: float`, `sensor_timestamp: str`, `device_provider: str` | `trend_arrow: str`, `glucose_flag: 'high'\|'low'\|'normal'`                                                                                                                                                           |
-| `track_spo2`        | `subject_id`, `spo2_percent: float`, `sensor_timestamp: str`, `device_provider: str`  | `pulse_bpm: float`, `measurement_context: 'resting'\|'during_sleep'\|'activity'`                                                                                                                                      |
-| `track_weight`      | `subject_id`, `weight_kg: float`, `sensor_timestamp: str`, `device_provider: str`     | `body_fat_percent: float`, `bmi: float`                                                                                                                                                                               |
+| Event type                    | Payload fields (required / optional)                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HEART_RATE_DATA_RECEIVED`    | `period: dict`, `device_provider: str` — `resting_bpm?`, `avg_bpm?`, `min_bpm?`, `max_bpm?`, `avg_hrv_sdnn_ms?`, `irregular_events_count?`                          |
+| `SLEEP_DATA_RECEIVED`         | `period: dict`, `device_provider: str` — `total_sleep_minutes?`, `deep_sleep_minutes?`, `rem_sleep_minutes?`, `light_sleep_minutes?`, `awake_minutes?`              |
+| `ACTIVITY_DATA_RECEIVED`      | `period: dict`, `device_provider: str` — `steps?`, `walking_minutes?`, `active_minutes?`, `sedentary_minutes?`, `calories_total?`, `exercise_sessions?: list[dict]` |
+| `CGM_READING_RECEIVED`        | `glucose_mg_dl: float`, `sensor_timestamp: str`, `device_provider: str` — `trend_arrow?: str`, `glucose_flag?: str`                                                 |
+| `SPO2_READING_RECEIVED`       | `spo2_percent: float`, `sensor_timestamp: str`, `device_provider: str` — `pulse_bpm?: float`, `measurement_context?: str`                                           |
+| `WEIGHT_MEASUREMENT_RECEIVED` | `weight_kg: float`, `sensor_timestamp: str`, `device_provider: str` — `body_fat_percent?: float`, `bmi?: float`                                                     |
 
-```python
-class TimePeriod(TypedDict):
-    start_datetime: str   # ISO 8601
-    end_datetime: str     # ISO 8601
-```
+`period` is a dict with `start_datetime` and `end_datetime` (ISO 8601). Use `TimePeriod.model_dump()` to construct it.
 
 **Example:**
 
 ```python
-client.track_sleep(
-    subject_id="p_abc123",
-    period={"start_datetime": "2026-02-25T22:10:00Z", "end_datetime": "2026-02-26T06:45:00Z"},
-    device_provider="withings",
-    total_sleep_minutes=395,
-    deep_sleep_minutes=72,
-    rem_sleep_minutes=88,
-    awake_minutes=20,
-)
+from olira import TimePeriod, OliraEventType
+
+payload = {
+    **TimePeriod(start_datetime="2026-02-25T22:10:00Z", end_datetime="2026-02-26T06:45:00Z").model_dump(),
+    "device_provider": "withings",
+    "total_sleep_minutes": 395,
+    "deep_sleep_minutes": 72,
+    "rem_sleep_minutes": 88,
+    "awake_minutes": 20,
+}
+client.log(event_type=OliraEventType.SLEEP_DATA_RECEIVED, patient_id="p_abc123", payload=payload)
 ```
 
 ### 5.6 Medication
 
-| Recorder                   | Required fields                                         | Optional fields                                        |
-| -------------------------- | ------------------------------------------------------- | ------------------------------------------------------ |
-| `track_medication_added`   | `subject_id`, `medications: list[MedicationItem]`       | —                                                      |
-| `track_medication_updated` | `subject_id`, `medications: list[MedicationPatch]`      | —                                                      |
-| `track_medication_deleted` | `subject_id`, `medications: list[MedicationIdentifier]` | —                                                      |
-| `track_dose_taken`         | `subject_id`, `rxnorm_cui_or_name: str`                 | `scheduled_time: str`, `dose_amount`, `dose_unit: str` |
-| `track_dose_skipped`       | `subject_id`, `rxnorm_cui_or_name: str`                 | `scheduled_time: str`, `dose_amount`, `dose_unit: str` |
+| Event type               | Payload fields (required / optional)                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `MEDICATION_ADDED`       | `medications: list[dict]` (see MedicationItem schema)                                                                                 |
+| `MEDICATION_UPDATED`     | `medications: list[dict]` (see MedicationPatch schema)                                                                                |
+| `MEDICATION_DELETED`     | `medications: list[dict]` (see MedicationIdentifier)                                                                                  |
+| `MEDICATION_DOSE_UPDATE` | `rxnorm_cui?: str`, `medication_name?: str` — `scheduled_time?: str`, `dose_amount?`, `dose_unit?: str`, `action: 'taken'\|'skipped'` |
 
 **Medication identity:** `rxnorm_cui` is the preferred identifier. When provided, `medication_name` and `therapeutic_class` are resolved server-side. At least one of `rxnorm_cui` or `medication_name` must be present.
-
-**`rxnorm_cui_or_name` parameter:** The `track_dose_taken` / `track_dose_skipped` recorders accept a single `rxnorm_cui_or_name` string. The SDK detects whether the value is an RxNorm CUI (digits only) or a name string and maps it to `rxnorm_cui` or `medication_name` on the wire accordingly.
-
-```python
-class MedicationItem(TypedDict):
-    rxnorm_cui: NotRequired[str]    # preferred
-    medication_name: NotRequired[str]
-    ndc_code: NotRequired[str]
-    dose: NotRequired[float]
-    dose_unit: NotRequired[str]
-    frequency: NotRequired[str]
-    route: NotRequired[str]         # 'oral'|'iv'|'subcutaneous'|'topical'|'inhaled'|'other'
-    form: NotRequired[str]          # 'tablet'|'capsule'|'liquid'|'injection'|'patch'|'other'
-    therapeutic_class: NotRequired[str]
-    start_date: NotRequired[str]
-    schedule_times: NotRequired[list[str]]
-    adherence_window_minutes: NotRequired[int]
-    prescribed_by: NotRequired[dict]
-
-class MedicationPatch(TypedDict):
-    rxnorm_cui: NotRequired[str]       # at least one of rxnorm_cui or medication_name required (identifier)
-    medication_name: NotRequired[str]
-    dose: NotRequired[float]
-    dose_unit: NotRequired[str]
-    frequency: NotRequired[str]
-    route: NotRequired[str]
-    form: NotRequired[str]
-    start_date: NotRequired[str]
-    schedule_times: NotRequired[list[str]]
-    adherence_window_minutes: NotRequired[int]
-
-class MedicationIdentifier(TypedDict):
-    rxnorm_cui: NotRequired[str]
-    medication_name: NotRequired[str]
-    # At least one required
-```
 
 **Example:**
 
 ```python
-client.track_medication_added(
-    subject_id="p_abc123",
-    medications=[
-        {
-            "rxnorm_cui": "1049502",
-            "medication_name": "Ondansetron 4mg",
-            "dose": 4.0,
-            "dose_unit": "mg",
-            "frequency": "every_8h_as_needed",
-            "route": "oral",
-            "form": "tablet",
-            "start_date": "2026-02-26",
-        }
-    ],
-)
+from olira import OliraEventType
+
+payload = {
+    "medications": [{
+        "rxnorm_cui": "1049502",
+        "medication_name": "Ondansetron 4mg",
+        "dose": 4.0,
+        "dose_unit": "mg",
+        "frequency": "every_8h_as_needed",
+        "route": "oral",
+        "form": "tablet",
+        "start_date": "2026-02-26",
+    }]
+}
+client.log(event_type=OliraEventType.MEDICATION_ADDED, patient_id="p_abc123", payload=payload)
 ```
 
 ### 5.7 Engagement
 
-| Recorder                         | Required fields                                                                    | Optional fields                                                                           |
-| -------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `track_login`                    | `subject_id`                                                                       | —                                                                                         |
-| `track_logout`                   | `subject_id`                                                                       | —                                                                                         |
-| `track_content_interaction`      | `subject_id`, `content_type: str`, `action: str`                                   | `content_id: str`, `title: str`, `preview: str`, `dwell_time_seconds: int`, `reason: str` |
-| `track_notification_interaction` | `subject_id`, `notification_type: str`, `action: 'opened'\|'dismissed'\|'snoozed'` | `delivered_at: str`, `time_to_open_seconds: int`                                          |
-| `track_task_updated`             | `subject_id`, `task_type: str`, `action: 'completed'\|'skipped'`                   | `task_id: str`, `task_description: str`, `completion_time_seconds: int`                   |
-| `track_interaction_feedback`     | `subject_id`, `target_type: str`, `feedback_type: str`                             | `target_id: str`                                                                          |
-| `track_feature_used`             | `subject_id`, `feature_name: str`                                                  | `session_id: str`, `dwell_time_seconds: int`                                              |
-
-**Generalisation principle:** `content_type`, `notification_type`, `task_type`, and `feature_name` are open strings. Customers define their own vocabulary.
+| Event type                | Payload fields (required / optional)                                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `USER_LOGIN`              | —                                                                                                                                   |
+| `USER_LOGOUT`             | —                                                                                                                                   |
+| `CONTENT_INTERACTED`      | `content_type: str`, `action: str` — `content_id?: str`, `title?: str`, `preview?: str`, `dwell_time_seconds?: int`, `reason?: str` |
+| `NOTIFICATION_INTERACTED` | `notification_type: str`, `action: str` — `delivered_at?: str`, `time_to_open_seconds?: int`                                        |
+| `TASK_UPDATED`            | `task_type: str`, `action: str` — `task_id?: str`, `task_description?: str`, `completion_time_seconds?: int`                        |
+| `INTERACTION_FEEDBACK`    | `target_type: str`, `feedback_type: str` — `target_id?: str`                                                                        |
+| `FEATURE_USED`            | `feature_name: str` — `session_id?: str`, `dwell_time_seconds?: int`                                                                |
 
 **Example:**
 
 ```python
-client.track_feature_used(
-    subject_id="p_abc123",
-    feature_name="symptom_tracker",
-    session_id="sess_001",
-    dwell_time_seconds=45,
+from olira import OliraEventType
+
+client.log(
+    event_type=OliraEventType.FEATURE_USED,
+    patient_id="p_abc123",
+    payload={"feature_name": "symptom_tracker", "session_id": "sess_001", "dwell_time_seconds": 45},
 )
 ```
 
@@ -547,73 +657,70 @@ client.track_feature_used(
 
 All profile events are patch-style: include only the fields that changed. Omitted fields are left untouched server-side.
 
-| Recorder                          | Required fields                                                                            | Optional/patch fields                                                                                                                                                   |
-| --------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `track_demographics_updated`      | `subject_id`                                                                               | `name`, `dob`, `sex`, `marital_status`, `address`, `phone`, `email`, `language`, `ethnicity`                                                                            |
-| `track_condition_updated`         | `subject_id`                                                                               | `disease_type`, `stage`, `diagnosis_date`, `icd10_codes: list[str]`                                                                                                     |
-| `track_preferences_updated`       | `subject_id`                                                                               | `reading_level`, `tone`, `dietary_preferences`, `comfort_with_technology`, `energy_level`, `symptoms_need_help_managing`, `things_to_track`, `notification_preferences` |
-| `track_emergency_contact_updated` | `subject_id`                                                                               | `name`, `relationship`, `phone`, `email`                                                                                                                                |
-| `track_care_team_updated`         | `subject_id`, `members: list[CareTeamMember]`                                              | —                                                                                                                                                                       |
-| `track_insurance_updated`         | `subject_id`                                                                               | `payer`, `plan_name`, `member_id`, `group_id`                                                                                                                           |
-| `track_social_updated`            | `subject_id`                                                                               | `living_situation`, `support_system`, `transportation_access`, `employment_status`, `housing_stability`                                                                 |
-| `track_pharmacy_updated`          | `subject_id`                                                                               | `name`, `address`, `phone`                                                                                                                                              |
-| `track_treatment_phase_changed`   | `subject_id`, `new_phase: str`, `effective_date: str`, `changed_by: 'clinician'\|'system'` | `previous_phase: str`                                                                                                                                                   |
-
-```python
-class CareTeamMember(TypedDict):
-    action: str    # 'add'|'update'|'remove'
-    role: str
-    name: NotRequired[str]
-    npi: NotRequired[str]   # preferred identifier for matching
-    organization: NotRequired[str]
-```
+| Event type                  | Payload fields (required / optional)                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `DEMOGRAPHICS_UPDATED`      | — `name?`, `dob?`, `sex?`, `marital_status?`, `address?`, `phone?`, `email?`, `language?`, `ethnicity?`        |
+| `CONDITION_UPDATED`         | — `disease_type?`, `stage?`, `diagnosis_date?`, `icd10_codes?: list[str]`                                      |
+| `PREFERENCES_UPDATED`       | — `reading_level?`, `tone?`, `dietary_preferences?`, `comfort_with_technology?`, `notification_preferences?`   |
+| `EMERGENCY_CONTACT_UPDATED` | — `name?`, `relationship?`, `phone?`, `email?`                                                                 |
+| `CARE_TEAM_UPDATED`         | `members: list[dict]` (action, role, name, npi, organization)                                                  |
+| `INSURANCE_UPDATED`         | — `payer?`, `plan_name?`, `member_id?`, `group_id?`                                                            |
+| `SOCIAL_UPDATED`            | — `living_situation?`, `support_system?`, `transportation_access?`, `employment_status?`, `housing_stability?` |
+| `PHARMACY_UPDATED`          | — `name?`, `address?`, `phone?`                                                                                |
+| `TREATMENT_PHASE_CHANGED`   | `new_phase: str`, `effective_date: str`, `changed_by: str` — `previous_phase?: str`                            |
 
 **Example:**
 
 ```python
-client.track_demographics_updated(
-    subject_id="p_abc123",
-    dob="1972-04-15",
-    sex="female",
-    language="en",
-    address={
-        "street": "123 Maple St",
-        "city": "Boston",
-        "state": "MA",
-        "zip": "02101",
-        "country": "US",
-    },
+from olira import OliraEventType
+
+client.log(
+    event_type=OliraEventType.DEMOGRAPHICS_UPDATED,
+    patient_id="p_abc123",
+    payload={"dob": "1972-04-15", "sex": "female", "language": "en"},
 )
 ```
 
 ---
 
-## 6. Ingestion API Endpoints
+## 6. API Endpoints
 
-The SDK targets the existing `app-api` surface via a dedicated SDK router at `services/app-api/routes/sdk/`, mirroring `services/app-api/routes/mcp/`.
+The SDK targets the `app-api` surface via a dedicated SDK router at `services/app-api/routes/sdk/`.
 
 Organisation identity is derived entirely from the API key — every request carries `Authorization: Bearer olira_{env}_{key}` and the server resolves the org server-side. Customers never include an `org_id` in the payload.
 
-| Method | Path               | Purpose                            |
-| ------ | ------------------ | ---------------------------------- |
-| `POST` | `/v1/events`       | Single event                       |
-| `POST` | `/v1/events/batch` | Batch of up to `batch_size` events |
+### 6.1 Full Endpoint Table
 
-### Single Event Request
+| Method   | Path                        | Purpose                                     | Required scope         |
+| -------- | --------------------------- | ------------------------------------------- | ---------------------- |
+| `POST`   | `/v1/events`                | Single event ingestion                      | `sdk:event-log`        |
+| `POST`   | `/v1/events/batch`          | Batch of up to `batch_size` events          | `sdk:event-log`        |
+| `GET`    | `/v1/events`                | Query events for a patient                  | `sdk:event-management` |
+| `DELETE` | `/v1/events`                | Delete events by filter                     | `sdk:event-management` |
+| `POST`   | `/v1/patients`              | Create a patient                            | `api:manage-patients`  |
+| `GET`    | `/v1/patients`              | List patients (paginated)                   | `api:manage-patients`  |
+| `GET`    | `/v1/patients/{patient_id}` | Get a patient by id                         | `api:manage-patients`  |
+| `PUT`    | `/v1/patients/{patient_id}` | Update a patient (partial)                  | `api:manage-patients`  |
+| `DELETE` | `/v1/patients/{patient_id}` | Soft-delete a patient                       | `api:manage-patients`  |
+| `POST`   | `/v1/auth/token`            | Mint a patient-scoped JWT                   | `sdk:patient-token`    |
+
+`{patient_id}` in patient paths is the customer-supplied `id` — never a MongoDB ObjectId.
+
+### Single Event (`POST /v1/events`)
 
 ```json
 {
   "event_name": "symptom_esas_report",
-  "subject_id": "p_123_pseudo",
+  "patient_id": "p_123_pseudo",
   "timestamp": "2026-02-26T08:15:00Z",
   "event_id": "e1a2b3c4-...",
   "idempotency_key": "c6f8b1...",
-  "properties": { ... },
+  "payload": { ... },
   "context": { ... }
 }
 ```
 
-### Batch Request
+### Batch Request (`POST /v1/events/batch`)
 
 ```json
 { "events": [ ... ] }
@@ -630,7 +737,7 @@ Organisation identity is derived entirely from the API key — every request car
       "index": 3,
       "status": "error",
       "code": "validation_error",
-      "message": "subject_id required"
+      "message": "patient_id required"
     }
   ]
 }
@@ -638,18 +745,223 @@ Organisation identity is derived entirely from the API key — every request car
 
 Partial batch failures: the SDK logs dropped events (event_name only, no payload content) and invokes the `on_error` callback if configured.
 
+> **Note — patient graph update (roadmap):** `PatientUser` records created via the Console API or SDK do not have a `UserPatientState` (the personalization graph is only initialised during app-user registration). Events are saved to the `EventLog` collection in full, but the graph pipeline (`_save_and_update_graph`) skips the state-update step and logs a warning when no graph is found. The graph update will be enabled once `UserPatientState` creation is wired into the `PatientUser` lifecycle.
+
+### Query Events (`GET /v1/events`)
+
+Query params: `patient_id` (required), `event_type`, `from_timestamp`, `to_timestamp`, `ingested_after`, `ingested_before`, `limit` (default 100), `offset` (default 0).
+
+Response:
+
+```json
+{
+  "events": [
+    {
+      "event_id": "e1a2b3c4-...",
+      "event_type": "medication_dose_update",
+      "patient_id": "p_abc",
+      "timestamp": "2026-01-15T08:00:00Z",
+      "ingested_at": "2026-01-15T10:02:33Z",
+      "payload": { ... }
+    }
+  ],
+  "total": 42,
+  "has_more": true
+}
+```
+
+### Delete Events (`DELETE /v1/events`)
+
+JSON body — filter by occurrence time:
+
+```json
+{
+  "patient_id": "p_abc",
+  "event_type": "medication_dose_update",
+  "from_timestamp": "2026-01-01T00:00:00Z",
+  "to_timestamp": "2026-01-31T23:59:59Z"
+}
+```
+
+Or filter by ingestion time window:
+
+```json
+{
+  "patient_id": "p_abc",
+  "ingested_after": "2026-01-14T09:55:00Z",
+  "ingested_before": "2026-01-14T10:05:00Z"
+}
+```
+
+Or by explicit event IDs:
+
+```json
+{
+  "patient_id": "p_abc",
+  "event_ids": ["e1a2b3c4-1111-...", "e1a2b3c4-2222-..."]
+}
+```
+
+Response:
+
+```json
+{ "deleted_count": 7, "patient_id": "p_abc" }
+```
+
+### Create Patient (`POST /v1/patients`)
+
+Request body:
+
+```json
+{
+  "id": "mrn-00042",
+  "first_name": "Jane",
+  "last_name": "Smith",
+  "email": "jane@example.com",
+  "phone_number": "+15550001234",
+  "date_of_birth": "1985-03-22T00:00:00Z",
+  "sex": "female",
+  "timezone": "America/New_York",
+  "primary_disease_site": "breast",
+  "disease_stage": "II"
+}
+```
+
+- `id` is **required** and must be unique within the organisation. It is the caller's own identifier (e.g. an EHR patient ID).
+- Returns `201` with the created patient as a `SdkPatientResponse` body.
+- Returns `409 Conflict` if a patient with the same `id` already exists.
+
+### List Patients (`GET /v1/patients`)
+
+Query params: `limit` (1–100, default 100), `offset` (default 0).
+
+Response:
+
+```json
+{
+  "patients": [
+    {
+      "id": "mrn-00042",
+      "first_name": "Jane",
+      "last_name": "Smith",
+      "sex": "female",
+      "timezone": "America/New_York",
+      "status": "pending",
+      "primary_disease_site": "breast",
+      "disease_stage": "II",
+      "created_at": "2026-03-01T12:00:00+00:00"
+    }
+  ],
+  "total": 1,
+  "has_more": false
+}
+```
+
+Deleted patients are excluded. Only patients created via the SDK (i.e. with an `id`) are returned.
+
+### Get / Update / Delete Patient
+
+`GET /v1/patients/{patient_id}` — returns a single `SdkPatientResponse`.
+
+`PUT /v1/patients/{patient_id}` — partial update. Supply only the fields to change:
+
+```json
+{ "disease_stage": "III" }
+```
+
+`DELETE /v1/patients/{patient_id}` — soft-delete. Sets status to `deleted`; the `id` is permanently reserved. Returns `{ "ok": true }`.
+
+All three return `404` if the patient does not exist or has already been deleted.
+
+### Mint Patient Token (`POST /v1/auth/token`)
+
+Request body:
+
+```json
+{ "patient_id": "mrn-00042" }
+```
+
+`patient_id` is the customer-supplied id (same as everywhere else in the SDK). The server resolves it to the internal PatientUser and mints a short-lived RS256 JWT locked to that patient.
+
+Response:
+
+```json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiJ9...",
+  "token_type": "bearer",
+  "expires_in": 900,
+  "scopes": ["mcp:patient-state"]
+}
+```
+
+- TTL: 900 seconds (15 minutes).
+- The JWT carries `user_type: "patient"` and `patient_id` locked to the internal ObjectId — the MCP Patient State server enforces this and ignores any `patient_id` passed in tool arguments.
+- Returns `404` if the patient does not exist.
+
 ---
 
 ## 7. Delivery & Reliability
 
-### Default: Non-Blocking Background Queue
+### Default: Non-Blocking Background Queue (`log()`)
 
-- `track_*` recorders enqueue events immediately and return without blocking the caller.
-- A background worker thread batches and flushes every `flush_interval` seconds or when the queue reaches `batch_size` events.
-- Best-effort delivery: events retried up to `max_retries` times with exponential backoff.
-- Queue bounded at `max_queue_size`; new events dropped (with `on_error` notification) when full.
-- `atexit` hook calls `flush()` automatically on interpreter shutdown.
-- `flush()` is **blocking** — it waits until all queued events have been delivered (or permanently failed) over the network before returning. This is required for the `atexit` hook and short-lived scripts to work reliably.
+When you call `log()`, the event is placed onto an in-memory queue and the call returns immediately — your application code is never blocked waiting for a network request. A background thread runs continuously alongside your process, draining that queue by batching events and sending them to the Olira API.
+
+The background thread sends a batch when either of these conditions is met:
+
+- The queue has accumulated `batch_size` events (default 50), or
+- `flush_interval` seconds have passed since the last send (default 1.5s).
+
+This means a single `log()` call doesn't trigger an HTTP request on its own — events are grouped and sent together, which keeps network overhead low regardless of how frequently your code calls `log()`.
+
+**Queue backpressure:** the queue is bounded at `max_queue_size` events (default 10,000). If your code produces events faster than the background thread can drain them and the queue fills up, new events are dropped and the `on_error` handler is invoked. This is intentional — the SDK never blocks the caller and never consumes unbounded memory.
+
+**Best-effort delivery:** failed requests are retried up to `max_retries` times (default 3) with exponential backoff. After all retries are exhausted the event is permanently dropped and `on_error` is invoked.
+
+### `flush()`
+
+`flush()` is a **blocking** call that waits until every event currently in the queue has been delivered (or permanently failed) before returning. You need this in two situations:
+
+1. **End of a short-lived script** — without `flush()` the process exits and in-flight events are lost. The SDK registers an `atexit` hook that calls `flush()` automatically on normal interpreter shutdown, so most scripts are covered without any extra code.
+2. **Tests and CI** — call `flush()` after your test code to ensure all events have been sent before making assertions.
+
+```python
+olira.log(event_type=OliraEventType.USER_LOGIN, patient_id="p_123")
+olira.flush()  # blocks until the event above has been delivered
+```
+
+### Serverless / `async_flush=False`
+
+The background thread cannot persist between invocations in serverless environments (AWS Lambda, Cloud Run, etc.) because each invocation gets a fresh process. Set `async_flush=False` to disable the background thread entirely — `log()` then sends synchronously on every call, blocking until the HTTP request completes.
+
+```python
+client = OliraClient(api_key=..., async_flush=False)
+client.log(...)  # blocks until delivered — no background thread
+```
+
+### Explicit Batch (`log_batch()`)
+
+`log_batch()` bypasses the background queue entirely and sends a single `/v1/events/batch` request synchronously, returning a `BatchResult`.
+
+```python
+from olira import EventSpec, BatchResult, OliraEventType
+
+result: BatchResult = client.log_batch([
+    EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
+    EventSpec(event_type=OliraEventType.SYMPTOM_ESAS_REPORT, patient_id="p_2",
+              payload={"symptoms": [...], "total_score": 5}),
+])
+# result.accepted: number of events accepted server-side
+# result.failed:   number rejected
+# result.errors:   list of BatchError(index, code, message) for rejected events
+```
+
+Use `log_batch()` when:
+
+- Bulk-ingesting historical data.
+- Sending a set of events that should succeed or fail together.
+- An idempotent retry loop where you need per-event error details.
+
+`log_batch()` still validates `patient_id` (PII guard) and payload size per event client-side before sending.
 
 ### Configuration Defaults
 
@@ -677,13 +989,6 @@ Partial batch failures: the SDK logs dropped events (event_name only, no payload
 | `404 Not Found`            | Drop — permanent failure           |
 | `422 Unprocessable Entity` | Drop — permanent failure           |
 
-### Serverless / Lambda Pattern
-
-```python
-client = OliraClient(api_key=..., async_flush=False)
-# track() blocks and flushes synchronously — no background thread
-```
-
 ---
 
 ## 8. Error Handling
@@ -703,7 +1008,8 @@ OliraError (base)
 import olira
 
 try:
-    client.track_symptom_esas(subject_id="p_123", symptoms=[...])
+    client.log(event_type=olira.OliraEventType.SYMPTOM_ESAS_REPORT, patient_id="p_123",
+               payload={"symptoms": [olira.EsasItem(name="pain", score=4).model_dump()], "total_score": 4})
 except olira.RateLimitError as e:
     print(f"Rate limited, retry after {e.retry_after}s")
 except olira.ValidationError as e:
@@ -730,9 +1036,9 @@ These controls govern what the SDK writes into the customer's own log pipeline (
 
 | Concern                | Behaviour                                                                                                                                                                                                                                                                                                                                |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Payload logging        | Event bodies are **never** written to logs. Only `event_name`, first 8 chars of `subject_id`, and batch metadata logged at `DEBUG` level via the standard Python `logging` module under the logger name `olira`. Silence or redirect with standard Python logging config.                                                                |
+| Payload logging        | Event bodies are **never** written to logs. Only `event_name`, first 8 chars of `patient_id`, and batch metadata logged at `DEBUG` level via the standard Python `logging` module under the logger name `olira`. Silence or redirect with standard Python logging config.                                                                |
 | API key redaction      | Keys always masked as `olira_***` in all output.                                                                                                                                                                                                                                                                                         |
-| `subject_id` PII guard | `ValidationError` raised if value matches email, 10-digit phone, or SSN pattern.                                                                                                                                                                                                                                                         |
+| `patient_id` PII guard | `ValidationError` raised if value matches email, 10-digit phone, or SSN pattern.                                                                                                                                                                                                                                                         |
 | Max payload size       | 512 KB per event hard limit — events exceeding this raise `ValidationError` before any network call. For `track_clinical_note` specifically, if the payload exceeds 512 KB the SDK raises `ValidationError` with a message indicating the note is too large; the caller is responsible for truncating or chunking. No silent truncation. |
 | Documentation warnings | All public docs and docstrings clearly warn against sending direct patient identifiers.                                                                                                                                                                                                                                                  |
 
@@ -742,12 +1048,13 @@ Customers are responsible for pseudonymisation upstream. A future validator vers
 
 This is separate from SDK-side logging. Every event that reaches Olira's ingestion API is stored in full and is the basis for provenance and audit trails.
 
-| Concern            | Behaviour                                                                                                                    |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Full event storage | The complete event payload is stored server-side, including all clinical fields, timestamps, and metadata.                   |
-| Provenance         | Each event is traceable by `event_id`, `idempotency_key`, `subject_id`, org (derived from API key), and ingestion timestamp. |
-| Audit trail        | The server-side record is the authoritative log of what data was submitted, by which organisation, and when.                 |
-| Deduplication      | `idempotency_key` prevents duplicate events from appearing in the audit trail on retries.                                    |
+| Concern            | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Full event storage | The complete event payload is stored server-side, including all clinical fields, timestamps, and metadata.                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Provenance         | Each event is stored as an `EventLog` document with a MongoDB `_id` assigned on insert. The SDK's `event_id` (UUID4) is the customer-facing identifier, persisted as `EventLog.event_id` by the ingestion endpoint — the stable bridge between what the customer sent and Olira's internal record. Events are queryable by `event_id`, `user_id` (resolved from `patient_id`), `type`, org (from API key), `timestamp`, and `ingested_at`. |
+| State attribution  | Whenever an event changes Patient State, a `StateUpdateLog` document is created linking the `EventLog._id` to the exact state paths that changed (before/after values, module type). This is the internal mechanism behind Olira's event provenance — tracing Raw Event Log → State Module.                                                                                                                                                 |
+| Audit trail        | The server-side record is the authoritative log of what data was submitted, by which organisation, and when.                                                                                                                                                                                                                                                                                                                                  |
+| Deduplication      | `idempotency_key` prevents the server from storing duplicate events when the SDK retries a failed request (same event re-sent). **Note:** server-side deduplication on `idempotency_key` is not yet implemented — the field is sent but not currently used for deduplication.                                                                                                                                                               |
 
 > Customers operating in regulated environments (HIPAA covered entities, etc.) should refer to Olira's data processing agreement for retention periods, access controls, and BAA terms. The SDK itself is the delivery mechanism — compliance obligations are governed at the platform level.
 
@@ -760,15 +1067,16 @@ This is separate from SDK-side logging. Every event that reaches Olira's ingesti
 ```
 packages/olira-sdk-python/
   src/olira/
-    __init__.py          # public API: init, flush, event recorders, OliraClient, exceptions
+    __init__.py          # public API: init, flush, log, log_batch, OliraClient, OliraEventType, exceptions
     client.py            # OliraClient class (sync); AsyncOliraClient class
     queue.py             # BackgroundWorker, bounded queue
-    http.py              # HTTP transport, retry logic
-    models.py            # Event recorder schemas (Pydantic v2 or TypedDict)
+    http.py              # HTTP transport, retry logic, send_batch_direct()
+    models.py            # OliraEventType, OliraTrace, EventSpec, BatchResult, BatchError, Pydantic helpers
     exceptions.py        # Typed exception hierarchy
     py.typed             # PEP 561 marker
   tests/
     test_client.py
+    test_async_client.py
     test_event_recorders.py
     test_retry.py
     test_privacy.py
@@ -782,6 +1090,15 @@ packages/olira-sdk-python/
   CHANGELOG.md
   LICENSE                # Apache 2.0
 ```
+
+### Dependencies
+
+| Dependency      | Purpose                                                              |
+| --------------- | -------------------------------------------------------------------- |
+| `pydantic>=2.0` | Public API schema models; validation at construction time            |
+| `httpx>=0.27`   | Sync and async HTTP transport; connection pooling, timeouts, retries |
+
+Schema models (e.g. `EsasItem`, `LabResultItem`, `PerformingLab`, `TimePeriod`) are exported from the top-level `olira` package. Field shapes align with `packages/common-models/.../schemas/personalization/util.py` (source of truth); the SDK does not depend on common-models so it remains public and PyPI-installable.
 
 ### Tooling (mirrors monorepo conventions)
 
@@ -840,7 +1157,7 @@ SemVer throughout. Every release has a corresponding `CHANGELOG.md` entry.
 Before tagging a release, update in a single commit:
 
 - `pyproject.toml` — bump `version`
-- `src/olira/__init__.py` — bump `__version__`
+- `src/olira/version.py` — bump `__version__`
 - `uv.lock` — run `uv lock`
 - `CHANGELOG.md` — add `## [x.y.z] - YYYY-MM-DD` entry
 
@@ -857,6 +1174,274 @@ Apache 2.0.
 - Includes an explicit patent grant — both Olira and customers get patent protection as part of the licence terms.
 - Standard for enterprise and healthcare SDKs; familiar to legal and procurement teams.
 - Permissive enough that customers can embed the SDK in any commercial product without restriction.
+
+---
+
+## 11. Event Management
+
+Customers can query and delete events for a patient using `get_events()` and `delete_events()`. This is the programmatic equivalent of correcting bad data in the Olira Console: find the events causing the incorrect PatientState, then delete them.
+
+**Scope requirement:** both methods require an API key with the `sdk:event-management` scope. This is intentionally separate from the `sdk:event-log` scope used for ingestion — it lets organisations issue ingestion-only keys that cannot delete data.
+
+### Worked Example — Bad Clinical Data
+
+A patient was logging medication doses with the wrong occurrence date (all of January recorded as January 2025 instead of 2026). Delete all `medication_dose_update` events in that window:
+
+```python
+import olira
+from olira import OliraEventType
+
+olira.init(api_key="olira_mgmt_...")
+
+# Step 1 — preview
+events = olira.get_events(
+    patient_id="p_abc",
+    event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
+    from_timestamp="2025-01-01T00:00:00Z",
+    to_timestamp="2025-01-31T23:59:59Z",
+)
+print(f"Found {events.total} events to delete")
+for e in events.events:
+    print(f"  occurred={e.timestamp}  ingested={e.ingested_at}")
+
+# Step 2 — delete
+result = olira.delete_events(
+    patient_id="p_abc",
+    event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
+    from_timestamp="2025-01-01T00:00:00Z",
+    to_timestamp="2025-01-31T23:59:59Z",
+)
+print(f"Deleted {result.deleted_count} events")
+```
+
+### Worked Example — Bad Data Load
+
+A script sent a batch of wrong events at 10am on Tuesday. Delete everything ingested in that window regardless of event type:
+
+```python
+result = olira.delete_events(
+    patient_id="p_abc",
+    ingested_after="2026-01-14T09:55:00Z",
+    ingested_before="2026-01-14T10:05:00Z",
+)
+print(f"Deleted {result.deleted_count} events")
+```
+
+### PatientState Recalculation
+
+After deleting events, the patient's PatientState will reflect stale data until Olira's backend recalculates it. Recalculation happens asynchronously — customers should expect an eventual-consistency window after a bulk delete. A future `recalculate_state(patient_id=...)` method will allow explicit triggering of recalculation.
+
+---
+
+## 12. Patient Management
+
+The `api:manage-patients` scope grants full CRUD access to patients in your organisation. Patients must be created before events can be logged against them.
+
+### Patient Model
+
+```python
+class ExternalIdentifier(BaseModel):
+    system: str   # System name — e.g. "epic", "flatiron", "cerner", "fhir"
+    value: str    # Patient ID in that system — MRN, FHIR resource ID, etc.
+
+class Patient(BaseModel):
+    id: str                                        # Olira-assigned — never changes
+    first_name: str
+    last_name: str
+    sex: str
+    timezone: str
+    status: str                                    # "pending" | "active" | "deleted"
+    email: str | None = None
+    phone_number: str | None = None
+    date_of_birth: str | None = None               # ISO 8601
+    primary_disease_site: str | None = None
+    disease_stage: str | None = None
+    created_at: str | None = None                  # ISO 8601
+    external_identifiers: list[ExternalIdentifier] = []
+    metadata: dict[str, Any] | None = None
+```
+
+`id` is the Olira-assigned identifier returned by `create_patient()`. It is the MongoDB `_id` of the `PatientUser` document, serialised as a 24-character hex string. Use it in all subsequent calls that reference this patient.
+
+`ExternalIdentifier` mirrors `ExternalIdentifier` in `packages/common-models/.../schemas/user/basic_user.py` — the SDK keeps its own copy so it remains PyPI-installable without depending on common-models.
+
+### API Surface
+
+```python
+from olira import OliraClient, Patient, PatientListResult, ExternalIdentifier
+
+client = OliraClient(api_key="olira_prod_...")
+
+# Create — with external identifiers and metadata
+patient: Patient = client.create_patient(
+    first_name="Jane",
+    last_name="Smith",
+    timezone="America/New_York",
+    primary_disease_site="breast",
+    disease_stage="II",
+    external_identifiers=[
+        ExternalIdentifier(system="epic", value="MRN-00042"),
+        ExternalIdentifier(system="flatiron", value="FLT-9981"),
+    ],
+    metadata={
+        "site_code": "BOS-01",
+        "trial_arm": "A",
+        "enrolled_by_npi": "1234567890",
+    },
+)
+
+# Get
+patient = client.get_patient(patient_id=patient.id)
+
+# List (paginated)
+result: PatientListResult = client.list_patients(limit=50, offset=0)
+
+# Look up by an external system's ID
+result = client.list_patients(external_system="epic", external_value="MRN-00042")
+patient = result.patients[0]
+
+# Update (partial — omitted fields unchanged)
+patient = client.update_patient(patient_id=patient.id, disease_stage="III")
+
+# Add a metadata key (read → merge → write, metadata is full-replace on PUT)
+current = client.get_patient(patient_id=patient.id)
+client.update_patient(
+    patient_id=patient.id,
+    metadata={**(current.metadata or {}), "new_key": "value"},
+)
+
+# Soft-delete
+client.delete_patient(patient_id=patient.id)
+```
+
+Module-level equivalents (`olira.create_patient(...)` etc.) proxy to the singleton client, matching the pattern of `olira.log()`.
+
+### API Endpoints
+
+| Method | Path | Action |
+| ------ | ---- | ------ |
+| `POST` | `/v1/patients` | Create patient |
+| `GET` | `/v1/patients` | List patients (query params: `limit`, `offset`, `external_system`, `external_value`) |
+| `GET` | `/v1/patients/{patient_id}` | Get patient by `id` |
+| `PUT` | `/v1/patients/{patient_id}` | Update patient (partial) |
+| `DELETE` | `/v1/patients/{patient_id}` | Soft-delete patient |
+
+All five endpoints require the `api:manage-patients` scope on the API key and accept a raw API key (not a JWT) as the Bearer token.
+
+`external_system` and `external_value` must be supplied together; supplying only one returns HTTP 422.
+
+### ID Uniqueness
+
+`id` must be unique within your organisation. Attempting to create a second patient with the same `id` returns HTTP 409 which the SDK surfaces as a `ValidationError`.
+
+Soft-deleted patients still occupy their `id` — the identifier is not recycled after deletion. This is intentional: it preserves the audit trail linking events to that patient.
+
+### `external_identifiers`
+
+Stores the patient's identifiers in your external systems (EHR, HIE, FHIR server, oncology platform, etc.). One patient can carry IDs from multiple systems simultaneously.
+
+| Constraint | Value |
+| --- | --- |
+| Type | `list[ExternalIdentifier]` |
+| Max entries | 20 per patient |
+| `system` | Printable ASCII, max 64 chars, lowercase recommended (e.g. `"epic"`, `"flatiron"`, `"cerner"`) |
+| `value` | String, max 256 chars |
+| Uniqueness | `(org_id, system, value)` must be unique. Attempting to assign an already-used pair to a second patient returns HTTP 409. |
+| Indexed | Yes — compound multikey index on `(org_id, external_identifiers.system, external_identifiers.value)` |
+| Update semantics | Full replace — the new list overwrites the previous one. |
+
+### `metadata`
+
+Stores arbitrary key-value pairs that are meaningful in your system but have no equivalent in Olira's core schema. Olira stores these verbatim and returns them on all reads, but never interprets or validates their values.
+
+| Constraint | Value |
+| --- | --- |
+| Type | `dict` |
+| Max keys | 50 |
+| Key format | Printable ASCII, max 64 chars. Keys starting with `olira_` are reserved and will be rejected with HTTP 422. |
+| Value types | `str` (max 512 chars), `int`, `float`, `bool`, `list` of scalars, `null`. No nested objects. |
+| Total size | Serialised dict must be ≤ 8 KB. |
+| Indexed | No — `metadata` is not filterable. Use `external_identifiers` for lookups. |
+| Update semantics | Full replace — the new dict overwrites the previous one. Omitting `metadata` entirely on a `PUT` leaves the existing value unchanged. |
+
+**What Olira does not do with `metadata`:** values are never read by ML models, clinical rules, the state-update engine, or any Console feature. They are opaque storage.
+
+### Evolution policy — when does a `metadata` field get promoted to the core model?
+
+A field living in `metadata` is a candidate for promotion when **all three** of the following are true:
+
+1. At least three distinct customers are storing the same semantic concept (even under different key names).
+2. Olira's platform needs to act on that data — ML, clinical rules, Console display, or reporting.
+3. The concept has a clear, cross-customer definition that Olira can validate.
+
+Promotion is a deliberate product decision. When a field is promoted, the API will continue accepting the old `metadata` key for one deprecation cycle, mirroring its value into the new first-class field server-side.
+
+---
+
+## 13. Patient Token
+
+The `sdk:patient-token` scope allows a customer backend to mint short-lived JWTs locked to a single patient. The typical use case: a provider-facing backend needs to give a patient device access to the Olira MCP Patient State server without embedding a tenant-wide API key on the device.
+
+### Flow
+
+```
+Customer Backend                    Olira API                    Patient Device
+      │                                  │                               │
+      │  POST /v1/auth/token             │                               │
+      │  Bearer: olira_prod_...          │                               │
+      │  { patient_id: "<patient id>" } ►│                               │
+      │                                  │ lookup PatientUser by _id     │
+      │                                  │ mint RS256 JWT                │
+      │◄── { access_token, expires_in } ─│                               │
+      │                                  │                               │
+      │  forward JWT ────────────────────┼──────────────────────────────►│
+      │                                  │                               │
+      │                                  │◄── MCP tool call (JWT Bearer) ─│
+      │                                  │ enforce patient_id from JWT   │
+      │                                  │ (ignores tool argument)       │
+```
+
+The JWT is RS256-signed, valid for 15 minutes, and carries `user_type: "patient"` with `mcp:patient-state` scope. The MCP server enforces the locked `patient_id` regardless of what the caller passes in tool arguments — a patient's token cannot read another patient's data.
+
+### API Surface
+
+```python
+from olira import OliraClient, PatientToken
+
+client = OliraClient(api_key="olira_prod_...")  # must have sdk:patient-token scope
+
+token: PatientToken = client.get_patient_token(patient_id="mrn-00042")
+# token.access_token  — pass this to the patient device
+# token.expires_in    — 900 (15 minutes)
+# token.scopes        — ["mcp:patient-state"]
+```
+
+### Endpoint
+
+| Method | Path | Scope required |
+| ------ | ---- | -------------- |
+| `POST` | `/v1/auth/token` | `sdk:patient-token` |
+
+Request body: `{ "patient_id": "<your patient id>" }`
+
+`patient_id` is the Olira-assigned patient id (the `id` returned by `POST /v1/patients`). The server looks up the `PatientUser` by `_id`, scoped to the calling organisation, and embeds the same ObjectId in the JWT's `patient_id` claim for the MCP to use directly.
+
+---
+
+## 14. Future Features
+
+### OpenTelemetry Integration
+
+Each `log()` call could create a short-lived OTel span (`olira.log {event_type}`) as a child of whatever span is active in the caller's code. Outbound HTTP requests would carry W3C `traceparent` / `tracestate` headers, allowing Olira's API to appear in the customer's existing distributed trace (Datadog, Honeycomb, Jaeger, etc.).
+
+**Proposed design:**
+
+- `opentelemetry-api>=1.20` as an optional dependency (`pip install olira[otel]`).
+- A new `src/olira/otel.py` module with `log_span()` context manager and `get_traceparent_headers()` helper.
+- All OTel behaviour would be a silent no-op when `opentelemetry-api` is not installed — no import errors, no runtime changes.
+- `init()` would accept an optional `otel_tracer_provider` parameter; if omitted, the global OTel provider is used if present.
+
+This feature adds observability value for customers already running OTel infrastructure but has no impact on customers who are not. Deferred to a future minor release.
 
 ---
 
@@ -905,6 +1490,9 @@ Patient-reported symptom burden using ESAS-r (Edmonton Symptom Assessment System
 | `symptoms`                  | `list[EsasItem]`    | Yes       | 1–10 items                                                                                                |
 | `symptoms[].name`           | `str`               | Yes       | pain, tiredness, nausea, depression, anxiety, drowsiness, appetite, wellbeing, shortness_of_breath, other |
 | `symptoms[].score`          | `int`               | Yes       | 0–10                                                                                                      |
+| `symptoms[].type`           | `str`               | No        | Symptom type for matching when snomed_code/meddra_code unset (e.g. pain, nausea)                          |
+| `symptoms[].snomed_code`    | `str`               | No        | SNOMED CT; first choice for matching                                                                      |
+| `symptoms[].meddra_code`    | `str`               | No        | MedDRA; used when snomed_code unset                                                                       |
 | `total_score`               | `int`               | †Computed | Auto-computed by SDK from sum; override accepted                                                          |
 | `subscale_scores.physical`  | `int`               | †Computed | Server-side                                                                                               |
 | `subscale_scores.emotional` | `int`               | †Computed | Server-side                                                                                               |
@@ -1428,7 +2016,7 @@ User interacted with a named application feature.
 
 ### A.8 Profile (`profile`)
 
-All profile events are patch-style — include only the `subject_id` and fields that changed.
+All profile events are patch-style — include only the `patient_id` and fields that changed.
 
 #### `demographics_updated`
 

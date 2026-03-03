@@ -1,0 +1,77 @@
+{
+  "name": "Olira Python SDK",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "VARIANT": "3.11-bullseye"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/home/vscode/.venv/bin/python",
+        "python.linting.enabled": true,
+        "python.formatting.ruffPath": "/usr/local/py-utils/bin/ruff",
+        "python.linting.ruffPath": "/usr/local/py-utils/bin/ruff",
+        "python.linting.mypyPath": "/usr/local/py-utils/bin/mypy",
+        "files.watcherExclude": {
+          "**/__pycache__/**": true,
+          "**/.mypy_cache/**": true,
+          "**/.pytest_cache/**": true,
+          "**/.ruff_cache/**": true,
+          "**/.venv/**": true,
+          "**/venv/**": true
+        },
+        "files.watcherInclude": [
+          "**/*.py",
+          "**/*.yaml",
+          "**/*.yml",
+          "**/*.json",
+          "**/*.toml"
+        ]
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "eamodio.gitlens",
+        "ms-python.mypy-type-checker"
+      ]
+    }
+  },
+  "remoteUser": "vscode",
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh/,target=/home/vscode/.ssh/,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.aws/,target=/home/vscode/.aws/,type=bind,consistency=cached",
+    "source=olira-sdk-venv,target=/home/vscode/.venv,type=volume",
+    "source=olira-sdk-pycache,target=/tmp/pycache,type=volume",
+    "source=olira-sdk-mypy-cache,target=/tmp/.mypy_cache,type=volume",
+    "source=olira-sdk-pytest-cache,target=/tmp/.pytest_cache,type=volume",
+    "source=olira-sdk-ruff-cache,target=/tmp/.ruff_cache,type=volume",
+    "source=olira-sdk-uv-cache,target=/root/.cache/uv,type=volume"
+  ],
+  "containerEnv": {
+    "PYTHONPATH": "${workspaceFolder}/src",
+    "CODE_ARTIFACT_TOKEN": "${localEnv:CODE_ARTIFACT_TOKEN}",
+    "UV_PROJECT_ENVIRONMENT": "/home/vscode/.venv",
+    "PYTHONPYCACHEPREFIX": "/tmp/pycache",
+    "MYPY_CACHE_DIR": "/tmp/.mypy_cache",
+    "PYTEST_CACHE_DIR": "/tmp/.pytest_cache",
+    "RUFF_CACHE_DIR": "/tmp/.ruff_cache"
+  },
+  "features": {
+    "git": "latest",
+    "aws-cli": "latest"
+  },
+  "postCreateCommand": "bash -c 'sudo chown -R vscode:vscode /home/vscode/.venv /tmp/pycache /tmp/.mypy_cache /tmp/.pytest_cache /tmp/.ruff_cache 2>/dev/null || true; cd ${containerWorkspaceFolder} && (uv sync --all-extras 2>/dev/null || UV_INDEX_URL=https://pypi.org/simple/ uv sync --all-extras)'",
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "4gb",
+    "storage": "8gb"
+  },
+  "runArgs": [
+    "--cpus=2",
+    "--memory=4g"
+  ]
+}

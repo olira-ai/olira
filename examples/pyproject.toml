@@ -1,0 +1,10 @@
+[project]
+name = "olira-sdk-examples"
+version = "0.1.0"
+description = "Runnable examples for the Olira Python SDK"
+requires-python = ">=3.9"
+dependencies = [
+    "olira @ file://../",
+    "python-dotenv>=1.0",
+    "ipykernel>=6.0",
+]
