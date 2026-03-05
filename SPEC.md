@@ -46,8 +46,8 @@ Authentication reuses the existing API key infrastructure: keys are created via 
 - Opaque Olira API keys only (v1). No JWT/Auth0.
 - Keys are scoped to a single tenant/organisation.
 - Created via `olira keys create --name "..."` (CLI) or Console dashboard.
-- Key lifecycle (create / list / revoke) is already implemented in `services/app-api/routes/mcp/api_keys.py`.
-- Key format: `olira_{hex}` (prefix stored for display; hash stored server-side).
+- Key lifecycle (create / list / revoke) is already implemented in `services/app-api/routes/auth/api_keys.py`.
+- Key format: `olira_{env}_{64-hex-chars}` (e.g. `olira_prod_…`, `olira_dev_…`; prefix stored for display; hash stored server-side).
 
 ### SDK-side Behaviour
 
@@ -296,7 +296,7 @@ When both axes are provided they are ANDed.
 | Field        | Type             | Notes                                                                        |
 | ------------ | ---------------- | ---------------------------------------------------------------------------- |
 | `event_name` | `OliraEventType` | Derived from `OliraEventType.value`; customers pass `event_type=` to `log()` |
-| `patient_id` | `str`            | Your identifier for this patient — the `id` you supplied when creating the patient. See [Patient ID Resolution](#patient-id-resolution) below. |
+| `patient_id` | `str`            | The Olira-assigned `id` returned when you created the patient. See [Patient ID Resolution](#patient-id-resolution) below. |
 
 ### Optional Fields
 
@@ -419,17 +419,15 @@ The `EventLog` document gets a MongoDB `_id` (ObjectId) assigned by Beanie on in
 
 ### Patient ID Resolution
 
-`patient_id` in every SDK method is **your own identifier for the patient** — the `id` you supplied when you created the patient via `create_patient()` (or the `id` field in the `Patient` model).
-
-Olira never exposes or accepts internal MongoDB ObjectIds through the SDK. The server resolves the supplied string as a customer identifier scoped to your organisation.
+`patient_id` in every SDK method is the **Olira-assigned `id`** returned when you called `create_patient()` (the `id` field of the `Patient` response). You do not supply this id at creation time — Olira assigns it at creation.
 
 ```python
-# patient_id is always your own identifier:
-olira.log(event_type=OliraEventType.USER_LOGIN, patient_id="your-internal-id-8821")
-olira.log(event_type=OliraEventType.USER_LOGIN, patient_id="PRN-00042")
+# patient_id is always the Olira-assigned id returned by create_patient():
+patient = client.create_patient(first_name="Jane", last_name="Smith", ...)
+olira.log(event_type=OliraEventType.USER_LOGIN, patient_id=patient.id)
 ```
 
-Patients must be created via `create_patient()` (or the Console) before events can be logged against them. When using `create_patient()`, the `id` you pass there is the same value you use in `log()`, `get_events()`, and all other calls.
+Patients must be created via `create_patient()` (or the Console) before events can be logged against them. Store the returned `id` from `create_patient()` — it is the value you use in `log()`, `get_events()`, and all other calls.
 
 ### patient_id Validation
 
@@ -462,7 +460,7 @@ Customers call `olira.log(event_type=OliraEventType.X, patient_id=..., payload={
 | `SYMPTOM_ESAS_REPORT`       | `symptoms: list[EsasItem]`, `total_score: int` — `recall_period?: str`                                                |
 | `SYMPTOM_CUSTOM_REPORT`     | `symptoms: list[CustomSymptomItem]` — `instrument?: str`                                                              |
 | `SYMPTOM_FREE_TEXT`         | `text: str` — `associated_symptoms?: list[str]`                                                                       |
-| `SYMPTOM_DETAIL`            | `symptom_type: str`, `detail_type: str`, `response: str` — `question?: str`, `snomed_code?: str`, `meddra_code?: str` |
+| `SYMPTOM_DETAIL`            | `type: str`, `detail_type: str`, `response: str` — `question?: str`, `snomed_code?: str`, `meddra_code?: str` |
 | `FUNCTIONAL_CLASS_REPORTED` | `instrument: str`, `functional_class: int` — `reported_by?: str`, `change_from_prior?: dict`                          |
 | `HEALTH_METRIC_REPORTED`    | `metric_type: str`, `score: float`, `scale_min: float`, `scale_max: float` — `source?: str`                           |
 | `MOODS_REPORT`              | `moods: list[MoodItem]` — `source?: str`                                                                              |
@@ -476,7 +474,7 @@ class EsasItem(BaseModel):
     """Shape matches EsasSymptomItem in common-models util.py."""
     name: str                      # pain, tiredness, nausea, depression, anxiety, ...
     score: int = Field(ge=0, le=10)
-    symptom_type: str | None = None  # for matching when snomed/meddra unset
+    type: str | None = Field(default=None)  # for matching when snomed/meddra unset
     snomed_code: str | None = None
     meddra_code: str | None = None
 ```
@@ -735,7 +733,6 @@ Organisation identity is derived entirely from the API key — every request car
   "errors": [
     {
       "index": 3,
-      "status": "error",
       "code": "validation_error",
       "message": "patient_id required"
     }
@@ -745,7 +742,7 @@ Organisation identity is derived entirely from the API key — every request car
 
 Partial batch failures: the SDK logs dropped events (event_name only, no payload content) and invokes the `on_error` callback if configured.
 
-> **Note — patient graph update (roadmap):** `PatientUser` records created via the Console API or SDK do not have a `UserPatientState` (the personalization graph is only initialised during app-user registration). Events are saved to the `EventLog` collection in full, but the graph pipeline (`_save_and_update_graph`) skips the state-update step and logs a warning when no graph is found. The graph update will be enabled once `UserPatientState` creation is wired into the `PatientUser` lifecycle.
+> **Note — patient graph update:** `PatientUser` records created via the Console API or SDK receive a `UserPatientState` at creation time (`create_default_patient_state()` is called as part of the `PatientUser` lifecycle). Events are saved to the `EventLog` collection and the graph pipeline runs normally.
 
 ### Query Events (`GET /v1/events`)
 
@@ -814,7 +811,6 @@ Request body:
 
 ```json
 {
-  "id": "mrn-00042",
   "first_name": "Jane",
   "last_name": "Smith",
   "email": "jane@example.com",
@@ -827,9 +823,8 @@ Request body:
 }
 ```
 
-- `id` is **required** and must be unique within the organisation. It is the caller's own identifier (e.g. an EHR patient ID).
+- The server assigns a stable `id` at creation time; it is returned in the response.
 - Returns `201` with the created patient as a `SdkPatientResponse` body.
-- Returns `409 Conflict` if a patient with the same `id` already exists.
 
 ### List Patients (`GET /v1/patients`)
 
@@ -1536,7 +1531,7 @@ Follow-up detail on a previously reported symptom.
 
 | Field          | Type  | Required | Notes                                                                           |
 | -------------- | ----- | -------- | ------------------------------------------------------------------------------- |
-| `symptom_type` | `str` | Yes      | Symptom name/key                                                                |
+| `type`         | `str` | Yes      | Symptom name/key                                                                |
 | `detail_type`  | `str` | Yes      | `'location'\|'duration'\|'character'\|'trigger'\|'alleviating_factor'\|'other'` |
 | `response`     | `str` | Yes      | Patient's response                                                              |
 | `question`     | `str` | No       | Question text that prompted the detail                                          |
