@@ -13,6 +13,7 @@ from .models import (
     DeleteResult,
     EventQueryResult,
     Patient,
+    PatientBatchResult,
     PatientListResult,
     PatientToken,
 )
@@ -247,6 +248,11 @@ class HttpTransport:
         """Soft-delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope."""
         self._request("DELETE", f"/v1/patients/{patient_id}")
 
+    def create_patients_batch(self, patients: list[dict[str, Any]]) -> PatientBatchResult:
+        """Batch-create patients (POST /v1/patients/batch). Requires api:manage-patients scope."""
+        raw = self._request("POST", "/v1/patients/batch", json={"patients": patients})
+        return PatientBatchResult.model_validate(raw)
+
     def get_patient_token(self, body: dict[str, Any]) -> PatientToken:
         """Mint a patient-scoped JWT (POST /v1/auth/token). Requires sdk:patient-token scope."""
         raw = self._request("POST", "/v1/auth/token", json=body)
@@ -323,6 +329,11 @@ class AsyncHttpTransport:
     async def delete_patient(self, patient_id: str) -> None:
         """Soft-delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope."""
         await self._request("DELETE", f"/v1/patients/{patient_id}")
+
+    async def create_patients_batch(self, patients: list[dict[str, Any]]) -> PatientBatchResult:
+        """Batch-create patients (POST /v1/patients/batch). Requires api:manage-patients scope."""
+        raw = await self._request("POST", "/v1/patients/batch", json={"patients": patients})
+        return PatientBatchResult.model_validate(raw)
 
     async def get_patient_token(self, body: dict[str, Any]) -> PatientToken:
         """Mint a patient-scoped JWT (POST /v1/auth/token). Requires sdk:patient-token scope."""

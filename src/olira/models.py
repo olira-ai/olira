@@ -326,6 +326,22 @@ class PatientListResult(BaseModel):
     has_more: bool
 
 
+class PatientBatchItem(BaseModel):
+    """One successfully created patient from a batch_create_patients() call."""
+
+    index: int
+    id: str
+    source: str | None = None
+
+
+class PatientBatchResult(BaseModel):
+    """Result of a create_patients_batch() call. Mirrors /v1/patients/batch response."""
+
+    count: int
+    items: list[PatientBatchItem]
+    errors: list[BatchError] = Field(default_factory=list)
+
+
 class PatientToken(BaseModel):
     """A short-lived patient-scoped JWT returned by get_patient_token().
 

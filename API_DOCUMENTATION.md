@@ -732,6 +732,95 @@ client.delete_patient(patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82")
 
 ---
 
+### Batch create patients
+
+**`POST /v1/patients/batch`**
+
+Creates up to **500** patients in a single request. Partial success is supported — if some patients fail, the rest are still created. The response lists each success in `items` and each failure in `errors`, both keyed by zero-based `index` matching the input array.
+
+**Authorization:** `api:manage-patients` scope
+
+**Request body**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `patients` | `list[CreatePatientRequest]` | **Yes** | 1–500 patient objects. Each object has the same fields as `POST /v1/patients` |
+
+**Response** `200 OK`
+
+| Field | Type | Description |
+|---|---|---|
+| `count` | `int` | Total patients submitted (accepted + failed) |
+| `items` | `list` | Successfully created patients |
+| `items[].index` | `int` | Zero-based position in the input array |
+| `items[].id` | `str` | Olira-assigned patient id |
+| `items[].source` | `str \| null` | First `external_identifiers[0].system`, or `null` if none provided |
+| `errors` | `list` | Patients that failed to create |
+| `errors[].index` | `int` | Zero-based position in the input array |
+| `errors[].code` | `str` | Machine-readable error code (see table below) |
+| `errors[].message` | `str` | Human-readable description |
+
+**Error codes**
+
+| Code | Meaning |
+|---|---|
+| `conflict` | `external_identifier (system, value)` already exists in your organisation |
+| `validation_error` | Invalid field value (e.g. malformed `date_of_birth`) |
+| `server_error` | Unexpected server-side failure |
+
+**Example request**
+
+```python
+from olira import OliraClient, CreatePatientRequest, ExternalIdentifier
+
+client = OliraClient(api_key="olira_prod_...")
+
+patients = [
+    CreatePatientRequest(
+        first_name="Jane",
+        last_name="Smith",
+        timezone="America/New_York",
+        external_identifiers=[ExternalIdentifier(system="epic", value="MRN-001")],
+    ),
+    CreatePatientRequest(
+        first_name="John",
+        last_name="Doe",
+        timezone="America/Chicago",
+        external_identifiers=[ExternalIdentifier(system="flatiron", value="FLT-002")],
+    ),
+]
+
+result = client.create_patients_batch(patients)
+print(f"Created: {len(result.items)}, Failed: {len(result.errors)}")
+for item in result.items:
+    print(f"  [{item.index}] id={item.id} source={item.source}")
+for err in result.errors:
+    print(f"  [{err.index}] {err.code}: {err.message}")
+```
+
+**Example response**
+
+```json
+{
+  "count": 2,
+  "items": [
+    { "index": 0, "id": "abc123...", "source": "epic" },
+    { "index": 1, "id": "def456...", "source": "flatiron" }
+  ],
+  "errors": []
+}
+```
+
+**Error responses**
+
+| Status | Cause |
+|---|---|
+| `401` | Missing or invalid API key |
+| `403` | Key does not have `api:manage-patients` scope |
+| `422 Unprocessable Entity` | More than 500 patients submitted, or invalid request body |
+
+---
+
 ## Events
 
 Event endpoints record health-related actions against a patient. The patient must exist (created via `POST /v1/patients` or the Console) before you can log events against them.

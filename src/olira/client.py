@@ -18,6 +18,7 @@ from .models import (
     OliraEventType,
     OliraTrace,
     Patient,
+    PatientBatchResult,
     PatientListResult,
     PatientToken,
     UpdatePatientRequest,
@@ -265,6 +266,15 @@ class OliraClient:
             metadata=metadata,
         )
         return self._transport.create_patient(req.model_dump(exclude_none=True))
+
+    def create_patients_batch(self, patients: list[CreatePatientRequest]) -> PatientBatchResult:
+        """Batch-create up to 500 patients. Requires api:manage-patients scope.
+
+        Returns a PatientBatchResult with items (successes) and errors (failures).
+        Partial success is supported — failures do not abort the rest of the batch.
+        """
+        wire = [p.model_dump(exclude_none=True) for p in patients]
+        return self._transport.create_patients_batch(wire)
 
     def get_patient(self, *, patient_id: str) -> Patient:
         """Get a patient by their id. Requires api:manage-patients scope."""
@@ -602,6 +612,19 @@ class AsyncOliraClient:
             metadata=metadata,
         )
         return await self._transport.create_patient(req.model_dump(exclude_none=True))
+
+    async def create_patients_batch(self, patients: list[CreatePatientRequest]) -> PatientBatchResult:
+        """Batch-create up to 500 patients. Requires api:manage-patients scope.
+
+        Returns a PatientBatchResult with items (successes) and errors (failures).
+        Partial success is supported — failures do not abort the rest of the batch.
+        """
+        if self._transport is None:
+            raise ValidationError(
+                "AsyncOliraClient must be used as an async context manager before calling create_patients_batch()"
+            )
+        wire = [p.model_dump(exclude_none=True) for p in patients]
+        return await self._transport.create_patients_batch(wire)
 
     async def get_patient(self, *, patient_id: str) -> Patient:
         """Get a patient by their id. Requires api:manage-patients scope."""

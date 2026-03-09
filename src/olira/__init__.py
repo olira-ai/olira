@@ -25,6 +25,8 @@ from .models import (
     OliraEventType,
     OliraTrace,
     Patient,
+    PatientBatchItem,
+    PatientBatchResult,
     PatientListResult,
     PatientToken,
     PerformingLab,
@@ -63,6 +65,8 @@ __all__ = [
     "CreatePatientRequest",
     "UpdatePatientRequest",
     "Patient",
+    "PatientBatchItem",
+    "PatientBatchResult",
     "PatientListResult",
     "PatientToken",
     # Module-level event functions
@@ -74,6 +78,7 @@ __all__ = [
     "delete_events",
     # Module-level patient functions
     "create_patient",
+    "create_patients_batch",
     "get_patient",
     "list_patients",
     "update_patient",
@@ -238,6 +243,15 @@ def create_patient(
         external_identifiers=external_identifiers,
         metadata=metadata,
     )
+
+
+def create_patients_batch(patients: list[CreatePatientRequest]) -> PatientBatchResult:
+    """Batch-create up to 500 patients. Module-level proxy to the singleton client.
+
+    Requires an API key with the api:manage-patients scope. Partial success is supported.
+    Returns a :class:`PatientBatchResult` with items (successes) and errors (failures).
+    """
+    return _get_client().create_patients_batch(patients)
 
 
 def get_patient(*, patient_id: str) -> Patient:
