@@ -258,7 +258,7 @@ async def test_async_get_events():
 
         result = await client.get_events(
             patient_id="p_async",
-            event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+            event_type=OliraEventType.SYMPTOM_REPORT,
             from_timestamp="2026-01-01T00:00:00Z",
         )
 
@@ -266,7 +266,7 @@ async def test_async_get_events():
     method, params = calls[0]
     assert method == "get_events"
     assert params["patient_id"] == "p_async"
-    assert params["event_type"] == "symptom_esas_report"
+    assert params["event_type"] == "symptom_report"
     assert isinstance(result, EventQueryResult)
 
 

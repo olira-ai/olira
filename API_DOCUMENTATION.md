@@ -4,6 +4,44 @@ The Olira API lets you manage patients, log health events, and mint patient-scop
 
 ---
 
+## Getting Started
+
+**Install the SDK:**
+
+```bash
+pip install olira
+```
+
+**First logged event — complete path from zero:**
+
+```python
+import olira
+from olira import OliraEventType
+
+# 1. Initialise once at application startup (reads OLIRA_API_KEY env var if api_key is omitted)
+olira.init(api_key="olira_prod_...")
+
+# 2. Create a patient — Olira assigns the id; store it for all future calls
+from olira import OliraClient
+client = OliraClient(api_key="olira_prod_...")
+patient = client.create_patient(
+    first_name="Jane",
+    last_name="Smith",
+    timezone="America/New_York",
+)
+patient_id = patient.id  # e.g. "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82" — persist this
+
+# 3. Log an event
+olira.log(event_type=OliraEventType.USER_LOGIN, patient_id=patient_id)
+
+# 4. Flush before process exit to ensure all queued events are delivered
+olira.flush()
+```
+
+> `patient.id` is Olira-assigned — you cannot choose it. Persist it in your database so you can reference the same patient in future calls.
+
+---
+
 ## Authentication
 
 All Olira API requests are authenticated using an `Authorization: Bearer <token>` header. There are two types of tokens, each suited to a different context.
@@ -304,65 +342,66 @@ Returned by `DELETE /v1/events`.
 
 String enum. All values are lowercase with underscores.
 
-**Symptoms**
+**Symptom reports**
 
 | Value | Description |
 |---|---|
-| `symptom_ctcae_grade` | NCI CTCAE graded symptom |
-| `symptom_esas_report` | ESAS-r symptom score report |
-| `symptom_custom_report` | Custom symptom report |
-| `symptom_free_text` | Free-text symptom description |
-| `symptom_detail` | Detailed symptom record |
-
-**Functional & Health**
-
-| Value | Description |
-|---|---|
-| `functional_class_reported` | Functional classification (e.g. ECOG) |
-| `health_metric_reported` | General health metric |
-| `moods_report` | Mood/emotional state report |
+| `symptom_report` | Structured symptom severity with a defined instrument (`esas_r`, `pro_ctcae`, `ctcae`, `custom`). Pass `instrument` in the payload |
+| `symptom_free_text` | Free-text symptom description (processed by extraction) |
+| `symptom_detail` | Follow-up detail on an already-reported symptom |
+| `moods_report` | Categorical mood or emotion labels |
+| `functional_class_reported` | Functional classification (NYHA, ECOG, Karnofsky, etc.) |
+| `health_metric_reported` | Single scalar patient-reported metric with an explicit scale |
 
 **Lab & Clinical**
 
 | Value | Description |
 |---|---|
-| `lab_results_received` | Laboratory test results |
-| `vitals_measurement` | Vital signs (BP, HR, temp, etc.) |
-| `clinical_note_received` | Clinical note or encounter summary |
+| `lab_results_received` | Laboratory test results (blood, urine, etc.) |
+| `vitals_measurement` | Vital signs (BP, HR, SpO2, temp, etc.) |
+| `clinical_note_received` | Provider-authored clinical note with structured sections |
+| `clinical_finding_reported` | Discrete clinical finding from exam or assessment |
+| `procedure_result_received` | Pathology or procedure result narrative |
+| `genomic_variant_reported` | Genomic or molecular variants |
+| `imaging_result_received` | Imaging study findings (CT, MRI, PET, etc.) |
+| `clinical_measurement_reported` | Non-lab clinical measurements (ejection fraction, tumour diameter, ECOG score, etc.) |
+| `treatment_response_assessment_reported` | Treatment response assessment (CR, PR, SD, PD, etc.) |
+| `clinical_plan_item_reported` | Discrete future plan items (orders, referrals, scheduled procedures) |
+| `care_encounter_reported` | Care encounters or visits |
+| `unstructured_report_received` | Raw document payload for extraction (OCR, PDF, EHR export) |
 
 **Questionnaires**
 
 | Value | Description |
 |---|---|
-| `questionnaire_response` | Full questionnaire completion |
-| `questionnaire_item_response` | Single questionnaire item answer |
+| `questionnaire_response` | Full questionnaire or instrument submission (PHQ-9, GAD-7, etc.) |
+| `questionnaire_item_response` | Single question-and-answer pair |
 
 **Conversations**
 
 | Value | Description |
 |---|---|
-| `conversation_completed` | End of an AI conversation session |
-| `conversation_turn_logged` | Single turn within a conversation |
+| `conversation_completed` | End of a chat or voice conversation (with transcript) |
+| `conversation_turn_logged` | Single turn within an ongoing conversation |
 
-**Wearables**
+**Passive data**
 
 | Value | Description |
 |---|---|
-| `heart_rate_data_received` | Heart rate / HRV data from a wearable |
-| `sleep_data_received` | Sleep stage data |
-| `activity_data_received` | Step count / activity / calorie data |
+| `heart_rate_data_received` | Heart rate / HRV data from a device |
+| `sleep_data_received` | Sleep session data |
+| `activity_data_received` | Steps / activity / calorie data |
 | `cgm_reading_received` | Continuous glucose monitor reading |
 | `spo2_reading_received` | Blood oxygen saturation reading |
-| `weight_measurement_received` | Body weight measurement |
+| `weight_measurement_received` | Body weight from a connected scale |
 
 **Medications**
 
 | Value | Description |
 |---|---|
-| `medication_added` | New medication added to regimen |
-| `medication_updated` | Existing medication details updated |
-| `medication_deleted` | Medication removed from regimen |
-| `medication_dose_update` | Dose taken or skipped event |
+| `medication_action` | Add, update, or remove medications from the patient's list. Pass `action: "add" \| "update" \| "delete"` per item |
+| `medication_dose_update` | Dose taken or skipped |
+| `medication_adverse_event_reported` | Medication-related adverse event or side effect |
 
 **Engagement**
 
@@ -372,7 +411,7 @@ String enum. All values are lowercase with underscores.
 | `user_logout` | Patient logged out |
 | `content_interacted` | Patient interacted with a content item |
 | `notification_interacted` | Patient acted on a push notification |
-| `task_updated` | Task status changed |
+| `task_updated` | Task completed or skipped |
 | `interaction_feedback` | Explicit feedback given by patient |
 | `feature_used` | Feature usage tracked |
 
@@ -381,14 +420,14 @@ String enum. All values are lowercase with underscores.
 | Value | Description |
 |---|---|
 | `demographics_updated` | Name, DOB, sex, address, language, etc. |
-| `condition_updated` | Diagnosis, stage, ICD-10 codes |
+| `condition_updated` | Diagnosis or disease (disease_type, stage) |
 | `preferences_updated` | Reading level, tone, dietary, notifications |
 | `emergency_contact_updated` | Emergency contact details |
-| `care_team_updated` | Providers added or updated |
+| `care_team_updated` | Providers added, updated, or removed |
 | `insurance_updated` | Insurance / payer details |
 | `social_updated` | Social determinants of health |
 | `pharmacy_updated` | Preferred pharmacy |
-| `treatment_phase_changed` | Treatment phase transition |
+| `treatment_phase_changed` | Treatment phase transition (active_treatment, surveillance, palliative, remission) |
 
 ---
 
@@ -404,7 +443,7 @@ All patient endpoints require the `api:manage-patients` scope and accept a raw A
 
 **`POST /v1/patients`**
 
-Creates a new patient in your organisation. The `id` you supply becomes the permanent identifier used in all subsequent API calls for this patient.
+Creates a new patient in your organisation. Olira assigns a stable `id` at creation time — store it to reference this patient in all subsequent calls.
 
 **Authorization:** `api:manage-patients` scope
 
@@ -870,6 +909,25 @@ client.log(
 client.close()
 ```
 
+**Python** (module-level singleton — recommended for long-running services)
+
+```python
+import olira
+from olira import OliraEventType
+
+# Call once at startup
+olira.init(api_key="olira_prod_...")
+
+# Then anywhere in your codebase — no client reference needed
+olira.log(
+    event_type=OliraEventType.USER_LOGIN,
+    patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
+)
+
+# At process shutdown
+olira.flush()
+```
+
 **Error responses**
 
 | Status | Cause |
@@ -906,18 +964,18 @@ This is the endpoint used by the background worker that powers `log()`.
       "event_id": "e1a2b3c4-0001-0000-0000-000000000001",
       "timestamp": "2026-03-01T09:00:00Z",
       "payload": {},
-      "context": { "sdk_version": "0.1.0a1", "environment": "production" }
+      "context": { "sdk_version": "0.1.0a4", "environment": "production" }
     },
     {
-      "event_name": "symptom_esas_report",
+      "event_name": "symptom_report",
       "patient_id": "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
       "event_id": "e1a2b3c4-0001-0000-0000-000000000002",
       "timestamp": "2026-03-01T09:01:00Z",
       "payload": {
-        "symptoms": [{ "name": "pain", "score": 4 }],
-        "total_score": 4
+        "instrument": "esas_r",
+        "symptoms": [{ "name": "pain", "score": 4 }]
       },
-      "context": { "sdk_version": "0.1.0a1", "environment": "production" }
+      "context": { "sdk_version": "0.1.0a4", "environment": "production" }
     }
   ]
 }
@@ -962,11 +1020,11 @@ result = client.log_batch([
         patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
     ),
     EventSpec(
-        event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+        event_type=OliraEventType.SYMPTOM_REPORT,
         patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
         payload={
+            "instrument": "esas_r",
             "symptoms": [EsasItem(name="pain", score=4).model_dump()],
-            "total_score": 4,
         },
     ),
 ])
@@ -1016,13 +1074,13 @@ Use `ingested_after` / `ingested_before` when you want to find events by when th
   "events": [
     {
       "event_id": "e1a2b3c4-0001-0000-0000-000000000002",
-      "event_type": "symptom_esas_report",
+      "event_type": "symptom_report",
       "patient_id": "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
       "timestamp": "2026-03-01T09:01:00Z",
       "ingested_at": "2026-03-01T09:01:03Z",
       "payload": {
-        "symptoms": [{ "name": "pain", "score": 4 }],
-        "total_score": 4
+        "instrument": "esas_r",
+        "symptoms": [{ "name": "pain", "score": 4 }]
       },
       "trace": null
     }
@@ -1041,7 +1099,7 @@ client = OliraClient(api_key="olira_prod_...")
 
 result = client.get_events(
     patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-    event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+    event_type=OliraEventType.SYMPTOM_REPORT,
     ingested_after="2026-03-01T00:00:00Z",
 )
 print(f"{result.total} events found")
@@ -1184,3 +1242,112 @@ client.close()
 | `401` | Missing or invalid API key |
 | `403` | Key does not have `sdk:patient-token` scope |
 | `404 Not Found` | No patient with this `patient_id` in your organisation, or patient has been deleted |
+
+---
+
+## Error Handling
+
+All SDK errors are subclasses of `OliraError`. Import the specific types you want to catch:
+
+```python
+from olira import AuthError, ValidationError, RateLimitError, ServerError
+
+try:
+    result = client.log_batch([...])
+except AuthError:
+    # Invalid or revoked API key, or missing scope
+    raise
+except RateLimitError as e:
+    # Too many requests — retry after e.retry_after seconds
+    time.sleep(e.retry_after)
+except ValidationError:
+    # Bad request — malformed payload, missing required field, etc.
+    logging.error("Event rejected: %s", e)
+except ServerError:
+    # 5xx from Olira — SDK has already retried; escalate or queue for later
+    raise
+```
+
+| Exception | When raised |
+|---|---|
+| `AuthError` | `401` or `403` response — invalid key, revoked key, or missing scope |
+| `ValidationError` | `422` response or client-side pre-flight check (e.g. no filters on `delete_events`) |
+| `RateLimitError` | `429` response — `e.retry_after` contains the seconds to wait |
+| `ServerError` | `5xx` response after all retries are exhausted |
+
+---
+
+## Common Event Payloads
+
+Quick reference for the four most-used event types. All payloads are passed as the `payload` dict to `client.log()` or inside `EventSpec`.
+
+### `symptom_report`
+
+```python
+from olira import EsasItem
+
+payload = {
+    "instrument": "esas_r",
+    "symptoms": [
+        EsasItem(name="pain", score=3).model_dump(),
+        EsasItem(name="fatigue", score=5).model_dump(),
+        EsasItem(name="nausea", score=1).model_dump(),
+    ],
+}
+client.log(event_type=OliraEventType.SYMPTOM_REPORT, patient_id=patient_id, payload=payload)
+```
+
+### `lab_results_received`
+
+```python
+payload = {
+    "results": [
+        {
+            "test_name": "Hemoglobin",
+            "value": 11.2,
+            "unit": "g/dL",
+            "reference_range": "12.0-16.0",
+            "flag": "L",
+        }
+    ],
+    "performing_lab": {"name": "Quest Diagnostics", "location": "New York, NY"},
+    "collection_date": "2026-03-01",
+}
+client.log(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id=patient_id, payload=payload)
+```
+
+### `medication_action`
+
+```python
+payload = {
+    "action": "add",
+    "medications": [
+        {
+            "rxnorm_cui": "1049502",
+            "medication_name": "Ondansetron 4mg",
+            "dose": 4.0,
+            "dose_unit": "mg",
+            "frequency": "every_8h_as_needed",
+            "route": "oral",
+            "form": "tablet",
+            "start_date": "2026-03-01",
+        }
+    ],
+}
+client.log(event_type=OliraEventType.MEDICATION_ACTION, patient_id=patient_id, payload=payload)
+```
+
+### `conversation_completed`
+
+```python
+payload = {
+    "transcript": [
+        {"role": "assistant", "content": "How are you feeling today?"},
+        {"role": "user", "content": "I've had a headache since yesterday."},
+        {"role": "assistant", "content": "I'm sorry to hear that. On a scale of 0–10, how severe is it?"},
+        {"role": "user", "content": "About a 6."},
+    ],
+    "duration_seconds": 120,
+}
+client.log(event_type=OliraEventType.CONVERSATION_COMPLETED, patient_id=patient_id, payload=payload)
+```

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0a4] - 2026-03-16
+
+### Fixed
+
+- **SPEC.md**: `medication_action` `action` field enum corrected from `'added'|'updated'|'deleted'` to `'add'|'update'|'delete'` in section 5.6 (table and example payload) and appendix A.6 (table, notes column, and footer prose). The authoritative values have always been `"add"`, `"update"`, `"delete"` — this was a documentation-only regression introduced in the previous session.
+
+### Changed
+
+- **API_DOCUMENTATION.md**: Added **Getting Started** section at the top — covers `pip install olira`, `olira.init()`, `create_patient()`, `olira.log()`, and `olira.flush()` as a copy-paste runnable quickstart.
+- **API_DOCUMENTATION.md**: Fixed factual error in "Create a patient" — the description now correctly states that Olira assigns the patient `id` at creation time rather than the caller supplying it.
+- **API_DOCUMENTATION.md**: Added **module-level singleton example** (`olira.init()` / `olira.log()` / `olira.flush()`) alongside the existing `OliraClient` example in the "Log a single event" section.
+- **API_DOCUMENTATION.md**: Fixed stale `GET /v1/events` response example — added `"instrument": "esas_r"` to the `symptom_report` payload and removed the stale `"total_score"` field.
+- **API_DOCUMENTATION.md**: Added **Error Handling** section — documents the typed exception hierarchy (`AuthError`, `ValidationError`, `RateLimitError`, `ServerError`) with a try/except example and a reference table.
+- **API_DOCUMENTATION.md**: Added **Common Event Payloads** section — copy-paste examples for `symptom_report`, `lab_results_received`, `medication_action`, and `conversation_completed`.
+
 ## [0.1.0a3] - 2026-03-09
 
 ### Added

@@ -49,24 +49,23 @@ async def test_async_client_log_with_payload():
     async with AsyncOliraClient(api_key="key", batch_size=10) as client:
         client._transport = transport
         payload = {
+            "instrument": "esas_r",
             "symptoms": [
                 EsasItem(name="pain", score=3).model_dump(),
                 EsasItem(name="tiredness", score=2).model_dump(),
             ],
-            "total_score": 5,
-            "recall_period": "24h",
         }
         await client.log(
-            event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+            event_type=OliraEventType.SYMPTOM_REPORT,
             patient_id="subj_1",
             payload=payload,
         )
         await client.flush()
 
     assert len(events_sent) == 1
-    assert events_sent[0]["event_name"] == "symptom_esas_report"
-    assert events_sent[0]["payload"]["total_score"] == 5
-    assert events_sent[0]["payload"]["recall_period"] == "24h"
+    assert events_sent[0]["event_name"] == "symptom_report"
+    assert events_sent[0]["payload"]["instrument"] == "esas_r"
+    assert len(events_sent[0]["payload"]["symptoms"]) == 2
 
 
 @pytest.mark.asyncio
@@ -90,9 +89,9 @@ async def test_async_client_log_batch():
             [
                 EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
                 EventSpec(
-                    event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+                    event_type=OliraEventType.SYMPTOM_REPORT,
                     patient_id="p_2",
-                    payload={"symptoms": [], "total_score": 0},
+                    payload={"instrument": "esas_r", "symptoms": []},
                 ),
             ]
         )
@@ -102,7 +101,7 @@ async def test_async_client_log_batch():
     assert len(batches_sent) == 1
     assert len(batches_sent[0]) == 2
     assert batches_sent[0][0]["event_name"] == "user_login"
-    assert batches_sent[0][1]["event_name"] == "symptom_esas_report"
+    assert batches_sent[0][1]["event_name"] == "symptom_report"
 
 
 @pytest.mark.asyncio

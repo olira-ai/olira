@@ -84,9 +84,9 @@ olira.init(api_key="olira_prod_...")   # or set OLIRA_API_KEY env var
 
 # Minimal log — payload is a free-form dict
 olira.log(
-    event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+    event_type=OliraEventType.SYMPTOM_REPORT,
     patient_id="p_123",
-    payload={"symptoms": [{"name": "pain", "score": 4}], "total_score": 4},
+    payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 4}]},
 )
 
 # With trace (links event to an internal Olira object)
@@ -106,10 +106,10 @@ Pydantic helpers remain exported for customers who want structured payload const
 from olira import EsasItem
 
 payload = {
+    "instrument": "esas_r",
     "symptoms": [EsasItem(name="pain", score=4).model_dump()],
-    "total_score": 4,
 }
-olira.log(event_type=OliraEventType.SYMPTOM_ESAS_REPORT, patient_id="p_123", payload=payload)
+olira.log(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_123", payload=payload)
 ```
 
 Optional `init` parameters:
@@ -167,9 +167,9 @@ from olira import AsyncOliraClient, OliraEventType
 
 async with AsyncOliraClient(api_key=...) as client:
     await client.log(
-        event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+        event_type=OliraEventType.SYMPTOM_REPORT,
         patient_id="p_789",
-        payload={"symptoms": [{"name": "pain", "score": 3}], "total_score": 3},
+        payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
     )
     await client.flush()
 ```
@@ -187,8 +187,8 @@ result: BatchResult = olira.log_batch([
     EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
     EventSpec(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_2",
               payload={"results": [...]}),
-    EventSpec(event_type=OliraEventType.SYMPTOM_ESAS_REPORT, patient_id="p_3",
-              payload={"symptoms": [...], "total_score": 5}),
+    EventSpec(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_3",
+              payload={"instrument": "esas_r", "symptoms": [...]}),
 ])
 
 print(result.accepted)           # int
@@ -201,7 +201,7 @@ for err in result.errors:
 
 | Name               | Kind      | Description                                                           |
 | ------------------ | --------- | --------------------------------------------------------------------- |
-| `OliraEventType`   | StrEnum   | 41 customer-facing event types (string values match common-models)    |
+| `OliraEventType`   | StrEnum   | 47 customer-facing event types (string values match common-models)    |
 | `OliraTrace`       | BaseModel | Links event to an internal Olira object (`object_type` + `object_id`) |
 | `EventSpec`        | dataclass | Lightweight event spec for `log_batch()`                              |
 | `BatchResult`      | dataclass | Result of `log_batch()` — `accepted`, `failed`, `errors`              |
@@ -456,11 +456,9 @@ Customers call `olira.log(event_type=OliraEventType.X, patient_id=..., payload={
 
 | Event type                  | Payload fields (required / optional)                                                                                  |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `SYMPTOM_CTCAE_GRADE`       | `symptoms: list[CtcaeItem]` — `instrument?: str`, `recall_period_days?: int`                                          |
-| `SYMPTOM_ESAS_REPORT`       | `symptoms: list[EsasItem]`, `total_score: int` — `recall_period?: str`                                                |
-| `SYMPTOM_CUSTOM_REPORT`     | `symptoms: list[CustomSymptomItem]` — `instrument?: str`                                                              |
+| `SYMPTOM_REPORT`            | `instrument: str`, `symptoms: list[EsasItem\|CtcaeItem\|CustomSymptomItem]` — `recall_period?: str`, `recall_period_days?: int` |
 | `SYMPTOM_FREE_TEXT`         | `text: str` — `associated_symptoms?: list[str]`                                                                       |
-| `SYMPTOM_DETAIL`            | `type: str`, `detail_type: str`, `response: str` — `question?: str`, `snomed_code?: str`, `meddra_code?: str` |
+| `SYMPTOM_DETAIL`            | `type: str`, `detail_type: str`, `response: str` — `question?: str`, `snomed_code?: str`, `meddra_code?: str`        |
 | `FUNCTIONAL_CLASS_REPORTED` | `instrument: str`, `functional_class: int` — `reported_by?: str`, `change_from_prior?: dict`                          |
 | `HEALTH_METRIC_REPORTED`    | `metric_type: str`, `score: float`, `scale_min: float`, `scale_max: float` — `source?: str`                           |
 | `MOODS_REPORT`              | `moods: list[MoodItem]` — `source?: str`                                                                              |
@@ -485,9 +483,9 @@ class EsasItem(BaseModel):
 from olira import EsasItem, OliraEventType
 
 items = [EsasItem(name="pain", score=4), EsasItem(name="nausea", score=2), EsasItem(name="anxiety", score=5)]
-payload = {"symptoms": [i.model_dump() for i in items], "total_score": sum(i.score for i in items), "recall_period": "past_24h"}
+payload = {"instrument": "esas_r", "symptoms": [i.model_dump() for i in items], "recall_period": "past_24h"}
 
-client.log(event_type=OliraEventType.SYMPTOM_ESAS_REPORT, patient_id="p_abc123", payload=payload)
+client.log(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_abc123", payload=payload)
 ```
 
 ### 5.2 Lab & Clinical
@@ -598,12 +596,11 @@ client.log(event_type=OliraEventType.SLEEP_DATA_RECEIVED, patient_id="p_abc123",
 
 ### 5.6 Medication
 
-| Event type               | Payload fields (required / optional)                                                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `MEDICATION_ADDED`       | `medications: list[dict]` (see MedicationItem schema)                                                                                 |
-| `MEDICATION_UPDATED`     | `medications: list[dict]` (see MedicationPatch schema)                                                                                |
-| `MEDICATION_DELETED`     | `medications: list[dict]` (see MedicationIdentifier)                                                                                  |
-| `MEDICATION_DOSE_UPDATE` | `rxnorm_cui?: str`, `medication_name?: str` — `scheduled_time?: str`, `dose_amount?`, `dose_unit?: str`, `action: 'taken'\|'skipped'` |
+| Event type                          | Payload fields (required / optional)                                                                                                    |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `MEDICATION_ACTION`                 | `action: 'add'\|'update'\|'delete'`, `medications: list[dict]` (see MedicationItem / MedicationPatch / MedicationIdentifier schema) |
+| `MEDICATION_DOSE_UPDATE`            | `medication_adherence: list[DoseRecord]` — `source?: str`                                                                               |
+| `MEDICATION_ADVERSE_EVENT_REPORTED` | `rxnorm_cui?: str`, `medication_name?: str`, `adverse_event: str` — `severity?: str`, `onset_date?: str`, `resolved?: bool`             |
 
 **Medication identity:** `rxnorm_cui` is the preferred identifier. When provided, `medication_name` and `therapeutic_class` are resolved server-side. At least one of `rxnorm_cui` or `medication_name` must be present.
 
@@ -613,6 +610,7 @@ client.log(event_type=OliraEventType.SLEEP_DATA_RECEIVED, patient_id="p_abc123",
 from olira import OliraEventType
 
 payload = {
+    "action": "add",
     "medications": [{
         "rxnorm_cui": "1049502",
         "medication_name": "Ondansetron 4mg",
@@ -624,7 +622,7 @@ payload = {
         "start_date": "2026-02-26",
     }]
 }
-client.log(event_type=OliraEventType.MEDICATION_ADDED, patient_id="p_abc123", payload=payload)
+client.log(event_type=OliraEventType.MEDICATION_ACTION, patient_id="p_abc123", payload=payload)
 ```
 
 ### 5.7 Engagement
@@ -708,7 +706,7 @@ Organisation identity is derived entirely from the API key — every request car
 
 ```json
 {
-  "event_name": "symptom_esas_report",
+  "event_name": "symptom_report",
   "patient_id": "p_123_pseudo",
   "timestamp": "2026-02-26T08:15:00Z",
   "event_id": "e1a2b3c4-...",
@@ -942,8 +940,8 @@ from olira import EventSpec, BatchResult, OliraEventType
 
 result: BatchResult = client.log_batch([
     EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
-    EventSpec(event_type=OliraEventType.SYMPTOM_ESAS_REPORT, patient_id="p_2",
-              payload={"symptoms": [...], "total_score": 5}),
+    EventSpec(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_2",
+              payload={"instrument": "esas_r", "symptoms": [...]}),
 ])
 # result.accepted: number of events accepted server-side
 # result.failed:   number rejected
@@ -1003,8 +1001,8 @@ OliraError (base)
 import olira
 
 try:
-    client.log(event_type=olira.OliraEventType.SYMPTOM_ESAS_REPORT, patient_id="p_123",
-               payload={"symptoms": [olira.EsasItem(name="pain", score=4).model_dump()], "total_score": 4})
+    client.log(event_type=olira.OliraEventType.SYMPTOM_REPORT, patient_id="p_123",
+               payload={"instrument": "esas_r", "symptoms": [olira.EsasItem(name="pain", score=4).model_dump()]})
 except olira.RateLimitError as e:
     print(f"Rate limited, retry after {e.retry_after}s")
 except olira.ValidationError as e:
@@ -1444,10 +1442,10 @@ This feature adds observability value for customers already running OTel infrast
 
 Complete list of all event types with their `event_name` strings, categories, payload shapes, and field-level notes.
 
-**Source of truth:** Event types are derived from two authoritative sources in this repository:
+**Source of truth:** Event types are defined in the `EventLogTypeDefinition` catalog, seeded from:
 
-- `EventLogType` enum in `packages/common-models/src/olira_common_models/foundation/shared/enums.py` — the canonical list of all event names the server recognises.
-- `services/app-api/docs/event_log_type_definition.md` — field-level payload definitions for each event type.
+- `services/app-api/data/event_log_type_definitions.jsonl` — 48 event type definitions (category, subtype, payload schema, target modules)
+- `packages/common-models/src/olira_common_models/foundation/base/event_log_type_definition.py` — Pydantic model for catalog entries
 
 Events generated internally by the platform (e.g. from the mobile app or internal pipelines) are defined in those sources but intentionally excluded from this SDK catalogue — the SDK only exposes events that external customer applications are expected to produce. Profile events are included here because they are required to populate `StableData`, a core section of the Patient State initialised at user creation time.
 
@@ -1457,60 +1455,55 @@ Fields marked `†` are computed server-side and must never be sent by clients.
 
 ### A.1 Symptom Reports (`symptom_reports`)
 
-#### `symptom_ctcae_grade`
+#### `symptom_report`
 
-Records CTCAE or PRO-CTCAE symptom grades.
+Unified symptom report. The `instrument` field determines the shape of the `symptoms` list — use `esas_r` for ESAS-r, `ctcae` or `pro_ctcae` for CTCAE graded reports, or any custom string for other instruments.
 
-| Field                     | Type                   | Required | Notes                                      |
-| ------------------------- | ---------------------- | -------- | ------------------------------------------ |
-| `instrument`              | `'ctcae'\|'pro_ctcae'` | No       | Defaults to `'ctcae'`                      |
-| `recall_period_days`      | `int`                  | No       | —                                          |
-| `symptoms`                | `list[CtcaeSymptom]`   | Yes      | At least one item                          |
-| `symptoms[].type`         | `str`                  | Yes      | Symptom name                               |
-| `symptoms[].grade`        | `int`                  | Yes      | 0–5 (ctcae); 0–4 per dimension (pro_ctcae) |
-| `symptoms[].frequency`    | `int`                  | No       | PRO-CTCAE only (0–4)                       |
-| `symptoms[].interference` | `int`                  | No       | PRO-CTCAE only (0–4)                       |
-| `symptoms[].onset`        | `str`                  | No       | ISO 8601 datetime                          |
-| `symptoms[].snomed_code`  | `str`                  | No       | SNOMED CT preferred                        |
-| `symptoms[].meddra_code`  | `str`                  | No       | MedDRA secondary                           |
+**Common fields:**
 
----
+| Field                | Type    | Required | Notes                                                             |
+| -------------------- | ------- | -------- | ----------------------------------------------------------------- |
+| `instrument`         | `str`   | Yes      | `'esas_r'\|'ctcae'\|'pro_ctcae'\|'custom'\|<any>`                |
+| `symptoms`           | `list`  | Yes      | Shape depends on instrument (see below)                           |
+| `recall_period`      | `str`   | No       | `'now'\|'past_24h'`                                               |
+| `recall_period_days` | `int`   | No       | Alternative numeric form                                          |
 
-#### `symptom_esas_report`
+**`instrument=esas_r` — symptoms items (`EsasItem`):**
 
-Patient-reported symptom burden using ESAS-r (Edmonton Symptom Assessment System Revised).
+| Field                       | Type  | Required  | Notes                                                                                                     |
+| --------------------------- | ----- | --------- | --------------------------------------------------------------------------------------------------------- |
+| `symptoms[].name`           | `str` | Yes       | pain, tiredness, nausea, depression, anxiety, drowsiness, appetite, wellbeing, shortness_of_breath, other |
+| `symptoms[].score`          | `int` | Yes       | 0–10                                                                                                      |
+| `symptoms[].type`           | `str` | No        | Symptom type for matching when snomed_code/meddra_code unset                                              |
+| `symptoms[].snomed_code`    | `str` | No        | SNOMED CT; first choice for matching                                                                      |
+| `symptoms[].meddra_code`    | `str` | No        | MedDRA; used when snomed_code unset                                                                       |
+| `subscale_scores.physical`  | `int` | †Computed | Server-side                                                                                               |
+| `subscale_scores.emotional` | `int` | †Computed | Server-side                                                                                               |
+| `subscale_scores.wellbeing` | `int` | †Computed | Server-side                                                                                               |
 
-| Field                       | Type                | Required  | Notes                                                                                                     |
-| --------------------------- | ------------------- | --------- | --------------------------------------------------------------------------------------------------------- |
-| `symptoms`                  | `list[EsasItem]`    | Yes       | 1–10 items                                                                                                |
-| `symptoms[].name`           | `str`               | Yes       | pain, tiredness, nausea, depression, anxiety, drowsiness, appetite, wellbeing, shortness_of_breath, other |
-| `symptoms[].score`          | `int`               | Yes       | 0–10                                                                                                      |
-| `symptoms[].type`           | `str`               | No        | Symptom type for matching when snomed_code/meddra_code unset (e.g. pain, nausea)                          |
-| `symptoms[].snomed_code`    | `str`               | No        | SNOMED CT; first choice for matching                                                                      |
-| `symptoms[].meddra_code`    | `str`               | No        | MedDRA; used when snomed_code unset                                                                       |
-| `total_score`               | `int`               | †Computed | Auto-computed by SDK from sum; override accepted                                                          |
-| `subscale_scores.physical`  | `int`               | †Computed | Server-side                                                                                               |
-| `subscale_scores.emotional` | `int`               | †Computed | Server-side                                                                                               |
-| `subscale_scores.wellbeing` | `int`               | †Computed | Server-side                                                                                               |
-| `recall_period`             | `'now'\|'past_24h'` | No        | —                                                                                                         |
+**`instrument=ctcae` or `pro_ctcae` — symptoms items:**
 
----
+| Field                     | Type  | Required | Notes                                      |
+| ------------------------- | ----- | -------- | ------------------------------------------ |
+| `symptoms[].type`         | `str` | Yes      | Symptom name                               |
+| `symptoms[].grade`        | `int` | Yes      | 0–5 (ctcae); 0–4 per dimension (pro_ctcae) |
+| `symptoms[].frequency`    | `int` | No       | PRO-CTCAE only (0–4)                       |
+| `symptoms[].interference` | `int` | No       | PRO-CTCAE only (0–4)                       |
+| `symptoms[].onset`        | `str` | No       | ISO 8601 datetime                          |
+| `symptoms[].snomed_code`  | `str` | No       | SNOMED CT preferred                        |
+| `symptoms[].meddra_code`  | `str` | No       | MedDRA secondary                           |
 
-#### `symptom_custom_report`
+**`instrument=custom` — symptoms items:**
 
-Custom or non-standard instrument symptom report.
-
-| Field                    | Type                      | Required | Notes                      |
-| ------------------------ | ------------------------- | -------- | -------------------------- |
-| `instrument`             | `str`                     | No       | Instrument name/identifier |
-| `symptoms`               | `list[CustomSymptomItem]` | Yes      | At least one item          |
-| `symptoms[].type`        | `str`                     | Yes      | Symptom type key           |
-| `symptoms[].name`        | `str`                     | Yes      | Display name               |
-| `symptoms[].score`       | `float`                   | Yes      | —                          |
-| `symptoms[].scale_min`   | `float`                   | No       | —                          |
-| `symptoms[].scale_max`   | `float`                   | No       | —                          |
-| `symptoms[].snomed_code` | `str`                     | No       | —                          |
-| `symptoms[].meddra_code` | `str`                     | No       | —                          |
+| Field                    | Type    | Required | Notes  |
+| ------------------------ | ------- | -------- | ------ |
+| `symptoms[].type`        | `str`   | Yes      | Symptom type key |
+| `symptoms[].name`        | `str`   | Yes      | Display name     |
+| `symptoms[].score`       | `float` | Yes      | —      |
+| `symptoms[].scale_min`   | `float` | No       | —      |
+| `symptoms[].scale_max`   | `float` | No       | —      |
+| `symptoms[].snomed_code` | `str`   | No       | —      |
+| `symptoms[].meddra_code` | `str`   | No       | —      |
 
 ---
 
@@ -1853,52 +1846,28 @@ Weight scale reading. Critical for heart failure decompensation detection (>2 kg
 
 ### A.6 Medication (`medication`)
 
-#### `medication_added`
+#### `medication_action`
 
-Medication added to a patient's medication list.
+Unified medication list change. Use `action` to distinguish whether medications are being added, updated (patch), or deleted.
 
-| Field                                    | Type                   | Required  | Notes                                           |
-| ---------------------------------------- | ---------------------- | --------- | ----------------------------------------------- |
-| `medications`                            | `list[MedicationItem]` | Yes       | See schema in Section 5.6                       |
-| `medications[].rxnorm_cui`               | `str`                  | Cond.     | Preferred; one of rxnorm_cui or medication_name |
-| `medications[].medication_name`          | `str`                  | Cond.     | Fallback                                        |
-| `medications[].dose`                     | `float`                | No        | —                                               |
-| `medications[].dose_unit`                | `str`                  | No        | —                                               |
-| `medications[].frequency`                | `str`                  | No        | —                                               |
-| `medications[].route`                    | `str`                  | No        | —                                               |
-| `medications[].form`                     | `str`                  | No        | —                                               |
-| `medications[].start_date`               | `str`                  | No        | ISO 8601 date                                   |
-| `medications[].schedule_times`           | `list[str]`            | No        | HH:MM strings; triggers adherence tracking      |
-| `medications[].adherence_window_minutes` | `int`                  | No        | Default 60                                      |
-| `medications[].prescribed_by.npi`        | `str`                  | No        | —                                               |
-| `therapeutic_class` †                    | `str`                  | †Computed | Resolved from RxNorm server-side                |
+| Field                                    | Type                   | Required  | Notes                                                            |
+| ---------------------------------------- | ---------------------- | --------- | ---------------------------------------------------------------- |
+| `action`                                 | `str`                  | Yes       | `'add'\|'update'\|'delete'`                                      |
+| `medications`                            | `list[dict]`           | Yes       | Shape varies by action (see below)                               |
+| `medications[].rxnorm_cui`               | `str`                  | Cond.     | Preferred; one of rxnorm_cui or medication_name                  |
+| `medications[].medication_name`          | `str`                  | Cond.     | Fallback                                                         |
+| `medications[].dose`                     | `float`                | No        | For `add`/`update`                                               |
+| `medications[].dose_unit`                | `str`                  | No        | —                                                                |
+| `medications[].frequency`                | `str`                  | No        | —                                                                |
+| `medications[].route`                    | `str`                  | No        | —                                                                |
+| `medications[].form`                     | `str`                  | No        | —                                                                |
+| `medications[].start_date`               | `str`                  | No        | ISO 8601 date                                                    |
+| `medications[].schedule_times`           | `list[str]`            | No        | HH:MM strings; triggers adherence tracking                       |
+| `medications[].adherence_window_minutes` | `int`                  | No        | Default 60                                                       |
+| `medications[].prescribed_by.npi`        | `str`                  | No        | —                                                                |
+| `therapeutic_class` †                    | `str`                  | †Computed | Resolved from RxNorm server-side                                 |
 
----
-
-#### `medication_updated`
-
-Existing medication details changed. Patch-style: include identifier + only changed fields.
-
-| Field                           | Type                    | Required | Notes                      |
-| ------------------------------- | ----------------------- | -------- | -------------------------- |
-| `medications`                   | `list[MedicationPatch]` | Yes      | —                          |
-| `medications[].rxnorm_cui`      | `str`                   | Cond.    | Identifier for matching    |
-| `medications[].medication_name` | `str`                   | Cond.    | Fallback identifier        |
-| (any MedicationItem field)      |                         | No       | Only changed fields needed |
-
-See `MedicationPatch` schema in Section 5.6.
-
----
-
-#### `medication_deleted`
-
-Medication removed from patient's list.
-
-| Field                           | Type                         | Required | Notes                |
-| ------------------------------- | ---------------------------- | -------- | -------------------- |
-| `medications`                   | `list[MedicationIdentifier]` | Yes      | —                    |
-| `medications[].rxnorm_cui`      | `str`                        | Cond.    | Preferred identifier |
-| `medications[].medication_name` | `str`                        | Cond.    | Fallback             |
+For `action=update`: include identifier + only changed fields. For `action=delete`: include only `rxnorm_cui` or `medication_name` per item.
 
 ---
 
@@ -1918,6 +1887,21 @@ One or more dose outcomes (taken or skipped).
 | `source`                                 | `str`                | No        | `'patient_app'\|'smart_pill_bottle'\|'ehr'` |
 | `consecutive_miss_count` †               |                      | †Computed | Server-side                                 |
 | `pdc` †                                  |                      | †Computed | Proportion of Days Covered; server-side     |
+
+---
+
+#### `medication_adverse_event_reported`
+
+Patient-reported adverse drug reaction or side effect.
+
+| Field                   | Type    | Required | Notes                                        |
+| ----------------------- | ------- | -------- | -------------------------------------------- |
+| `rxnorm_cui`            | `str`   | Cond.    | One of rxnorm_cui or medication_name         |
+| `medication_name`       | `str`   | Cond.    | Fallback                                     |
+| `adverse_event`         | `str`   | Yes      | Description of the adverse event             |
+| `severity`              | `str`   | No       | `'mild'\|'moderate'\|'severe'\|'life_threatening'` |
+| `onset_date`            | `str`   | No       | ISO 8601 date                                |
+| `resolved`              | `bool`  | No       | Whether the event has resolved               |
 
 ---
 

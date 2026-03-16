@@ -94,11 +94,11 @@ client = OliraClient(api_key="olira_prod_...")
 result = client.log_batch([
     EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id=patient_id),
     EventSpec(
-        event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+        event_type=OliraEventType.SYMPTOM_REPORT,
         patient_id=patient_id,
         payload={
+            "instrument": "esas_r",
             "symptoms": [EsasItem(name="pain", score=4).model_dump()],
-            "total_score": 4,
         },
     ),
 ])

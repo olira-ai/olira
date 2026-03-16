@@ -40,24 +40,29 @@ def _validate_patient_id(value: str) -> str:
 
 
 class OliraEventType(StrEnum):
-    """Customer-facing event types. String values match EventLogType in common-models."""
+    """Customer-facing event types. Values match the platform event log catalog."""
 
-    # Symptom
-    SYMPTOM_CTCAE_GRADE = "symptom_ctcae_grade"
-    SYMPTOM_ESAS_REPORT = "symptom_esas_report"
-    SYMPTOM_CUSTOM_REPORT = "symptom_custom_report"
+    # Symptom reports
+    SYMPTOM_REPORT = "symptom_report"
     SYMPTOM_FREE_TEXT = "symptom_free_text"
     SYMPTOM_DETAIL = "symptom_detail"
-
-    # Functional & health
+    MOODS_REPORT = "moods_report"
     FUNCTIONAL_CLASS_REPORTED = "functional_class_reported"
     HEALTH_METRIC_REPORTED = "health_metric_reported"
-    MOODS_REPORT = "moods_report"
 
     # Lab & clinical
     LAB_RESULTS_RECEIVED = "lab_results_received"
     VITALS_MEASUREMENT = "vitals_measurement"
     CLINICAL_NOTE_RECEIVED = "clinical_note_received"
+    CLINICAL_FINDING_REPORTED = "clinical_finding_reported"
+    PROCEDURE_RESULT_RECEIVED = "procedure_result_received"
+    GENOMIC_VARIANT_REPORTED = "genomic_variant_reported"
+    IMAGING_RESULT_RECEIVED = "imaging_result_received"
+    CLINICAL_MEASUREMENT_REPORTED = "clinical_measurement_reported"
+    TREATMENT_RESPONSE_ASSESSMENT_REPORTED = "treatment_response_assessment_reported"
+    CLINICAL_PLAN_ITEM_REPORTED = "clinical_plan_item_reported"
+    CARE_ENCOUNTER_REPORTED = "care_encounter_reported"
+    UNSTRUCTURED_REPORT_RECEIVED = "unstructured_report_received"
 
     # Questionnaires
     QUESTIONNAIRE_RESPONSE = "questionnaire_response"
@@ -67,7 +72,7 @@ class OliraEventType(StrEnum):
     CONVERSATION_COMPLETED = "conversation_completed"
     CONVERSATION_TURN_LOGGED = "conversation_turn_logged"
 
-    # Wearables
+    # Passive data
     HEART_RATE_DATA_RECEIVED = "heart_rate_data_received"
     SLEEP_DATA_RECEIVED = "sleep_data_received"
     ACTIVITY_DATA_RECEIVED = "activity_data_received"
@@ -76,12 +81,11 @@ class OliraEventType(StrEnum):
     WEIGHT_MEASUREMENT_RECEIVED = "weight_measurement_received"
 
     # Medications
-    MEDICATION_ADDED = "medication_added"
-    MEDICATION_UPDATED = "medication_updated"
-    MEDICATION_DELETED = "medication_deleted"
+    MEDICATION_ACTION = "medication_action"
     MEDICATION_DOSE_UPDATE = "medication_dose_update"
+    MEDICATION_ADVERSE_EVENT_REPORTED = "medication_adverse_event_reported"
 
-    # User activity
+    # Engagement
     USER_LOGIN = "user_login"
     USER_LOGOUT = "user_logout"
     CONTENT_INTERACTED = "content_interacted"
@@ -90,7 +94,7 @@ class OliraEventType(StrEnum):
     INTERACTION_FEEDBACK = "interaction_feedback"
     FEATURE_USED = "feature_used"
 
-    # Profile updates
+    # Profile
     DEMOGRAPHICS_UPDATED = "demographics_updated"
     CONDITION_UPDATED = "condition_updated"
     PREFERENCES_UPDATED = "preferences_updated"

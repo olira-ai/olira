@@ -82,27 +82,25 @@ def _make_sync_client() -> tuple[OliraClient, list[dict]]:
     return client, events_sent
 
 
-def test_log_symptom_esas_wire_format():
+def test_log_symptom_report_wire_format():
     client, events_sent = _make_sync_client()
     payload = {
+        "instrument": "esas_r",
         "symptoms": [
             EsasItem(name="pain", score=4).model_dump(),
             EsasItem(name="nausea", score=2).model_dump(),
         ],
-        "total_score": 6,
-        "recall_period": "past_24h",
     }
     client.log(
-        event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+        event_type=OliraEventType.SYMPTOM_REPORT,
         patient_id="p_abc",
         payload=payload,
     )
     assert len(events_sent) == 1
-    assert events_sent[0]["event_name"] == "symptom_esas_report"
+    assert events_sent[0]["event_name"] == "symptom_report"
     assert events_sent[0]["patient_id"] == "p_abc"
     props = events_sent[0]["payload"]
-    assert props["total_score"] == 6
-    assert props["recall_period"] == "past_24h"
+    assert props["instrument"] == "esas_r"
     assert len(props["symptoms"]) == 2
     client.close()
 
@@ -177,9 +175,9 @@ def test_log_batch_accepted():
             EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
             EventSpec(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_2", payload={"results": []}),
             EventSpec(
-                event_type=OliraEventType.SYMPTOM_ESAS_REPORT,
+                event_type=OliraEventType.SYMPTOM_REPORT,
                 patient_id="p_3",
-                payload={"symptoms": [], "total_score": 0},
+                payload={"instrument": "esas_r", "symptoms": []},
             ),
         ]
     )
