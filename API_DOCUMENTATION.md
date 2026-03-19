@@ -1,1184 +1,874 @@
-# Olira API Reference
+> **Maintained by:** Olira Engineering  
+> **Published at:** `olira.ai/api-docs` → Python SDK tab
 
-The Olira API lets you manage patients, log health events, and mint patient-scoped access tokens. The Python SDK handles all HTTP details for you — if you're calling the API directly, see the cURL examples in the [Authentication](#authentication) section for the base URL.
+# Olira Python SDK — API Reference
+
+The Olira Python SDK provides a typed client for logging health events,
+managing patients, and minting patient-scoped tokens for use with the
+[Olira MCP Patient State server](https://olira.ai/api-docs).
+
+**Package:** `olira` — **Version:** `0.1.0a4`
+
+---
+
+## Related docs
+
+| Doc | What it covers | Why you need it |
+| --- | -------------- | --------------- |
+| **MCP Patient State** (`olira.ai/api-docs` → MCP tab) | Tools for querying patient health state from AI agents | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
+| **CLI** (`olira.ai/api-docs` → CLI tab) | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server |
 
 ---
 
 ## Getting Started
 
-**Install the SDK:**
+### Installation
 
 ```bash
 pip install olira
 ```
 
-**First logged event — complete path from zero:**
+Or with `uv`:
+
+```bash
+uv add olira
+```
+
+### Initialise the client
 
 ```python
 import olira
-from olira import OliraEventType
 
-# 1. Initialise once at application startup (reads OLIRA_API_KEY env var if api_key is omitted)
-olira.init(api_key="olira_prod_...")
-
-# 2. Create a patient — Olira assigns the id; store it for all future calls
-from olira import OliraClient
-client = OliraClient(api_key="olira_prod_...")
-patient = client.create_patient(
-    first_name="Jane",
-    last_name="Smith",
-    timezone="America/New_York",
-)
-patient_id = patient.id  # e.g. "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82" — persist this
-
-# 3. Log an event
-olira.log(event_type=OliraEventType.USER_LOGIN, patient_id=patient_id)
-
-# 4. Flush before process exit to ensure all queued events are delivered
-olira.flush()
+olira.init(api_key="YOUR_OLIRA_API_KEY")
 ```
 
-> `patient.id` is Olira-assigned — you cannot choose it. Persist it in your database so you can reference the same patient in future calls.
+The API key can also be supplied via the `OLIRA_API_KEY` environment variable:
+
+```python
+import os, olira
+
+os.environ["OLIRA_API_KEY"] = "YOUR_OLIRA_API_KEY"
+olira.init()
+```
+
+Use `OliraClient` directly when you need multiple keys or prefer
+dependency injection:
+
+```python
+from olira import OliraClient
+
+client = OliraClient(api_key="YOUR_OLIRA_API_KEY")
+```
+
+### `init()` — module-level initialisation
+
+#### `init`
+
+```python
+init(api_key: str | None = None, *, environment: OliraEnv = OliraEnv.PRODUCTION, service_name: str | None = None, base_url: str = 'https://api.prod.olira.ai', batch_size: int = 50, flush_interval: float = 1.5, max_queue_size: int = 10000, timeout: float = 5.0, max_retries: int = 3, on_error: str = 'drop', async_flush: bool = True) -> None
+```
+
+Initialize the SDK. API key can be passed or set via OLIRA_API_KEY env var.
+
+| Parameter        | Required | Type       | Default                       |
+| ---------------- | -------- | ---------- | ----------------------------- | ------ |
+| `api_key`        | No       | `str       | None`                         | `None` |
+| `environment`    | No       | `OliraEnv` | `OliraEnv.PRODUCTION`         |
+| `service_name`   | No       | `str       | None`                         | `None` |
+| `base_url`       | No       | `str`      | `'https://api.prod.olira.ai'` |
+| `batch_size`     | No       | `int`      | `50`                          |
+| `flush_interval` | No       | `float`    | `1.5`                         |
+| `max_queue_size` | No       | `int`      | `10000`                       |
+| `timeout`        | No       | `float`    | `5.0`                         |
+| `max_retries`    | No       | `int`      | `3`                           |
+| `on_error`       | No       | `str`      | `'drop'`                      |
+| `async_flush`    | No       | `bool`     | `True`                        |
 
 ---
 
 ## Authentication
 
-All Olira API requests are authenticated using an `Authorization: Bearer <token>` header. There are two types of tokens, each suited to a different context.
-
 ### API Keys — server-side use
 
-API keys are long-lived credentials tied to your organisation. They are the primary way to call the API from your backend. Create one in the [Olira Console](https://console.olira.ai) under **Settings → API Keys**, or with the CLI:
+Create API keys in the Olira Console or with the CLI:
 
 ```bash
-olira keys create --name "My Backend" --scopes api:manage-patients sdk:event-log sdk:patient-token
+olira keys create --name "my-backend" --scopes sdk:event-log api:manage-patients
 ```
 
-Copy the key when shown — it is **not displayed again**. Pass it as a Bearer token on every request:
+Pass the key to `init()` or set `OLIRA_API_KEY`:
 
 ```python
-from olira import OliraClient
-
-client = OliraClient(api_key="olira_prod_...")
+olira.init(api_key="YOUR_OLIRA_API_KEY")
 ```
 
-```bash
-curl https://api.prod.olira.ai/v1/patients \
-  --header "Authorization: Bearer olira_prod_..."
-```
-
-Use `olira_dev_...` keys against the development environment (`https://api.dev.olira.ai`).
-
-Organisation context is resolved server-side from the key — you never pass an `org_id` in request bodies or query parameters.
-
-> **Keep API keys server-side.** Do not embed them in mobile apps, browser JavaScript, or any client-side code. For patient-facing clients, use a Patient Token instead (see below).
-
----
+Keys are shown only once at creation. Store them in a secrets manager.
 
 ### Patient Tokens — client-side use
 
-A Patient Token is a short-lived JWT (15 minutes) scoped to a single patient. It is designed for situations where a patient device or frontend needs to call Olira directly — for example, when connecting to the **MCP Patient State server** from a mobile app or AI tool.
-
-The flow is:
-
-```
-Your backend ──── POST /v1/auth/token ────► Olira API
-                  { patient_id: "8a4fde23-0f1b-..." }   (API key, sdk:patient-token scope)
-                  ◄────── { access_token, expires_in: 900 }
-
-Your backend ──── forward token ──────────► Patient device / AI tool
-                                            │
-                                            └── uses token as Bearer credential
-                                                (locked to patient id, read-only)
-```
-
-Mint a token from your backend using the SDK:
+For patient-facing requests (e.g. from a mobile app calling the
+[MCP Patient State server](https://olira.ai/api-docs) directly),
+mint a short-lived patient-scoped JWT server-side. The API key used here must
+carry the `sdk:patient-token` scope.
 
 ```python
-from olira import OliraClient
-
-# Your backend — API key with sdk:patient-token scope
-client = OliraClient(api_key="olira_prod_...")
-token = client.get_patient_token(patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82")
-
-# Forward token.access_token to the patient device.
-# The device uses it as: Authorization: Bearer <token.access_token>
+token = olira.get_patient_token(patient_id="patient-uuid")
+# token.access_token is a short-lived Bearer token locked to that patient
 ```
 
-The token is locked to the patient on the server — the recipient cannot access any other patient's data, and the token expires automatically after `expires_in` seconds.
-
----
+Pass `token.access_token` as the Bearer token from your client.
+Tokens expire after `token.expires_in` seconds (default 15 minutes).
 
 ### Auth error responses
 
-| Status | Cause |
-|---|---|
-| `401 Unauthorized` | Missing `Authorization` header, malformed key format, or revoked key |
-| `403 Forbidden` | Valid key but missing the required scope for this endpoint |
+| Status | Exception         | Meaning                                  |
+| ------ | ----------------- | ---------------------------------------- |
+| 401    | `AuthError`       | Invalid or expired token                 |
+| 403    | `AuthError`       | Token does not have the required scope   |
+| 429    | `RateLimitError`  | Rate limit exceeded; check `retry_after` |
+| 422    | `ValidationError` | Malformed request or payload             |
+| 5xx    | `ServerError`     | Server-side failure after retries        |
 
 ---
 
 ## Olira CLI
 
-The **Olira CLI** (`olira`) is a companion tool that handles authentication and API key management without needing to open the Console in a browser. Install it once and use it to create keys, check your identity, and configure MCP access.
-
-> **Prerequisites:** You need an Olira account before using the CLI. Sign up or log in at [console.olira.ai](https://console.olira.ai).
-
-**Install (macOS / Linux — Homebrew, recommended):**
+The CLI ships separately and provides local tooling for API key management
+and Cursor configuration. Install it with:
 
 ```bash
-brew install raiahealth/tap/olira
-```
-
-**Install via shell script:**
-
-```bash
-curl -fsSL https://install.olira.ai | sh
-```
-
-**Verify:**
-
-```bash
-olira --version
+pip install olira-cli
 ```
 
 ### Creating an API key with the CLI
 
 ```bash
-# Interactive wizard — prompts for name and scope selection
-olira keys create
-
-# Non-interactive (for scripting / CI)
-olira keys create --name "My Backend" --scopes api:manage-patients sdk:patient-token sdk:event-log
+olira login
+olira keys create --name "my-key" --scopes sdk:event-log api:manage-patients
 ```
-
-Copy the key when shown — it is **not displayed again**. API keys never expire and can be revoked at any time with `olira keys revoke <name-or-id>`.
 
 ### Other useful commands
 
-| Command | Description |
-|---|---|
-| `olira login` | Log in via browser (opens Auth0) |
-| `olira status` | Show current identity, org, and token expiry |
-| `olira keys list` | List all API keys for your organisation and their scopes |
-| `olira keys revoke <name>` | Permanently revoke a key |
-| `olira configure cursor` | Write the MCP Patient State entry into `.cursor/mcp.json` |
-| `olira logout` | Remove local credentials and wipe MCP config |
-
-> The CLI is the fastest way to set up a new integration. Run `olira keys create`, paste the resulting key into your application as `OLIRA_API_KEY`, and you're ready to make API calls.
+```bash
+olira status          # Show login status and token expiry
+olira token           # Print access token to stdout
+olira keys list       # List all API keys for your org
+olira keys revoke my-key
+olira configure cursor  # Write MCP server config to .cursor/mcp.json
+```
 
 ---
 
 ## Scopes
 
-Each API key is assigned one or more scopes at creation time. Use the minimum set of scopes required for the key's purpose — in particular, keep `api:manage-patients` and `sdk:patient-token` out of client-side or device-embedded keys.
-
-| Scope | Endpoints |
-|---|---|
-| `sdk:event-log` | `POST /v1/events`, `POST /v1/events/batch` |
-| `sdk:event-management` | `GET /v1/events`, `DELETE /v1/events` |
-| `api:manage-patients` | `POST /v1/patients`, `GET /v1/patients`, `GET /v1/patients/{patient_id}`, `PUT /v1/patients/{patient_id}`, `DELETE /v1/patients/{patient_id}` |
-| `sdk:patient-token` | `POST /v1/auth/token` |
+| Scope                  | Description                                                    |
+| ---------------------- | -------------------------------------------------------------- |
+| `sdk:event-log`        | Log health events via `log()` and `log_batch()`                |
+| `sdk:event-management` | Query and delete events via `get_events()` / `delete_events()` |
+| `api:manage-patients`  | Create, read, update, delete patients                          |
+| `sdk:patient-token`    | Mint patient-scoped JWTs via `get_patient_token()`             |
+| `mcp:patient-state`    | Query patient state via the MCP Patient State server           |
 
 ---
 
 ## Models
 
-Typed reference for every SDK model. Import these directly from the `olira` package.
-
----
-
-### `ExternalIdentifier`
-
-Links a patient to their ID in an external system. Used in `CreatePatientRequest`, `UpdatePatientRequest`, and `Patient`.
-
-| Field | Type | Description |
-|---|---|---|
-| `system` | `str` | System name, e.g. `"epic"`, `"flatiron"`, `"fhir"` |
-| `value` | `str` | Patient ID in that system (MRN, FHIR id, etc.) |
-
----
-
-### `Patient`
-
-Returned by all patient endpoints.
-
-`id` is the Olira-assigned identifier for this patient, returned at creation time. Use it in all subsequent calls that reference this patient.
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | `str` | Olira-assigned identifier for this patient |
-| `first_name` | `str` | |
-| `last_name` | `str` | |
-| `sex` | `str` | `"male"`, `"female"`, or `"unknown"` |
-| `timezone` | `str` | IANA timezone string, e.g. `"America/Los_Angeles"` |
-| `status` | `str` | `"pending"`, `"active"`, or `"deleted"` |
-| `email` | `str \| None` | |
-| `phone_number` | `str \| None` | |
-| `date_of_birth` | `str \| None` | ISO 8601 datetime string |
-| `primary_disease_site` | `str \| None` | e.g. `"breast"`, `"lung"` |
-| `disease_stage` | `str \| None` | e.g. `"II"`, `"IIIa"` |
-| `created_at` | `str \| None` | ISO 8601 datetime of patient creation |
-| `external_identifiers` | `list[ExternalIdentifier]` | IDs in external systems; empty list if none |
-| `metadata` | `dict \| None` | Arbitrary key-value store; `null` if not set |
-
----
-
-### `PatientListResult`
-
-Returned by `GET /v1/patients`.
-
-| Field | Type | Description |
-|---|---|---|
-| `patients` | `list[Patient]` | Page of results |
-| `total` | `int` | Total patients in the organisation (across all pages) |
-| `has_more` | `bool` | `true` if more results exist beyond this page |
-
----
-
-### `PatientToken`
-
-Returned by `POST /v1/auth/token`.
-
-| Field | Type | Description |
-|---|---|---|
-| `access_token` | `str` | RS256-signed JWT. Pass as `Authorization: Bearer <token>` to the MCP Patient State server |
-| `token_type` | `str` | Always `"bearer"` |
-| `expires_in` | `int` | Seconds until expiry (always `900` — 15 minutes) |
-| `scopes` | `list[str]` | Always `["mcp:patient-state"]` |
-
----
-
-### `EventSpec`
-
-Input to `log_batch()`. One per event in the batch.
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `event_type` | `OliraEventType` | Yes | Event category |
-| `patient_id` | `str` | Yes | Olira-assigned patient id (the `id` from `Patient`) |
-| `payload` | `dict \| None` | No | Event-specific data |
-| `trace` | `OliraTrace \| None` | No | Link the event to an object in your system (e.g. a conversation or message) |
-| `timestamp` | `str \| None` | No | ISO 8601 event occurrence time. Defaults to ingestion time |
-| `idempotency_key` | `str \| None` | No | Deduplication key (UUID recommended) |
-
----
+### Helper models
 
 ### `OliraTrace`
 
-Links an event to an object inside Olira (e.g. a conversation or message). Used in both `EventSpec` and `EventRecord`.
+Links an event to an object in your own system (e.g. a conversation or message).
 
-| Field | Type | Description |
-|---|---|---|
-| `object_type` | `str` | e.g. `"conversation"`, `"message"` |
-| `object_id` | `str` | Your identifier for the linked object (e.g. a conversation ID in your system) |
+`object_id` is your identifier for that object — the same string you would use
+to look it up in your own database. It is stored and returned as-is and is never
+interpreted or validated by Olira.
 
----
+| Field         | Required | Type  | Description                                                     |
+| ------------- | -------- | ----- | --------------------------------------------------------------- |
+| `object_type` | Yes      | `str` | Category of the linked object, e.g. 'conversation' or 'message' |
+| `object_id`   | Yes      | `str` | Your identifier for the linked object                           |
 
-### `BatchResult`
+### `EsasItem`
 
-Returned by `log_batch()` / `POST /v1/events/batch`.
+Single ESAS-r symptom item (name + score 0–10).
+Shape matches EsasSymptomItem in common-models util.py.
+Optional type/snomed_code/meddra_code used for matching server-side.
 
-| Field | Type | Description |
-|---|---|---|
-| `accepted` | `int` | Number of events successfully ingested |
-| `failed` | `int` | Number of events rejected |
-| `errors` | `list[BatchError]` | Per-event error detail; empty when `failed == 0` |
+| Field         | Required | Type  | Description                                     |
+| ------------- | -------- | ----- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `name`        | Yes      | `str` | ESAS item name (display); not used for matching |
+| `score`       | Yes      | `int` | Score 0–10                                      |
+| `type`        | No       | `str  | None`                                           | Symptom type for matching when snomed_code and meddra_code unset (e.g. pain, nausea) (default: `None`) |
+| `snomed_code` | No       | `str  | None`                                           | SNOMED CT code; first choice for matching (default: `None`)                                            |
+| `meddra_code` | No       | `str  | None`                                           | MedDRA code; used when snomed_code unset (default: `None`)                                             |
 
----
+### `LabResultItem`
 
-### `BatchError`
+One result item from lab_results_received.results[] (with or without LOINC).
+Shape matches LabResultItem in common-models util.py.
+At least one of loinc_code or test_name; at least one of value_numeric or value_string.
 
-One entry per rejected event in a batch.
+| Field                  | Required | Type   | Description                                                 |
+| ---------------------- | -------- | ------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `loinc_code`           | No       | `str   | None`                                                       | LOINC code when available; test_name/specimen resolved server-side (default: `None`) |
+| `test_name`            | No       | `str   | None`                                                       | Required when loinc_code not provided (default: `None`)                              |
+| `specimen_type`        | No       | `str   | None`                                                       | Optional when no LOINC (default: `None`)                                             |
+| `test_category`        | No       | `str   | None`                                                       | e.g. hematology, metabolic, lipid (default: `None`)                                  |
+| `value_numeric`        | No       | `float | None`                                                       | Quantitative result (default: `None`)                                                |
+| `value_string`         | No       | `str   | None`                                                       | Non-quantitative result (default: `None`)                                            |
+| `unit`                 | No       | `str`  | Unit of measure (prefer explicit e.g. g/dL) (default: `''`) |
+| `abnormal_flag`        | No       | `str   | None`                                                       | H, L, N, HH, LL (default: `None`)                                                    |
+| `reference_range_low`  | No       | `float | None`                                                       | — (default: `None`)                                                                  |
+| `reference_range_high` | No       | `float | None`                                                       | — (default: `None`)                                                                  |
+| `result_status`        | No       | `str   | None`                                                       | final, preliminary, corrected (default: `None`)                                      |
 
-| Field | Type | Description |
-|---|---|---|
-| `index` | `int` | Zero-based position of the failed event in the request array |
-| `code` | `str` | Machine-readable error code, e.g. `"validation_error"`, `"patient_not_found"` |
-| `message` | `str` | Human-readable description |
+### `PerformingLab`
 
----
+Performing lab from lab_results_received envelope. Shape matches common-models util.py.
 
-### `EventRecord`
+| Field         | Required | Type | Description |
+| ------------- | -------- | ---- | ----------- | ------------------- |
+| `name`        | No       | `str | None`       | — (default: `None`) |
+| `clia_number` | No       | `str | None`       | — (default: `None`) |
 
-One event returned by `GET /v1/events`.
+### `TimePeriod`
 
-| Field | Type | Description |
-|---|---|---|
-| `event_id` | `str` | UUID assigned at ingestion. Stable — use for `delete_events(event_ids=...)` |
-| `event_type` | `OliraEventType` | |
-| `patient_id` | `str` | Your identifier for the patient |
-| `timestamp` | `str` | ISO 8601 event occurrence time |
-| `ingested_at` | `str` | ISO 8601 server ingestion time |
-| `payload` | `dict` | Event payload as submitted |
-| `trace` | `OliraTrace \| None` | Present only when the event was logged with a trace |
+Time range in ISO 8601 datetimes. Wire-compatible with PeriodRange in common-models util.py.
 
----
-
-### `EventQueryResult`
-
-Returned by `GET /v1/events`.
-
-| Field | Type | Description |
-|---|---|---|
-| `events` | `list[EventRecord]` | Page of results |
-| `total` | `int` | Total matching events (across all pages) |
-| `has_more` | `bool` | `true` if more results exist beyond this page |
-
----
-
-### `DeleteResult`
-
-Returned by `DELETE /v1/events`.
-
-| Field | Type | Description |
-|---|---|---|
-| `deleted_count` | `int` | Number of events permanently removed |
-| `patient_id` | `str` | The patient ID from the request, echoed back |
-
----
+| Field            | Required | Type  | Description |
+| ---------------- | -------- | ----- | ----------- |
+| `start_datetime` | Yes      | `str` | —           |
+| `end_datetime`   | Yes      | `str` | —           |
 
 ### `OliraEventType`
 
-String enum. All values are lowercase with underscores.
+`StrEnum` of all supported event types. Use these constants as `event_type`
+in `log()` and `log_batch()`.
 
 **Symptom reports**
 
-| Value | Description |
-|---|---|
-| `symptom_report` | Structured symptom severity with a defined instrument (`esas_r`, `pro_ctcae`, `ctcae`, `custom`). Pass `instrument` in the payload |
-| `symptom_free_text` | Free-text symptom description (processed by extraction) |
-| `symptom_detail` | Follow-up detail on an already-reported symptom |
-| `moods_report` | Categorical mood or emotion labels |
-| `functional_class_reported` | Functional classification (NYHA, ECOG, Karnofsky, etc.) |
-| `health_metric_reported` | Single scalar patient-reported metric with an explicit scale |
+- `OliraEventType.SYMPTOM_REPORT` → `"symptom_report"`
+- `OliraEventType.SYMPTOM_FREE_TEXT` → `"symptom_free_text"`
+- `OliraEventType.SYMPTOM_DETAIL` → `"symptom_detail"`
+- `OliraEventType.MOODS_REPORT` → `"moods_report"`
+- `OliraEventType.FUNCTIONAL_CLASS_REPORTED` → `"functional_class_reported"`
+- `OliraEventType.HEALTH_METRIC_REPORTED` → `"health_metric_reported"`
 
-**Lab & Clinical**
+**Lab & clinical**
 
-| Value | Description |
-|---|---|
-| `lab_results_received` | Laboratory test results (blood, urine, etc.) |
-| `vitals_measurement` | Vital signs (BP, HR, SpO2, temp, etc.) |
-| `clinical_note_received` | Provider-authored clinical note with structured sections |
-| `clinical_finding_reported` | Discrete clinical finding from exam or assessment |
-| `procedure_result_received` | Pathology or procedure result narrative |
-| `genomic_variant_reported` | Genomic or molecular variants |
-| `imaging_result_received` | Imaging study findings (CT, MRI, PET, etc.) |
-| `clinical_measurement_reported` | Non-lab clinical measurements (ejection fraction, tumour diameter, ECOG score, etc.) |
-| `treatment_response_assessment_reported` | Treatment response assessment (CR, PR, SD, PD, etc.) |
-| `clinical_plan_item_reported` | Discrete future plan items (orders, referrals, scheduled procedures) |
-| `care_encounter_reported` | Care encounters or visits |
-| `unstructured_report_received` | Raw document payload for extraction (OCR, PDF, EHR export) |
+- `OliraEventType.LAB_RESULTS_RECEIVED` → `"lab_results_received"`
+- `OliraEventType.VITALS_MEASUREMENT` → `"vitals_measurement"`
+- `OliraEventType.CLINICAL_NOTE_RECEIVED` → `"clinical_note_received"`
+- `OliraEventType.CLINICAL_FINDING_REPORTED` → `"clinical_finding_reported"`
+- `OliraEventType.PROCEDURE_RESULT_RECEIVED` → `"procedure_result_received"`
+- `OliraEventType.GENOMIC_VARIANT_REPORTED` → `"genomic_variant_reported"`
+- `OliraEventType.IMAGING_RESULT_RECEIVED` → `"imaging_result_received"`
+- `OliraEventType.CLINICAL_MEASUREMENT_REPORTED` → `"clinical_measurement_reported"`
+- `OliraEventType.TREATMENT_RESPONSE_ASSESSMENT_REPORTED` → `"treatment_response_assessment_reported"`
+- `OliraEventType.CLINICAL_PLAN_ITEM_REPORTED` → `"clinical_plan_item_reported"`
+- `OliraEventType.CARE_ENCOUNTER_REPORTED` → `"care_encounter_reported"`
+- `OliraEventType.UNSTRUCTURED_REPORT_RECEIVED` → `"unstructured_report_received"`
 
 **Questionnaires**
 
-| Value | Description |
-|---|---|
-| `questionnaire_response` | Full questionnaire or instrument submission (PHQ-9, GAD-7, etc.) |
-| `questionnaire_item_response` | Single question-and-answer pair |
+- `OliraEventType.QUESTIONNAIRE_RESPONSE` → `"questionnaire_response"`
+- `OliraEventType.QUESTIONNAIRE_ITEM_RESPONSE` → `"questionnaire_item_response"`
 
 **Conversations**
 
-| Value | Description |
-|---|---|
-| `conversation_completed` | End of a chat or voice conversation (with transcript) |
-| `conversation_turn_logged` | Single turn within an ongoing conversation |
+- `OliraEventType.CONVERSATION_COMPLETED` → `"conversation_completed"`
+- `OliraEventType.CONVERSATION_TURN_LOGGED` → `"conversation_turn_logged"`
 
 **Passive data**
 
-| Value | Description |
-|---|---|
-| `heart_rate_data_received` | Heart rate / HRV data from a device |
-| `sleep_data_received` | Sleep session data |
-| `activity_data_received` | Steps / activity / calorie data |
-| `cgm_reading_received` | Continuous glucose monitor reading |
-| `spo2_reading_received` | Blood oxygen saturation reading |
-| `weight_measurement_received` | Body weight from a connected scale |
+- `OliraEventType.HEART_RATE_DATA_RECEIVED` → `"heart_rate_data_received"`
+- `OliraEventType.SLEEP_DATA_RECEIVED` → `"sleep_data_received"`
+- `OliraEventType.ACTIVITY_DATA_RECEIVED` → `"activity_data_received"`
+- `OliraEventType.CGM_READING_RECEIVED` → `"cgm_reading_received"`
+- `OliraEventType.SPO2_READING_RECEIVED` → `"spo2_reading_received"`
+- `OliraEventType.WEIGHT_MEASUREMENT_RECEIVED` → `"weight_measurement_received"`
 
 **Medications**
 
-| Value | Description |
-|---|---|
-| `medication_action` | Add, update, or remove medications from the patient's list. Pass `action: "add" \| "update" \| "delete"` per item |
-| `medication_dose_update` | Dose taken or skipped |
-| `medication_adverse_event_reported` | Medication-related adverse event or side effect |
+- `OliraEventType.MEDICATION_ACTION` → `"medication_action"`
+- `OliraEventType.MEDICATION_DOSE_UPDATE` → `"medication_dose_update"`
+- `OliraEventType.MEDICATION_ADVERSE_EVENT_REPORTED` → `"medication_adverse_event_reported"`
 
 **Engagement**
 
-| Value | Description |
-|---|---|
-| `user_login` | Patient logged in |
-| `user_logout` | Patient logged out |
-| `content_interacted` | Patient interacted with a content item |
-| `notification_interacted` | Patient acted on a push notification |
-| `task_updated` | Task completed or skipped |
-| `interaction_feedback` | Explicit feedback given by patient |
-| `feature_used` | Feature usage tracked |
+- `OliraEventType.USER_LOGIN` → `"user_login"`
+- `OliraEventType.USER_LOGOUT` → `"user_logout"`
+- `OliraEventType.CONTENT_INTERACTED` → `"content_interacted"`
+- `OliraEventType.NOTIFICATION_INTERACTED` → `"notification_interacted"`
+- `OliraEventType.TASK_UPDATED` → `"task_updated"`
+- `OliraEventType.INTERACTION_FEEDBACK` → `"interaction_feedback"`
+- `OliraEventType.FEATURE_USED` → `"feature_used"`
 
 **Profile**
 
-| Value | Description |
-|---|---|
-| `demographics_updated` | Name, DOB, sex, address, language, etc. |
-| `condition_updated` | Diagnosis or disease (disease_type, stage) |
-| `preferences_updated` | Reading level, tone, dietary, notifications |
-| `emergency_contact_updated` | Emergency contact details |
-| `care_team_updated` | Providers added, updated, or removed |
-| `insurance_updated` | Insurance / payer details |
-| `social_updated` | Social determinants of health |
-| `pharmacy_updated` | Preferred pharmacy |
-| `treatment_phase_changed` | Treatment phase transition (active_treatment, surveillance, palliative, remission) |
+- `OliraEventType.DEMOGRAPHICS_UPDATED` → `"demographics_updated"`
+- `OliraEventType.CONDITION_UPDATED` → `"condition_updated"`
+- `OliraEventType.PREFERENCES_UPDATED` → `"preferences_updated"`
+- `OliraEventType.EMERGENCY_CONTACT_UPDATED` → `"emergency_contact_updated"`
+- `OliraEventType.CARE_TEAM_UPDATED` → `"care_team_updated"`
+- `OliraEventType.INSURANCE_UPDATED` → `"insurance_updated"`
+- `OliraEventType.SOCIAL_UPDATED` → `"social_updated"`
+- `OliraEventType.PHARMACY_UPDATED` → `"pharmacy_updated"`
+- `OliraEventType.TREATMENT_PHASE_CHANGED` → `"treatment_phase_changed"`
 
 ---
 
 ## Patients
 
-All patient endpoints require the `api:manage-patients` scope and accept a raw API key (not a JWT) as the Bearer token.
-
-`{patient_id}` in all paths is the Olira-assigned `id` returned in the `Patient` object when you called `POST /v1/patients`.
-
----
+All patient functions require an API key with `api:manage-patients` scope.
 
 ### Create a patient
 
-**`POST /v1/patients`**
-
-Creates a new patient in your organisation. Olira assigns a stable `id` at creation time — store it to reference this patient in all subsequent calls.
-
-**Authorization:** `api:manage-patients` scope
-
-**Request body**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `first_name` | `str` | **Yes** | |
-| `last_name` | `str` | **Yes** | |
-| `timezone` | `str` | **Yes** | IANA timezone string, e.g. `"America/Los_Angeles"` |
-| `email` | `str \| null` | No | |
-| `phone_number` | `str \| null` | No | |
-| `date_of_birth` | `str \| null` | No | ISO 8601 datetime, e.g. `"1985-03-22T00:00:00Z"` |
-| `sex` | `str` | No | `"male"`, `"female"`, or `"unknown"` (default) |
-| `primary_disease_site` | `str \| null` | No | e.g. `"breast"`, `"lung"` |
-| `disease_stage` | `str \| null` | No | e.g. `"II"`, `"IIIa"` |
-| `external_identifiers` | `list[ExternalIdentifier]` | No | IDs in external systems (default `[]`). Max 20 per patient. Each `(system, value)` pair must be unique within your organisation |
-| `metadata` | `dict \| null` | No | Arbitrary key-value store. Keys must not start with `olira_`. Max 50 keys, ≤ 8 KB total. Values must be scalars (no nested objects) |
-
-**Response** `201 Created` → [`Patient`](#patient)
-
-```json
-{
-  "id": "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-  "first_name": "Jane",
-  "last_name": "Smith",
-  "email": "jane@example.com",
-  "phone_number": null,
-  "date_of_birth": "1985-03-22T00:00:00+00:00",
-  "sex": "female",
-  "timezone": "America/New_York",
-  "status": "pending",
-  "primary_disease_site": "breast",
-  "disease_stage": "II",
-  "created_at": "2026-03-01T12:00:00+00:00"
-}
-```
-
-**Python**
+#### `create_patient`
 
 ```python
-from olira import OliraClient, ExternalIdentifier
+create_patient(*, first_name: str, last_name: str, email: str | None = None, phone_number: str | None = None, date_of_birth: str | None = None, sex: str = 'unknown', timezone: str, primary_disease_site: str | None = None, disease_stage: str | None = None, external_identifiers: list[ExternalIdentifier] | None = None, metadata: dict[str, Any] | None = None) -> Patient
+```
 
-client = OliraClient(api_key="olira_prod_...")
+Create a patient. Module-level proxy to the singleton client.
 
-# timezone is required; id is auto-generated — store patient.id to reference this patient later
-patient = client.create_patient(
+Requires an API key with the api:manage-patients scope. Returns a :class:`Patient`
+with an Olira-assigned `id` — use it in all subsequent calls for this patient.
+
+| Parameter              | Required | Type                      | Default     |
+| ---------------------- | -------- | ------------------------- | ----------- | ------ |
+| `first_name`           | Yes      | `str`                     | —           |
+| `last_name`            | Yes      | `str`                     | —           |
+| `email`                | No       | `str                      | None`       | `None` |
+| `phone_number`         | No       | `str                      | None`       | `None` |
+| `date_of_birth`        | No       | `str                      | None`       | `None` |
+| `sex`                  | No       | `str`                     | `'unknown'` |
+| `timezone`             | Yes      | `str`                     | —           |
+| `primary_disease_site` | No       | `str                      | None`       | `None` |
+| `disease_stage`        | No       | `str                      | None`       | `None` |
+| `external_identifiers` | No       | `list[ExternalIdentifier] | None`       | `None` |
+| `metadata`             | No       | `dict[str, Any]           | None`       | `None` |
+
+**Example:**
+
+```python
+from olira import ExternalIdentifier
+
+patient = olira.create_patient(
     first_name="Jane",
     last_name="Smith",
     email="jane@example.com",
-    timezone="America/Los_Angeles",
+    sex="female",
+    timezone="America/New_York",
     primary_disease_site="breast",
-    disease_stage="II",
-    external_identifiers=[ExternalIdentifier(system="epic", value="MRN-00042")],
-    metadata={"trial_arm": "A", "enrolled_by_npi": "1234567890"},
+    disease_stage="Stage II",
+    external_identifiers=[ExternalIdentifier(system="epic", value="MRN-12345")],
 )
-print(patient.id, patient.status)  # "8a4fde23-0f1b-4c2a-..." "pending"
+print(patient.id)  # Olira-assigned ID — use in all subsequent calls
 ```
-
-**Error responses**
-
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `api:manage-patients` scope |
-| `409 Conflict` | An `(external_system, external_value)` pair already exists in your organisation |
-| `422 Unprocessable Entity` | `first_name`, `last_name`, or `timezone` missing; `date_of_birth` not valid ISO 8601; `metadata` constraint violated |
-
----
 
 ### List patients
 
-**`GET /v1/patients`**
-
-Returns all non-deleted patients in your organisation that were created via the SDK. Results are sorted by first name.
-
-**Authorization:** `api:manage-patients` scope
-
-**Query parameters**
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `limit` | `int` | `100` | Maximum number of patients to return. Range: 1–100 |
-| `offset` | `int` | `0` | Number of patients to skip (for pagination) |
-| `external_system` | `str` | — | Filter by external system name (must be used together with `external_value`) |
-| `external_value` | `str` | — | Filter by external system value (must be used together with `external_system`) |
-
-**Response** `200 OK` → [`PatientListResult`](#patientlistresult)
-
-```json
-{
-  "patients": [
-    {
-      "id": "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-      "first_name": "Jane",
-      "last_name": "Smith",
-      "email": "jane@example.com",
-      "phone_number": null,
-      "date_of_birth": "1985-03-22T00:00:00+00:00",
-      "sex": "female",
-      "timezone": "America/New_York",
-      "status": "pending",
-      "primary_disease_site": "breast",
-      "disease_stage": "II",
-      "created_at": "2026-03-01T12:00:00+00:00"
-    }
-  ],
-  "total": 1,
-  "has_more": false
-}
-```
-
-**Python**
+#### `list_patients`
 
 ```python
-from olira import OliraClient
-
-client = OliraClient(api_key="olira_prod_...")
-
-result = client.list_patients(limit=50, offset=0)
-print(f"{result.total} patients, has_more={result.has_more}")
-for patient in result.patients:
-    print(patient.id, patient.first_name, patient.last_name)
-
-# Lookup by external identifier
-result = client.list_patients(external_system="epic", external_value="MRN-00042")
-assert len(result.patients) == 1
+list_patients(*, limit: int = 100, offset: int = 0, external_system: str | None = None, external_value: str | None = None) -> PatientListResult
 ```
 
-**Error responses**
+List patients in your organisation. Module-level proxy to the singleton client.
 
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `api:manage-patients` scope |
+Requires an API key with the api:manage-patients scope.
 
----
+| Parameter         | Required | Type  | Default |
+| ----------------- | -------- | ----- | ------- | ------ |
+| `limit`           | No       | `int` | `100`   |
+| `offset`          | No       | `int` | `0`     |
+| `external_system` | No       | `str  | None`   | `None` |
+| `external_value`  | No       | `str  | None`   | `None` |
+
+**Example:**
+
+```python
+result = olira.list_patients(limit=20, offset=0)
+for patient in result.patients:
+    print(patient.id, patient.first_name, patient.last_name)
+```
 
 ### Get a patient
 
-**`GET /v1/patients/{patient_id}`**
-
-Returns a single patient by their id.
-
-**Authorization:** `api:manage-patients` scope
-
-**Path parameters**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `patient_id` | `str` | Olira-assigned patient id (from `Patient.id`) |
-
-**Response** `200 OK` → [`Patient`](#patient)
-
-```json
-{
-  "id": "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-  "first_name": "Jane",
-  "last_name": "Smith",
-  "email": "jane@example.com",
-  "phone_number": null,
-  "date_of_birth": "1985-03-22T00:00:00+00:00",
-  "sex": "female",
-  "timezone": "America/New_York",
-  "status": "pending",
-  "primary_disease_site": "breast",
-  "disease_stage": "II",
-  "created_at": "2026-03-01T12:00:00+00:00"
-}
-```
-
-**Python**
+#### `get_patient`
 
 ```python
-from olira import OliraClient
-
-client = OliraClient(api_key="olira_prod_...")
-
-patient = client.get_patient(patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82")
-print(patient.status)
+get_patient(*, patient_id: str) -> Patient
 ```
 
-**Error responses**
+Get a patient by their id. Module-level proxy to the singleton client.
 
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `api:manage-patients` scope |
-| `404 Not Found` | No patient with this id in your organisation, or patient has been deleted |
+Requires an API key with the api:manage-patients scope.
 
----
+| Parameter    | Required | Type  | Default |
+| ------------ | -------- | ----- | ------- |
+| `patient_id` | Yes      | `str` | —       |
+
+**Example:**
+
+```python
+patient = olira.get_patient(patient_id="patient-uuid")
+```
 
 ### Update a patient
 
-**`PUT /v1/patients/{patient_id}`**
-
-Partially updates a patient. Only the fields you include in the request body are changed — omitted fields are left as-is.
-
-**Authorization:** `api:manage-patients` scope
-
-**Path parameters**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `patient_id` | `str` | Olira-assigned patient id (from `Patient.id`) |
-
-**Request body** (all fields optional)
-
-| Field | Type | Description |
-|---|---|---|
-| `first_name` | `str \| null` | |
-| `last_name` | `str \| null` | |
-| `email` | `str \| null` | |
-| `phone_number` | `str \| null` | |
-| `sex` | `str \| null` | `"male"`, `"female"`, or `"unknown"` |
-| `timezone` | `str \| null` | IANA timezone string |
-| `primary_disease_site` | `str \| null` | |
-| `disease_stage` | `str \| null` | |
-| `external_identifiers` | `list[ExternalIdentifier] \| null` | Full replace — omit to leave as-is; pass `[]` to clear all |
-| `metadata` | `dict \| null` | Full replace — omit to leave as-is; pass `{}` to clear |
-
-**Response** `200 OK` → [`Patient`](#patient) (full updated record)
-
-```json
-{
-  "id": "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-  "first_name": "Jane",
-  "last_name": "Smith",
-  "email": "jane@example.com",
-  "phone_number": null,
-  "date_of_birth": "1985-03-22T00:00:00+00:00",
-  "sex": "female",
-  "timezone": "America/New_York",
-  "status": "pending",
-  "primary_disease_site": "breast",
-  "disease_stage": "III",
-  "created_at": "2026-03-01T12:00:00+00:00"
-}
-```
-
-**Python**
+#### `update_patient`
 
 ```python
-from olira import OliraClient
-
-client = OliraClient(api_key="olira_prod_...")
-
-patient = client.update_patient(
-    patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-    disease_stage="III",
-)
-print(patient.disease_stage)  # "III"
+update_patient(*, patient_id: str, first_name: str | None = None, last_name: str | None = None, email: str | None = None, phone_number: str | None = None, sex: str | None = None, timezone: str | None = None, primary_disease_site: str | None = None, disease_stage: str | None = None, external_identifiers: list[ExternalIdentifier] | None = None, metadata: dict[str, Any] | None = None) -> Patient
 ```
 
-**Error responses**
+Update a patient. Module-level proxy to the singleton client.
 
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `api:manage-patients` scope |
-| `404 Not Found` | No patient with this id in your organisation, or patient has been deleted |
-| `409 Conflict` | An `(external_system, external_value)` pair in `external_identifiers` already exists in your organisation |
+Requires an API key with the api:manage-patients scope.
+Only supplied fields are changed; omitted fields are left as-is.
 
----
+| Parameter              | Required | Type                      | Default |
+| ---------------------- | -------- | ------------------------- | ------- | ------ |
+| `patient_id`           | Yes      | `str`                     | —       |
+| `first_name`           | No       | `str                      | None`   | `None` |
+| `last_name`            | No       | `str                      | None`   | `None` |
+| `email`                | No       | `str                      | None`   | `None` |
+| `phone_number`         | No       | `str                      | None`   | `None` |
+| `sex`                  | No       | `str                      | None`   | `None` |
+| `timezone`             | No       | `str                      | None`   | `None` |
+| `primary_disease_site` | No       | `str                      | None`   | `None` |
+| `disease_stage`        | No       | `str                      | None`   | `None` |
+| `external_identifiers` | No       | `list[ExternalIdentifier] | None`   | `None` |
+| `metadata`             | No       | `dict[str, Any]           | None`   | `None` |
+
+Only the fields you supply are changed; omitted fields are left as-is.
+
+**Example:**
+
+```python
+olira.update_patient(
+    patient_id="patient-uuid",
+    disease_stage="Stage III",
+    primary_disease_site="lung",
+)
+```
 
 ### External Identifiers
 
-`external_identifiers` links a patient to their ID in an external system, enabling round-trip lookups without a side table.
+Link a patient to their ID in another system using `ExternalIdentifier`:
 
-**Common use cases:**
-- Storing an Epic MRN: `ExternalIdentifier(system="epic", value="MRN-00042")`
-- Storing a Flatiron patient ID: `ExternalIdentifier(system="flatiron", value="FLT-9999")`
-- Storing a FHIR resource ID: `ExternalIdentifier(system="fhir", value="Patient/abc123")`
-
-**Lookup pattern:**
 ```python
-# Find a patient by their Epic MRN
-result = client.list_patients(external_system="epic", external_value="MRN-00042")
-patient = result.patients[0]
+from olira import ExternalIdentifier
+
+olira.update_patient(
+    patient_id="patient-uuid",
+    external_identifiers=[
+        ExternalIdentifier(system="epic", value="MRN-12345"),
+        ExternalIdentifier(system="flatiron", value="FLT-67890"),
+    ],
+)
 ```
-
-**Constraints (enforced server-side):**
-- Max 20 `external_identifiers` per patient
-- Each `(system, value)` pair must be unique within your organisation — duplicate submissions return `409 Conflict`
-
----
 
 ### Delete a patient
 
-**`DELETE /v1/patients/{patient_id}`**
-
-Soft-deletes a patient. The patient's status is set to `"deleted"` and they are excluded from list results and future API calls.
-
-**Authorization:** `api:manage-patients` scope
-
-**Path parameters**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `patient_id` | `str` | Olira-assigned patient id (from `Patient.id`) |
-
-**Response** `200 OK`
-
-```json
-{ "ok": true }
-```
-
-**Python**
+#### `delete_patient`
 
 ```python
-from olira import OliraClient
-
-client = OliraClient(api_key="olira_prod_...")
-
-client.delete_patient(patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82")
+delete_patient(*, patient_id: str) -> None
 ```
 
-**Error responses**
+Soft-delete a patient. Module-level proxy to the singleton client.
 
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `api:manage-patients` scope |
-| `404 Not Found` | No patient with this id in your organisation, or patient already deleted |
+Requires an API key with the api:manage-patients scope.
 
----
+| Parameter    | Required | Type  | Default |
+| ------------ | -------- | ----- | ------- |
+| `patient_id` | Yes      | `str` | —       |
+
+Soft-deletes the patient. The record is retained for audit purposes.
 
 ### Batch create patients
 
-**`POST /v1/patients/batch`**
-
-Creates up to **500** patients in a single request. Partial success is supported — if some patients fail, the rest are still created. The response lists each success in `items` and each failure in `errors`, both keyed by zero-based `index` matching the input array.
-
-**Authorization:** `api:manage-patients` scope
-
-**Request body**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `patients` | `list[CreatePatientRequest]` | **Yes** | 1–500 patient objects. Each object has the same fields as `POST /v1/patients` |
-
-**Response** `200 OK`
-
-| Field | Type | Description |
-|---|---|---|
-| `count` | `int` | Total patients submitted (accepted + failed) |
-| `items` | `list` | Successfully created patients |
-| `items[].index` | `int` | Zero-based position in the input array |
-| `items[].id` | `str` | Olira-assigned patient id |
-| `items[].source` | `str \| null` | First `external_identifiers[0].system`, or `null` if none provided |
-| `errors` | `list` | Patients that failed to create |
-| `errors[].index` | `int` | Zero-based position in the input array |
-| `errors[].code` | `str` | Machine-readable error code (see table below) |
-| `errors[].message` | `str` | Human-readable description |
-
-**Error codes**
-
-| Code | Meaning |
-|---|---|
-| `conflict` | `external_identifier (system, value)` already exists in your organisation |
-| `validation_error` | Invalid field value (e.g. malformed `date_of_birth`) |
-| `server_error` | Unexpected server-side failure |
-
-**Example request**
+#### `create_patients_batch`
 
 ```python
-from olira import OliraClient, CreatePatientRequest, ExternalIdentifier
-
-client = OliraClient(api_key="olira_prod_...")
-
-patients = [
-    CreatePatientRequest(
-        first_name="Jane",
-        last_name="Smith",
-        timezone="America/New_York",
-        external_identifiers=[ExternalIdentifier(system="epic", value="MRN-001")],
-    ),
-    CreatePatientRequest(
-        first_name="John",
-        last_name="Doe",
-        timezone="America/Chicago",
-        external_identifiers=[ExternalIdentifier(system="flatiron", value="FLT-002")],
-    ),
-]
-
-result = client.create_patients_batch(patients)
-print(f"Created: {len(result.items)}, Failed: {len(result.errors)}")
-for item in result.items:
-    print(f"  [{item.index}] id={item.id} source={item.source}")
-for err in result.errors:
-    print(f"  [{err.index}] {err.code}: {err.message}")
+create_patients_batch(patients: list[CreatePatientRequest]) -> PatientBatchResult
 ```
 
-**Example response**
+Batch-create up to 500 patients. Module-level proxy to the singleton client.
 
-```json
-{
-  "count": 2,
-  "items": [
-    { "index": 0, "id": "abc123...", "source": "epic" },
-    { "index": 1, "id": "def456...", "source": "flatiron" }
-  ],
-  "errors": []
-}
+Requires an API key with the api:manage-patients scope. Partial success is supported.
+Returns a :class:`PatientBatchResult` with items (successes) and errors (failures).
+
+| Parameter  | Required | Type                         | Default |
+| ---------- | -------- | ---------------------------- | ------- |
+| `patients` | Yes      | `list[CreatePatientRequest]` | —       |
+
+**Example:**
+
+```python
+from olira import CreatePatientRequest
+
+result = olira.create_patients_batch([
+    CreatePatientRequest(first_name="Alice", last_name="Jones", sex="female", timezone="UTC"),
+    CreatePatientRequest(first_name="Bob", last_name="Lee", sex="male", timezone="UTC"),
+])
+print(f"Created {result.count}, errors: {len(result.errors)}")
 ```
 
-**Error responses**
+### Patient response models
 
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `api:manage-patients` scope |
-| `422 Unprocessable Entity` | More than 500 patients submitted, or invalid request body |
+### `ExternalIdentifier`
+
+Links a patient to their ID in an external system (e.g. Epic MRN, Flatiron ID, FHIR resource ID).
+
+| Field    | Required | Type  | Description                                  |
+| -------- | -------- | ----- | -------------------------------------------- |
+| `system` | Yes      | `str` | System name, e.g. 'epic', 'flatiron', 'fhir' |
+| `value`  | Yes      | `str` | Patient ID in that system                    |
+
+### `CreatePatientRequest`
+
+Request body for creating a patient.
+
+All fields map directly to the patient record. Olira assigns a stable `id`
+to the patient at creation time — it is returned in the :class:`Patient` response.
+
+| Field                  | Required | Type                       | Description              |
+| ---------------------- | -------- | -------------------------- | ------------------------ | ----------------------------------------------------------------------- |
+| `first_name`           | Yes      | `str`                      | —                        |
+| `last_name`            | Yes      | `str`                      | —                        |
+| `email`                | No       | `str                       | None`                    | — (default: `None`)                                                     |
+| `phone_number`         | No       | `str                       | None`                    | — (default: `None`)                                                     |
+| `date_of_birth`        | No       | `str                       | None`                    | ISO 8601 datetime string, e.g. '1985-03-22T00:00:00Z' (default: `None`) |
+| `sex`                  | No       | `str`                      | — (default: `'unknown'`) |
+| `timezone`             | Yes      | `str`                      | —                        |
+| `primary_disease_site` | No       | `str                       | None`                    | — (default: `None`)                                                     |
+| `disease_stage`        | No       | `str                       | None`                    | — (default: `None`)                                                     |
+| `external_identifiers` | No       | `list[ExternalIdentifier]` | — (default: `list()`)    |
+| `metadata`             | No       | `dict[str, Any]            | None`                    | — (default: `None`)                                                     |
+
+### `UpdatePatientRequest`
+
+Request body for updating a patient (all fields optional).
+
+Only the fields you set are changed; omitted fields are left as-is.
+
+| Field                  | Required | Type                      | Description |
+| ---------------------- | -------- | ------------------------- | ----------- | ------------------- |
+| `first_name`           | No       | `str                      | None`       | — (default: `None`) |
+| `last_name`            | No       | `str                      | None`       | — (default: `None`) |
+| `email`                | No       | `str                      | None`       | — (default: `None`) |
+| `phone_number`         | No       | `str                      | None`       | — (default: `None`) |
+| `sex`                  | No       | `str                      | None`       | — (default: `None`) |
+| `timezone`             | No       | `str                      | None`       | — (default: `None`) |
+| `primary_disease_site` | No       | `str                      | None`       | — (default: `None`) |
+| `disease_stage`        | No       | `str                      | None`       | — (default: `None`) |
+| `external_identifiers` | No       | `list[ExternalIdentifier] | None`       | — (default: `None`) |
+| `metadata`             | No       | `dict[str, Any]           | None`       | — (default: `None`) |
+
+### `Patient`
+
+A patient in your organisation.
+
+`id` is the Olira-assigned identifier for this patient, returned at creation
+time. Use it in all subsequent calls that reference this patient.
+
+| Field                  | Required | Type                       | Description           |
+| ---------------------- | -------- | -------------------------- | --------------------- | ------------------- |
+| `id`                   | Yes      | `str`                      | —                     |
+| `first_name`           | Yes      | `str`                      | —                     |
+| `last_name`            | Yes      | `str`                      | —                     |
+| `sex`                  | Yes      | `str`                      | —                     |
+| `timezone`             | Yes      | `str`                      | —                     |
+| `status`               | Yes      | `str`                      | —                     |
+| `email`                | No       | `str                       | None`                 | — (default: `None`) |
+| `phone_number`         | No       | `str                       | None`                 | — (default: `None`) |
+| `date_of_birth`        | No       | `str                       | None`                 | — (default: `None`) |
+| `primary_disease_site` | No       | `str                       | None`                 | — (default: `None`) |
+| `disease_stage`        | No       | `str                       | None`                 | — (default: `None`) |
+| `created_at`           | No       | `str                       | None`                 | — (default: `None`) |
+| `external_identifiers` | No       | `list[ExternalIdentifier]` | — (default: `list()`) |
+| `metadata`             | No       | `dict[str, Any]            | None`                 | — (default: `None`) |
+
+### `PatientListResult`
+
+Result of a list_patients() call.
+
+| Field      | Required | Type            | Description |
+| ---------- | -------- | --------------- | ----------- |
+| `patients` | Yes      | `list[Patient]` | —           |
+| `total`    | Yes      | `int`           | —           |
+| `has_more` | Yes      | `bool`          | —           |
+
+### `PatientBatchItem`
+
+One successfully created patient from a batch_create_patients() call.
+
+| Field    | Required | Type  | Description |
+| -------- | -------- | ----- | ----------- | ------------------- |
+| `index`  | Yes      | `int` | —           |
+| `id`     | Yes      | `str` | —           |
+| `source` | No       | `str  | None`       | — (default: `None`) |
+
+### `PatientBatchResult`
+
+Result of a create_patients_batch() call. Mirrors /v1/patients/batch response.
+
+| Field    | Required | Type                     | Description           |
+| -------- | -------- | ------------------------ | --------------------- |
+| `count`  | Yes      | `int`                    | —                     |
+| `items`  | Yes      | `list[PatientBatchItem]` | —                     |
+| `errors` | No       | `list[BatchError]`       | — (default: `list()`) |
+
+### `PatientToken`
+
+A short-lived patient-scoped JWT returned by get_patient_token().
+
+Pass `access_token` as a Bearer token to the Olira MCP Patient State server.
+The token is locked to the patient identified by the `patient_id` you supplied
+and expires after `expires_in` seconds (default 15 minutes).
+
+| Field          | Required | Type        | Description             |
+| -------------- | -------- | ----------- | ----------------------- |
+| `access_token` | Yes      | `str`       | —                       |
+| `token_type`   | No       | `str`       | — (default: `'bearer'`) |
+| `expires_in`   | Yes      | `int`       | —                       |
+| `scopes`       | Yes      | `list[str]` | —                       |
 
 ---
 
 ## Events
 
-Event endpoints record health-related actions against a patient. The patient must exist (created via `POST /v1/patients` or the Console) before you can log events against them.
-
-`patient_id` in every event request is the Olira-assigned `id` returned when the patient was created.
-
----
+All event functions use `sdk:event-log` scope for logging, and
+`sdk:event-management` scope for querying and deleting.
 
 ### Log a single event
 
-**`POST /v1/events`**
-
-Ingests one event. For high-throughput use cases prefer the batch endpoint. The SDK's `log()` method uses this endpoint when `async_flush=False`; otherwise events are automatically batched via `POST /v1/events/batch`.
-
-**Authorization:** `sdk:event-log` scope
-
-**Request body**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `event_name` | `str` | **Yes** | Event type value from `OliraEventType`, e.g. `"user_login"` |
-| `patient_id` | `str` | **Yes** | Olira-assigned patient id (the `id` from `Patient`). Must not be an email address, raw phone number, or SSN |
-| `event_id` | `str \| null` | No | UUID for this event. Auto-generated if omitted. Stable identifier for targeted deletion |
-| `idempotency_key` | `str \| null` | No | Deduplication key. Duplicate submissions with the same key are silently ignored |
-| `timestamp` | `str \| null` | No | ISO 8601 event occurrence time. Defaults to server ingestion time if omitted |
-| `payload` | `object` | No | Event-specific data. See event type catalogue in SPEC.md. Max 512 KB |
-| `context` | `object` | No | SDK metadata (version, environment). Set automatically by the SDK client |
-| `trace` | `object \| null` | No | Links the event to an Olira object — `{ "object_type": "...", "object_id": "..." }` |
-
-**Response** `200 OK`
-
-```json
-{ "accepted": 1 }
-```
-
-**Python** (direct — synchronous)
+#### `log`
 
 ```python
-from olira import OliraClient, OliraEventType
-
-client = OliraClient(api_key="olira_prod_...", async_flush=False)
-
-client.log(
-    event_type=OliraEventType.USER_LOGIN,
-    patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-)
-client.close()
+log(*, event_type: OliraEventType, patient_id: str, payload: dict[str, Any] | None = None, trace: OliraTrace | None = None, timestamp: str | None = None) -> None
 ```
 
-**Python** (module-level singleton — recommended for long-running services)
+Enqueue an event for background delivery. Module-level proxy to the singleton client.
+
+| Parameter    | Required | Type             | Default |
+| ------------ | -------- | ---------------- | ------- | ------ |
+| `event_type` | Yes      | `OliraEventType` | —       |
+| `patient_id` | Yes      | `str`            | —       |
+| `payload`    | No       | `dict[str, Any]  | None`   | `None` |
+| `trace`      | No       | `OliraTrace      | None`   | `None` |
+| `timestamp`  | No       | `str             | None`   | `None` |
+
+Events are enqueued and flushed in the background. Call `olira.flush()` before
+process exit to ensure delivery.
+
+**Example:**
 
 ```python
 import olira
 from olira import OliraEventType
 
-# Call once at startup
-olira.init(api_key="olira_prod_...")
-
-# Then anywhere in your codebase — no client reference needed
 olira.log(
-    event_type=OliraEventType.USER_LOGIN,
-    patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
+    event_type=OliraEventType.SYMPTOM_REPORT,
+    patient_id="patient-uuid",
+    payload={
+        "instrument": "esas_r",
+        "symptoms": [
+            {"name": "pain", "score": 4},
+            {"name": "fatigue", "score": 6},
+        ],
+    },
 )
-
-# At process shutdown
 olira.flush()
 ```
 
-**Error responses**
-
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `sdk:event-log` scope |
-| `404 Not Found` | No patient with this `patient_id` in your organisation |
-| `422 Unprocessable Entity` | Missing required fields or payload exceeds 512 KB |
-
----
-
 ### Log a batch of events
 
-**`POST /v1/events/batch`**
-
-Ingests up to `batch_size` events in a single request (default 50 per call when using `log_batch()`; up to whatever your server allows). Supports partial success — individual event failures do not abort the whole batch.
-
-This is the endpoint used by the background worker that powers `log()`.
-
-**Authorization:** `sdk:event-log` scope
-
-**Request body**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `events` | `array` | **Yes** | Array of event objects. Each has the same shape as the single-event request body |
-
-```json
-{
-  "events": [
-    {
-      "event_name": "user_login",
-      "patient_id": "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-      "event_id": "e1a2b3c4-0001-0000-0000-000000000001",
-      "timestamp": "2026-03-01T09:00:00Z",
-      "payload": {},
-      "context": { "sdk_version": "0.1.0a4", "environment": "production" }
-    },
-    {
-      "event_name": "symptom_report",
-      "patient_id": "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-      "event_id": "e1a2b3c4-0001-0000-0000-000000000002",
-      "timestamp": "2026-03-01T09:01:00Z",
-      "payload": {
-        "instrument": "esas_r",
-        "symptoms": [{ "name": "pain", "score": 4 }]
-      },
-      "context": { "sdk_version": "0.1.0a4", "environment": "production" }
-    }
-  ]
-}
-```
-
-**Response** `200 OK` → [`BatchResult`](#batchresult)
-
-```json
-{
-  "accepted": 2,
-  "failed": 0,
-  "errors": []
-}
-```
-
-Partial failure example:
-
-```json
-{
-  "accepted": 1,
-  "failed": 1,
-  "errors": [
-    {
-      "index": 1,
-      "code": "patient_not_found",
-      "message": "Patient 'mrn-unknown' not found"
-    }
-  ]
-}
-```
-
-**Python**
+#### `log_batch`
 
 ```python
-from olira import OliraClient, EventSpec, OliraEventType, EsasItem
+log_batch(events: list[EventSpec]) -> BatchResult
+```
 
-client = OliraClient(api_key="olira_prod_...")
+Send a batch of events directly. Module-level proxy to the singleton client.
 
-result = client.log_batch([
+| Parameter | Required | Type              | Default |
+| --------- | -------- | ----------------- | ------- |
+| `events`  | Yes      | `list[EventSpec]` | —       |
+
+**Example:**
+
+```python
+from olira import EventSpec, OliraEventType
+
+result = olira.log_batch([
     EventSpec(
-        event_type=OliraEventType.USER_LOGIN,
-        patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
+        event_type=OliraEventType.VITALS_MEASUREMENT,
+        patient_id="patient-uuid",
+        payload={
+            "measurements": {"systolic_bp_mmhg": 128, "diastolic_bp_mmhg": 82,
+                               "heart_rate_bpm": 72, "spo2_percent": None,
+                               "weight_kg": None, "temperature_celsius": None,
+                               "respiratory_rate_bpm": None},
+            "context": {"position": "sitting", "fasting": None},
+            "source": "manual_entry",
+            "collection_datetime": "2026-03-18T09:00:00Z",
+        },
     ),
     EventSpec(
-        event_type=OliraEventType.SYMPTOM_REPORT,
-        patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
+        event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
+        patient_id="patient-uuid",
         payload={
-            "instrument": "esas_r",
-            "symptoms": [EsasItem(name="pain", score=4).model_dump()],
+            "medication_adherence": [{"status": "taken", "medication_name": "Ondansetron 4mg"}],
         },
     ),
 ])
-print(f"accepted={result.accepted}, failed={result.failed}")
-client.close()
+print(f"Accepted: {result.accepted}, Failed: {result.failed}")
 ```
-
-**Error responses**
-
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `sdk:event-log` scope |
-| `422 Unprocessable Entity` | Request body malformed (e.g. `events` field missing) |
-
-Per-event failures (patient not found, payload too large, etc.) are returned inside the response body as `errors[]`, not as HTTP error codes.
-
----
 
 ### Query events
 
-**`GET /v1/events`**
-
-Returns events for a patient, filtered by event type and/or time range. Results are ordered by `timestamp` descending.
-
-**Authorization:** `sdk:event-management` scope
-
-**Query parameters**
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `patient_id` | `str` | **Yes** | Olira-assigned patient id (from `Patient.id`) |
-| `event_type` | `str` | No | Filter to a single `OliraEventType` value, e.g. `"user_login"` |
-| `from_timestamp` | `str` | No | Include events with `timestamp >=` this ISO 8601 value |
-| `to_timestamp` | `str` | No | Include events with `timestamp <=` this ISO 8601 value |
-| `ingested_after` | `str` | No | Include events with `ingested_at >` this ISO 8601 value |
-| `ingested_before` | `str` | No | Include events with `ingested_at <` this ISO 8601 value |
-| `limit` | `int` | No | Max results to return (default `100`) |
-| `offset` | `int` | No | Results to skip for pagination (default `0`) |
-
-Use `ingested_after` / `ingested_before` when you want to find events by when they arrived (e.g. "everything received in the last hour"). Use `from_timestamp` / `to_timestamp` to filter by when the event occurred in the real world.
-
-**Response** `200 OK` → [`EventQueryResult`](#eventqueryresult)
-
-```json
-{
-  "events": [
-    {
-      "event_id": "e1a2b3c4-0001-0000-0000-000000000002",
-      "event_type": "symptom_report",
-      "patient_id": "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-      "timestamp": "2026-03-01T09:01:00Z",
-      "ingested_at": "2026-03-01T09:01:03Z",
-      "payload": {
-        "instrument": "esas_r",
-        "symptoms": [{ "name": "pain", "score": 4 }]
-      },
-      "trace": null
-    }
-  ],
-  "total": 1,
-  "has_more": false
-}
-```
-
-**Python**
+#### `get_events`
 
 ```python
-from olira import OliraClient, OliraEventType
-
-client = OliraClient(api_key="olira_prod_...")
-
-result = client.get_events(
-    patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-    event_type=OliraEventType.SYMPTOM_REPORT,
-    ingested_after="2026-03-01T00:00:00Z",
-)
-print(f"{result.total} events found")
-for event in result.events:
-    print(event.event_id, event.timestamp, event.payload)
-client.close()
+get_events(*, patient_id: str, event_type: OliraEventType | None = None, from_timestamp: str | None = None, to_timestamp: str | None = None, ingested_after: str | None = None, ingested_before: str | None = None, limit: int = 100, offset: int = 0) -> EventQueryResult
 ```
 
-**Error responses**
+Query events for a patient. Module-level proxy to the singleton client.
 
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `sdk:event-management` scope |
-| `404 Not Found` | No patient with this `patient_id` in your organisation |
+Requires an API key with the sdk:event-management scope.
 
----
+| Parameter         | Required | Type            | Default |
+| ----------------- | -------- | --------------- | ------- | ------ |
+| `patient_id`      | Yes      | `str`           | —       |
+| `event_type`      | No       | `OliraEventType | None`   | `None` |
+| `from_timestamp`  | No       | `str            | None`   | `None` |
+| `to_timestamp`    | No       | `str            | None`   | `None` |
+| `ingested_after`  | No       | `str            | None`   | `None` |
+| `ingested_before` | No       | `str            | None`   | `None` |
+| `limit`           | No       | `int`           | `100`   |
+| `offset`          | No       | `int`           | `0`     |
+
+**Example:**
+
+```python
+result = olira.get_events(
+    patient_id="patient-uuid",
+    event_type=OliraEventType.SYMPTOM_REPORT,
+    limit=50,
+)
+for event in result.events:
+    print(event.event_id, event.timestamp, event.payload)
+```
 
 ### Delete events
 
-**`DELETE /v1/events`**
-
-Permanently deletes events matching the given filters. At least one filter is required to prevent accidental deletion of all events for a patient.
-
-**Authorization:** `sdk:event-management` scope
-
-**Request body**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `patient_id` | `str` | **Yes** | Olira-assigned patient id (from `Patient.id`) |
-| `event_type` | `str \| null` | No* | Delete only events of this type |
-| `from_timestamp` | `str \| null` | No* | Delete events with `timestamp >=` this ISO 8601 value |
-| `to_timestamp` | `str \| null` | No* | Delete events with `timestamp <=` this ISO 8601 value |
-| `ingested_after` | `str \| null` | No* | Delete events with `ingested_at >` this ISO 8601 value |
-| `ingested_before` | `str \| null` | No* | Delete events with `ingested_at <` this ISO 8601 value |
-| `event_ids` | `list[str] \| null` | No* | Delete specific events by their `event_id` UUIDs |
-
-\* At least one of these filters must be provided. The SDK client enforces this client-side and raises `ValidationError` before making the request.
-
-**Response** `200 OK` → [`DeleteResult`](#deleteresult)
-
-```json
-{
-  "deleted_count": 3,
-  "patient_id": "8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82"
-}
-```
-
-**Python**
+#### `delete_events`
 
 ```python
-from olira import OliraClient, OliraEventType
-
-client = OliraClient(api_key="olira_prod_...")
-
-# Delete all USER_LOGIN events for a patient
-result = client.delete_events(
-    patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-    event_type=OliraEventType.USER_LOGIN,
-)
-print(f"deleted {result.deleted_count} events")
-
-# Delete specific events by ID
-result = client.delete_events(
-    patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82",
-    event_ids=["e1a2b3c4-0001-...", "e1a2b3c4-0002-..."],
-)
-client.close()
+delete_events(*, patient_id: str, event_type: OliraEventType | None = None, from_timestamp: str | None = None, to_timestamp: str | None = None, ingested_after: str | None = None, ingested_before: str | None = None, event_ids: list[str] | None = None) -> DeleteResult
 ```
 
-**Error responses**
+Delete events by filter. Module-level proxy to the singleton client.
 
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `sdk:event-management` scope |
-| `404 Not Found` | No patient with this `patient_id` in your organisation |
-| `422 Unprocessable Entity` | No filters provided (also raised client-side as `ValidationError`) |
+Requires an API key with the sdk:event-management scope.
+At least one filter must be provided.
+
+| Parameter         | Required | Type            | Default |
+| ----------------- | -------- | --------------- | ------- | ------ |
+| `patient_id`      | Yes      | `str`           | —       |
+| `event_type`      | No       | `OliraEventType | None`   | `None` |
+| `from_timestamp`  | No       | `str            | None`   | `None` |
+| `to_timestamp`    | No       | `str            | None`   | `None` |
+| `ingested_after`  | No       | `str            | None`   | `None` |
+| `ingested_before` | No       | `str            | None`   | `None` |
+| `event_ids`       | No       | `list[str]      | None`   | `None` |
+
+At least one filter must be provided.
+
+**Example:**
+
+```python
+result = olira.delete_events(
+    patient_id="patient-uuid",
+    event_type=OliraEventType.SYMPTOM_REPORT,
+    from_timestamp="2026-01-01T00:00:00Z",
+    to_timestamp="2026-02-01T00:00:00Z",
+)
+print(f"Deleted {result.deleted_count} events")
+```
+
+### Event response models
+
+### `EventSpec`
+
+Lightweight event specification for log_batch(). Not persisted internally.
+
+| Field             | Required | Type             | Description |
+| ----------------- | -------- | ---------------- | ----------- | ------------------- |
+| `event_type`      | Yes      | `OliraEventType` | —           |
+| `patient_id`      | Yes      | `str`            | —           |
+| `payload`         | No       | `dict[str, Any]  | None`       | — (default: `None`) |
+| `trace`           | No       | `OliraTrace      | None`       | — (default: `None`) |
+| `timestamp`       | No       | `str             | None`       | — (default: `None`) |
+| `idempotency_key` | No       | `str             | None`       | — (default: `None`) |
+
+### `BatchResult`
+
+Result of a log_batch() call. Mirrors /v1/events/batch response.
+
+| Field      | Required | Type               | Description           |
+| ---------- | -------- | ------------------ | --------------------- |
+| `accepted` | Yes      | `int`              | —                     |
+| `failed`   | Yes      | `int`              | —                     |
+| `errors`   | No       | `list[BatchError]` | — (default: `list()`) |
+
+### `BatchError`
+
+Per-event error from a batch response.
+
+| Field     | Required | Type  | Description |
+| --------- | -------- | ----- | ----------- |
+| `index`   | Yes      | `int` | —           |
+| `code`    | Yes      | `str` | —           |
+| `message` | Yes      | `str` | —           |
+
+### `EventRecord`
+
+A single event record returned by get_events().
+
+| Field         | Required | Type             | Description           |
+| ------------- | -------- | ---------------- | --------------------- | ------------------- |
+| `event_id`    | Yes      | `str`            | —                     |
+| `event_type`  | Yes      | `OliraEventType` | —                     |
+| `patient_id`  | Yes      | `str`            | —                     |
+| `timestamp`   | Yes      | `str`            | —                     |
+| `ingested_at` | Yes      | `str`            | —                     |
+| `payload`     | No       | `dict[str, Any]` | — (default: `dict()`) |
+| `trace`       | No       | `OliraTrace      | None`                 | — (default: `None`) |
+
+### `EventQueryResult`
+
+Result of a get_events() call.
+
+| Field      | Required | Type                | Description |
+| ---------- | -------- | ------------------- | ----------- |
+| `events`   | Yes      | `list[EventRecord]` | —           |
+| `total`    | Yes      | `int`               | —           |
+| `has_more` | Yes      | `bool`              | —           |
+
+### `DeleteResult`
+
+Result of a delete_events() call.
+
+| Field           | Required | Type  | Description |
+| --------------- | -------- | ----- | ----------- |
+| `deleted_count` | Yes      | `int` | —           |
+| `patient_id`    | Yes      | `str` | —           |
 
 ---
 
@@ -1186,168 +876,145 @@ client.close()
 
 ### Mint a patient-scoped JWT
 
-**`POST /v1/auth/token`**
-
-Exchanges an API key for a short-lived JWT locked to a single patient. The typical flow: your backend mints a token and forwards it to a patient device. The device uses the token with the Olira MCP Patient State server. The token enforces the patient binding server-side — the MCP ignores any `patient_id` passed in tool arguments and always uses the one embedded in the JWT.
-
-```
-Your backend ──── POST /v1/auth/token ────► Olira API
-                  { patient_id: "8a4fde23-0f1b-..." }
-                  ◄── { access_token, expires_in: 900 }
-
-Your backend ──── forward token ──────────► Patient device
-                                            │
-                                            └── MCP Patient State server
-                                                (locked to patient id)
-```
-
-**Authorization:** `sdk:patient-token` scope
-
-**Request body**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `patient_id` | `str` | **Yes** | Olira-assigned patient id (from `Patient.id`). The minted JWT grants access to this patient only |
-
-**Response** `200 OK` → [`PatientToken`](#patienttoken)
-
-```json
-{
-  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "expires_in": 900,
-  "scopes": ["mcp:patient-state"]
-}
-```
-
-**Python**
+#### `get_patient_token`
 
 ```python
-from olira import OliraClient
-
-client = OliraClient(api_key="olira_prod_...")  # must have sdk:patient-token scope
-
-token = client.get_patient_token(patient_id="8a4fde23-0f1b-4c2a-9d7e-b36c1a5f0e82")
-
-# Forward token.access_token to the patient device.
-# The device uses it as: Authorization: Bearer <token.access_token>
-print(f"expires in {token.expires_in}s, scopes={token.scopes}")
-client.close()
+get_patient_token(*, patient_id: str) -> PatientToken
 ```
 
-**Error responses**
+Mint a short-lived patient-scoped JWT. Module-level proxy to the singleton client.
 
-| Status | Cause |
-|---|---|
-| `401` | Missing or invalid API key |
-| `403` | Key does not have `sdk:patient-token` scope |
-| `404 Not Found` | No patient with this `patient_id` in your organisation, or patient has been deleted |
+Requires an API key with the sdk:patient-token scope.
+The returned JWT can be used as a Bearer token with the Olira MCP Patient State server.
+
+| Parameter    | Required | Type  | Default |
+| ------------ | -------- | ----- | ------- |
+| `patient_id` | Yes      | `str` | —       |
+
+Requires `sdk:patient-token` scope. The token is locked to the patient
+and can be used as a Bearer token with the Olira MCP Patient State server.
+
+**Example:**
+
+```python
+token = olira.get_patient_token(patient_id="patient-uuid")
+# Pass token.access_token to your frontend / AI agent
+print(f"Token expires in {token.expires_in}s")
+```
 
 ---
 
 ## Error Handling
 
-All SDK errors are subclasses of `OliraError`. Import the specific types you want to catch:
+All SDK errors inherit from `OliraError`.
+
+| Exception         | Inherits     | Description                                                                                 |
+| ----------------- | ------------ | ------------------------------------------------------------------------------------------- |
+| `OliraError`      | `Exception`  | Base exception for all Olira SDK errors.                                                    |
+| `AuthError`       | `OliraError` | Raised on 401 Unauthorized or 403 Forbidden — invalid or revoked API key.                   |
+| `RateLimitError`  | `OliraError` | Raised on 429 Too Many Requests. Includes retry_after from Retry-After header.              |
+| `ValidationError` | `OliraError` | Raised on 422 or client-side validation failure (malformed event, PII in patient_id, etc.). |
+| `ServerError`     | `OliraError` | Raised on 409 Conflict or 5xx server-side failure after retries exhausted.                  |
+| `NetworkError`    | `OliraError` | Raised on connection timeout, DNS failure, or other network error after retries exhausted.  |
+
+**Example:**
 
 ```python
-from olira import AuthError, ValidationError, RateLimitError, ServerError
+from olira import AuthError, RateLimitError, ValidationError
+import time
 
 try:
-    result = client.log_batch([...])
+    olira.log(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="...", payload={...})
+    olira.flush()
 except AuthError:
-    # Invalid or revoked API key, or missing scope
-    raise
+    print("Invalid or revoked API key — check your credentials")
 except RateLimitError as e:
-    # Too many requests — retry after e.retry_after seconds
+    print(f"Rate limited — retry after {e.retry_after}s")
     time.sleep(e.retry_after)
-except ValidationError:
-    # Bad request — malformed payload, missing required field, etc.
-    logging.error("Event rejected: %s", e)
-except ServerError:
-    # 5xx from Olira — SDK has already retried; escalate or queue for later
-    raise
+except ValidationError as e:
+    print(f"Validation error: {e}")
 ```
-
-| Exception | When raised |
-|---|---|
-| `AuthError` | `401` or `403` response — invalid key, revoked key, or missing scope |
-| `ValidationError` | `422` response or client-side pre-flight check (e.g. no filters on `delete_events`) |
-| `RateLimitError` | `429` response — `e.retry_after` contains the seconds to wait |
-| `ServerError` | `5xx` response after all retries are exhausted |
 
 ---
 
 ## Common Event Payloads
 
-Quick reference for the four most-used event types. All payloads are passed as the `payload` dict to `client.log()` or inside `EventSpec`.
-
 ### `symptom_report`
 
 ```python
-from olira import EsasItem
-
-payload = {
-    "instrument": "esas_r",
-    "symptoms": [
-        EsasItem(name="pain", score=3).model_dump(),
-        EsasItem(name="fatigue", score=5).model_dump(),
-        EsasItem(name="nausea", score=1).model_dump(),
-    ],
-}
-client.log(event_type=OliraEventType.SYMPTOM_REPORT, patient_id=patient_id, payload=payload)
+olira.log(
+    event_type=OliraEventType.SYMPTOM_REPORT,
+    patient_id="patient-uuid",
+    payload={
+        "instrument": "esas_r",
+        "symptoms": [
+            {"name": "pain", "score": 4},
+            {"name": "tiredness", "score": 6},
+            {"name": "nausea", "score": 1},
+        ],
+    },
+)
 ```
 
 ### `lab_results_received`
 
 ```python
-payload = {
-    "results": [
-        {
-            "test_name": "Hemoglobin",
-            "value": 11.2,
-            "unit": "g/dL",
-            "reference_range": "12.0-16.0",
-            "flag": "L",
-        }
-    ],
-    "performing_lab": {"name": "Quest Diagnostics", "location": "New York, NY"},
-    "collection_date": "2026-03-01",
-}
-client.log(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id=patient_id, payload=payload)
+olira.log(
+    event_type=OliraEventType.LAB_RESULTS_RECEIVED,
+    patient_id="patient-uuid",
+    payload={
+        "collection_datetime": "2026-03-18T07:30:00Z",
+        "results": [
+            {
+                "loinc_code": "718-7",
+                "test_name": "Hemoglobin",
+                "value_numeric": 11.2,
+                "unit": "g/dL",
+                "abnormal_flag": "L",
+                "reference_range_low": 12.0,
+                "reference_range_high": 16.0,
+            }
+        ],
+    },
+)
 ```
 
 ### `medication_action`
 
 ```python
-payload = {
-    "action": "add",
-    "medications": [
-        {
-            "rxnorm_cui": "1049502",
-            "medication_name": "Ondansetron 4mg",
-            "dose": 4.0,
-            "dose_unit": "mg",
-            "frequency": "every_8h_as_needed",
-            "route": "oral",
-            "form": "tablet",
-            "start_date": "2026-03-01",
-        }
-    ],
-}
-client.log(event_type=OliraEventType.MEDICATION_ACTION, patient_id=patient_id, payload=payload)
+olira.log(
+    event_type=OliraEventType.MEDICATION_ACTION,
+    patient_id="patient-uuid",
+    payload={
+        "medications": [
+            {
+                "action": "add",
+                "rxnorm_cui": "1049502",
+                "medication_name": "Ondansetron 4mg",
+                "dose": "4 mg",
+                "frequency": "every 8h as needed",
+                "route": "oral",
+                "start_date": "2026-03-18",
+                "schedule_times": ["08:00", "16:00", "00:00"],
+            }
+        ],
+    },
+)
 ```
 
 ### `conversation_completed`
 
 ```python
-payload = {
-    "transcript": [
-        {"role": "assistant", "content": "How are you feeling today?"},
-        {"role": "user", "content": "I've had a headache since yesterday."},
-        {"role": "assistant", "content": "I'm sorry to hear that. On a scale of 0–10, how severe is it?"},
-        {"role": "user", "content": "About a 6."},
-    ],
-    "duration_seconds": 120,
-}
-client.log(event_type=OliraEventType.CONVERSATION_COMPLETED, patient_id=patient_id, payload=payload)
+olira.log(
+    event_type=OliraEventType.CONVERSATION_COMPLETED,
+    patient_id="patient-uuid",
+    payload={
+        "conversation_id": "conv-abc-123",
+        "channel": "chat",
+        "transcript": [
+            {"speaker_label": "agent", "text": "How are you feeling today?"},
+            {"speaker_label": "patient", "text": "My nausea has improved but I'm still fatigued."},
+        ],
+    },
+)
 ```
