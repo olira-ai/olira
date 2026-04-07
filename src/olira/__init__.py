@@ -1,4 +1,4 @@
-"""Olira Python SDK — event ingestion and management client for the Olira Health platform."""
+"""Olira Python SDK — event ingestion client for the Olira Health platform."""
 
 from typing import Any
 
@@ -15,13 +15,10 @@ from .models import (
     BatchError,
     BatchResult,
     CreatePatientRequest,
-    DeleteResult,
     EsasItem,
-    EventQueryResult,
-    EventRecord,
-    EventSpec,
     ExternalIdentifier,
     LabResultItem,
+    LogSpec,
     OliraEventType,
     OliraTrace,
     Patient,
@@ -53,13 +50,10 @@ __all__ = [
     "LabResultItem",
     "PerformingLab",
     "TimePeriod",
-    # Event management types
-    "EventSpec",
+    # Log types
+    "LogSpec",
     "BatchResult",
     "BatchError",
-    "EventRecord",
-    "EventQueryResult",
-    "DeleteResult",
     # Patient management types
     "ExternalIdentifier",
     "CreatePatientRequest",
@@ -69,13 +63,11 @@ __all__ = [
     "PatientBatchResult",
     "PatientListResult",
     "PatientToken",
-    # Module-level event functions
+    # Module-level log functions
     "init",
     "flush",
     "log",
     "log_batch",
-    "get_events",
-    "delete_events",
     # Module-level patient functions
     "create_patient",
     "create_patients_batch",
@@ -153,62 +145,9 @@ def log(
     )
 
 
-def log_batch(events: list[EventSpec]) -> BatchResult:
+def log_batch(events: list[LogSpec]) -> BatchResult:
     """Send a batch of events directly. Module-level proxy to the singleton client."""
     return _get_client().log_batch(events)
-
-
-def get_events(
-    *,
-    patient_id: str,
-    event_type: OliraEventType | None = None,
-    from_timestamp: str | None = None,
-    to_timestamp: str | None = None,
-    ingested_after: str | None = None,
-    ingested_before: str | None = None,
-    limit: int = 100,
-    offset: int = 0,
-) -> EventQueryResult:
-    """Query events for a patient. Module-level proxy to the singleton client.
-
-    Requires an API key with the sdk:event-management scope.
-    """
-    return _get_client().get_events(
-        patient_id=patient_id,
-        event_type=event_type,
-        from_timestamp=from_timestamp,
-        to_timestamp=to_timestamp,
-        ingested_after=ingested_after,
-        ingested_before=ingested_before,
-        limit=limit,
-        offset=offset,
-    )
-
-
-def delete_events(
-    *,
-    patient_id: str,
-    event_type: OliraEventType | None = None,
-    from_timestamp: str | None = None,
-    to_timestamp: str | None = None,
-    ingested_after: str | None = None,
-    ingested_before: str | None = None,
-    event_ids: list[str] | None = None,
-) -> DeleteResult:
-    """Delete events by filter. Module-level proxy to the singleton client.
-
-    Requires an API key with the sdk:event-management scope.
-    At least one filter must be provided.
-    """
-    return _get_client().delete_events(
-        patient_id=patient_id,
-        event_type=event_type,
-        from_timestamp=from_timestamp,
-        to_timestamp=to_timestamp,
-        ingested_after=ingested_after,
-        ingested_before=ingested_before,
-        event_ids=event_ids,
-    )
 
 
 def create_patient(

@@ -18,11 +18,10 @@
 8. [Error Handling](#8-error-handling)
 9. [Privacy & Compliance Defaults](#9-privacy--compliance-defaults)
 10. [Packaging & Distribution](#10-packaging--distribution)
-11. [Event Management](#11-event-management)
-12. [Patient Management](#12-patient-management)
-13. [Patient Token](#13-patient-token)
-14. [Future Features](#14-future-features)
-15. [Appendix: Full Event Catalogue](#appendix-full-event-catalogue)
+11. [Patient Management](#11-patient-management)
+12. [Patient Token](#12-patient-token)
+13. [Future Features](#13-future-features)
+14. [Appendix: Full Event Catalogue](#appendix-full-event-catalogue)
 
 ---
 
@@ -178,16 +177,16 @@ async with AsyncOliraClient(api_key=...) as client:
 
 ### Explicit batch — `log_batch()`
 
-For bulk submissions where the caller already has a list of events. Sends a single `/v1/events/batch` request directly, **bypassing the background queue**, and returns a `BatchResult`.
+For bulk submissions where the caller already has a list of events. Sends a single `/v1/logs/batch` request directly, **bypassing the background queue**, and returns a `BatchResult`.
 
 ```python
-from olira import EventSpec, BatchResult, OliraEventType
+from olira import LogSpec, BatchResult, OliraEventType
 
 result: BatchResult = olira.log_batch([
-    EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
-    EventSpec(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_2",
+    LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
+    LogSpec(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_2",
               payload={"results": [...]}),
-    EventSpec(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_3",
+    LogSpec(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_3",
               payload={"instrument": "esas_r", "symptoms": [...]}),
 ])
 
@@ -199,93 +198,17 @@ for err in result.errors:
 
 **Exported types:**
 
-| Name               | Kind      | Description                                                           |
-| ------------------ | --------- | --------------------------------------------------------------------- |
-| `OliraEventType`   | StrEnum   | 47 customer-facing event types (string values match common-models)    |
-| `OliraTrace`       | BaseModel | Links event to an internal Olira object (`object_type` + `object_id`) |
-| `EventSpec`        | dataclass | Lightweight event spec for `log_batch()`                              |
-| `BatchResult`      | dataclass | Result of `log_batch()` — `accepted`, `failed`, `errors`              |
-| `BatchError`       | dataclass | Per-event error from a batch response                                 |
-| `EventRecord`      | dataclass | Single event returned by `get_events()`                               |
-| `EventQueryResult` | dataclass | Result of `get_events()` — `events`, `total`, `has_more`              |
-| `DeleteResult`     | dataclass | Result of `delete_events()` — `deleted_count`, `patient_id`           |
-| `EsasItem`         | BaseModel | Pydantic helper for ESAS-r symptom payload construction               |
-| `LabResultItem`    | BaseModel | Pydantic helper for lab results payload construction                  |
-| `PerformingLab`    | BaseModel | Pydantic helper for performing lab in lab results                     |
-| `TimePeriod`       | BaseModel | ISO 8601 time range (start/end)                                       |
-
-### Event Management — `get_events()` and `delete_events()`
-
-Query and delete events for a patient. Requires an API key with the `sdk:event-management` scope (separate from the `sdk:event-log` scope used for ingestion).
-
-```python
-import olira
-from olira import OliraEventType
-
-olira.init(api_key="olira_mgmt_...")
-
-# Step 1 — preview what will be deleted
-events = olira.get_events(
-    patient_id="p_abc",
-    event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
-    from_timestamp="2026-01-01T00:00:00Z",
-    to_timestamp="2026-01-31T23:59:59Z",
-)
-print(f"Found {events.total} events")
-for e in events.events:
-    print(f"  {e.event_type}  occurred={e.timestamp}  ingested={e.ingested_at}")
-
-# Step 2 — delete once confirmed
-result = olira.delete_events(
-    patient_id="p_abc",
-    event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
-    from_timestamp="2026-01-01T00:00:00Z",
-    to_timestamp="2026-01-31T23:59:59Z",
-)
-print(f"Deleted {result.deleted_count} events")
-```
-
-**`get_events()` signature:**
-
-```python
-def get_events(
-    *,
-    patient_id: str,
-    event_type: OliraEventType | None = None,
-    from_timestamp: str | None = None,    # ISO 8601 — event occurrence time, inclusive
-    to_timestamp: str | None = None,      # ISO 8601 — event occurrence time, inclusive
-    ingested_after: str | None = None,    # ISO 8601 — server ingestion time, inclusive
-    ingested_before: str | None = None,   # ISO 8601 — server ingestion time, inclusive
-    limit: int = 100,
-    offset: int = 0,
-) -> EventQueryResult
-```
-
-**`delete_events()` signature:**
-
-```python
-def delete_events(
-    *,
-    patient_id: str,
-    event_type: OliraEventType | None = None,
-    from_timestamp: str | None = None,
-    to_timestamp: str | None = None,
-    ingested_after: str | None = None,
-    ingested_before: str | None = None,
-    event_ids: list[str] | None = None,   # delete specific events by event_id UUID4
-) -> DeleteResult
-```
-
-**Validation rule:** at least one of `event_type`, a timestamp filter, or `event_ids` must be provided. Calling `delete_events(patient_id=...)` with no other arguments raises `ValidationError` — this prevents accidental deletion of an entire patient's event history.
-
-**Filter axes:**
-
-| Filter param                    | Filters on              | Use case                                      |
-| ------------------------------- | ----------------------- | --------------------------------------------- |
-| `from_timestamp` / `to_timestamp` | `EventLog.timestamp`  | Delete events where the thing *occurred* in a date range |
-| `ingested_after` / `ingested_before` | `EventLog.ingested_at` | Delete everything sent to Olira in a bad data-load window |
-
-When both axes are provided they are ANDed.
+| Name             | Kind      | Description                                                           |
+| ---------------- | --------- | --------------------------------------------------------------------- |
+| `OliraEventType` | StrEnum   | 47 customer-facing event types (string values match common-models)    |
+| `OliraTrace`     | BaseModel | Links event to an internal Olira object (`object_type` + `object_id`) |
+| `LogSpec`        | dataclass | Lightweight log spec for `log_batch()`                                |
+| `BatchResult`    | dataclass | Result of `log_batch()` — `accepted`, `failed`, `errors`              |
+| `BatchError`     | dataclass | Per-event error from a batch response                                 |
+| `EsasItem`       | BaseModel | Pydantic helper for ESAS-r symptom payload construction               |
+| `LabResultItem`  | BaseModel | Pydantic helper for lab results payload construction                  |
+| `PerformingLab`  | BaseModel | Pydantic helper for performing lab in lab results                     |
+| `TimePeriod`     | BaseModel | ISO 8601 time range (start/end)                                       |
 
 ---
 
@@ -312,13 +235,13 @@ When both axes are provided they are ANDed.
 
 The SDK auto-generates a UUID4 per event. **For `log()` users this field is invisible and irrelevant** — the background worker retries the same in-memory Event object (same key) automatically, so deduplication is handled transparently.
 
-**`log_batch()` callers must be mindful.** `log_batch()` bypasses the background queue — the caller owns the retry loop. If the process crashes after a failed send, the `EventSpec` objects are gone. Replaying from a persistent queue or DB constructs new `EventSpec` objects with new auto-generated keys, and the server will store duplicates.
+**`log_batch()` callers must be mindful.** `log_batch()` bypasses the background queue — the caller owns the retry loop. If the process crashes after a failed send, the `LogSpec` objects are gone. Replaying from a persistent queue or DB constructs new `LogSpec` objects with new auto-generated keys, and the server will store duplicates.
 
 **Fix for replay scenarios:** derive a stable key from your source record so the same record always produces the same key across process restarts:
 
 ```python
 client.log_batch([
-    EventSpec(
+    LogSpec(
         event_type=OliraEventType.LAB_RESULTS_RECEIVED,
         patient_id="p_123",
         payload={...},
@@ -409,13 +332,13 @@ The ingestion endpoint translates wire fields into the internal `EventLog` docum
 | `payload`         | `payload`         | Direct pass-through                                                                                                       |
 | `trace`           | `trace`           | Direct; `object_type` string is mapped to `ObjectType` enum                                                               |
 | `timestamp`       | `timestamp`       | Event occurrence time. Client-provided; server substitutes ingestion time when absent (see caveat below)                  |
-| `event_id`        | `event_id`        | Customer-facing UUID4. Persisted by the ingestion endpoint. Stable identifier for targeted `delete_events(event_ids=...)` |
+| `event_id`        | `event_id`        | Customer-facing UUID4. Persisted by the ingestion endpoint.                                                               |
 | `idempotency_key` | _(not persisted)_ | `EventLogBase` currently has no `idempotency_key` field — server-side deduplication is not yet implemented                |
 | _(server-set)_    | `ingested_at`     | Server ingestion timestamp. Always set at insert time; never accepted from the wire payload                               |
 
 The `EventLog` document gets a MongoDB `_id` (ObjectId) assigned by Beanie on insert. This is the server's internal record identifier and is never exposed in the public SDK API. Use `event_id` to reference events externally.
 
-**`timestamp` caveat:** `timestamp` is the event occurrence time (when the thing happened in the real world). If the SDK caller does not provide it, the server falls back to ingestion time — so `timestamp` and `ingested_at` will be identical. Use `ingested_at` in `get_events()` / `delete_events()` filters when you want to target events by when they were *received*, not when they *occurred*.
+**`timestamp` caveat:** `timestamp` is the event occurrence time (when the thing happened in the real world). If the SDK caller does not provide it, the server falls back to ingestion time — so `timestamp` and `ingested_at` will be identical.
 
 ### Patient ID Resolution
 
@@ -427,7 +350,7 @@ patient = client.create_patient(first_name="Jane", last_name="Smith", ...)
 olira.log(event_type=OliraEventType.USER_LOGIN, patient_id=patient.id)
 ```
 
-Patients must be created via `create_patient()` (or the Console) before events can be logged against them. Store the returned `id` from `create_patient()` — it is the value you use in `log()`, `get_events()`, and all other calls.
+Patients must be created via `create_patient()` (or the Console) before events can be logged against them. Store the returned `id` from `create_patient()` — it is the value you use in `log()` and all other calls.
 
 ### patient_id Validation
 
@@ -687,36 +610,19 @@ Organisation identity is derived entirely from the API key — every request car
 
 ### 6.1 Full Endpoint Table
 
-| Method   | Path                        | Purpose                                     | Required scope         |
-| -------- | --------------------------- | ------------------------------------------- | ---------------------- |
-| `POST`   | `/v1/events`                | Single event ingestion                      | `sdk:event-log`        |
-| `POST`   | `/v1/events/batch`          | Batch of up to `batch_size` events          | `sdk:event-log`        |
-| `GET`    | `/v1/events`                | Query events for a patient                  | `sdk:event-management` |
-| `DELETE` | `/v1/events`                | Delete events by filter                     | `sdk:event-management` |
-| `POST`   | `/v1/patients`              | Create a patient                            | `api:manage-patients`  |
-| `GET`    | `/v1/patients`              | List patients (paginated)                   | `api:manage-patients`  |
-| `GET`    | `/v1/patients/{patient_id}` | Get a patient by id                         | `api:manage-patients`  |
-| `PUT`    | `/v1/patients/{patient_id}` | Update a patient (partial)                  | `api:manage-patients`  |
-| `DELETE` | `/v1/patients/{patient_id}` | Soft-delete a patient                       | `api:manage-patients`  |
-| `POST`   | `/v1/auth/token`            | Mint a patient-scoped JWT                   | `sdk:patient-token`    |
+| Method   | Path                        | Purpose                                     | Required scope        |
+| -------- | --------------------------- | ------------------------------------------- | --------------------- |
+| `POST`   | `/v1/logs/batch`            | Batch of up to `batch_size` events          | `sdk:event-log`       |
+| `POST`   | `/v1/patients`              | Create a patient                            | `api:manage-patients` |
+| `GET`    | `/v1/patients`              | List patients (paginated)                   | `api:manage-patients` |
+| `GET`    | `/v1/patients/{patient_id}` | Get a patient by id                         | `api:manage-patients` |
+| `PUT`    | `/v1/patients/{patient_id}` | Update a patient (partial)                  | `api:manage-patients` |
+| `DELETE` | `/v1/patients/{patient_id}` | Soft-delete a patient                       | `api:manage-patients` |
+| `POST`   | `/v1/auth/token`            | Mint a patient-scoped JWT                   | `sdk:patient-token`   |
 
 `{patient_id}` in patient paths is the customer-supplied `id` — never a MongoDB ObjectId.
 
-### Single Event (`POST /v1/events`)
-
-```json
-{
-  "event_name": "symptom_report",
-  "patient_id": "p_123_pseudo",
-  "timestamp": "2026-02-26T08:15:00Z",
-  "event_id": "e1a2b3c4-...",
-  "idempotency_key": "c6f8b1...",
-  "payload": { ... },
-  "context": { ... }
-}
-```
-
-### Batch Request (`POST /v1/events/batch`)
+### Batch Request (`POST /v1/logs/batch`)
 
 ```json
 { "events": [ ... ] }
@@ -741,67 +647,6 @@ Organisation identity is derived entirely from the API key — every request car
 Partial batch failures: the SDK logs dropped events (event_name only, no payload content) and invokes the `on_error` callback if configured.
 
 > **Note — patient graph update:** `PatientUser` records created via the Console API or SDK receive a `UserPatientState` at creation time (`create_default_patient_state()` is called as part of the `PatientUser` lifecycle). Events are saved to the `EventLog` collection and the graph pipeline runs normally.
-
-### Query Events (`GET /v1/events`)
-
-Query params: `patient_id` (required), `event_type`, `from_timestamp`, `to_timestamp`, `ingested_after`, `ingested_before`, `limit` (default 100), `offset` (default 0).
-
-Response:
-
-```json
-{
-  "events": [
-    {
-      "event_id": "e1a2b3c4-...",
-      "event_type": "medication_dose_update",
-      "patient_id": "p_abc",
-      "timestamp": "2026-01-15T08:00:00Z",
-      "ingested_at": "2026-01-15T10:02:33Z",
-      "payload": { ... }
-    }
-  ],
-  "total": 42,
-  "has_more": true
-}
-```
-
-### Delete Events (`DELETE /v1/events`)
-
-JSON body — filter by occurrence time:
-
-```json
-{
-  "patient_id": "p_abc",
-  "event_type": "medication_dose_update",
-  "from_timestamp": "2026-01-01T00:00:00Z",
-  "to_timestamp": "2026-01-31T23:59:59Z"
-}
-```
-
-Or filter by ingestion time window:
-
-```json
-{
-  "patient_id": "p_abc",
-  "ingested_after": "2026-01-14T09:55:00Z",
-  "ingested_before": "2026-01-14T10:05:00Z"
-}
-```
-
-Or by explicit event IDs:
-
-```json
-{
-  "patient_id": "p_abc",
-  "event_ids": ["e1a2b3c4-1111-...", "e1a2b3c4-2222-..."]
-}
-```
-
-Response:
-
-```json
-{ "deleted_count": 7, "patient_id": "p_abc" }
-```
 
 ### Create Patient (`POST /v1/patients`)
 
@@ -933,14 +778,14 @@ client.log(...)  # blocks until delivered — no background thread
 
 ### Explicit Batch (`log_batch()`)
 
-`log_batch()` bypasses the background queue entirely and sends a single `/v1/events/batch` request synchronously, returning a `BatchResult`.
+`log_batch()` bypasses the background queue entirely and sends a single `POST /v1/logs/batch` request synchronously, returning a `BatchResult`.
 
 ```python
-from olira import EventSpec, BatchResult, OliraEventType
+from olira import LogSpec, BatchResult, OliraEventType
 
 result: BatchResult = client.log_batch([
-    EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
-    EventSpec(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_2",
+    LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
+    LogSpec(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_2",
               payload={"instrument": "esas_r", "symptoms": [...]}),
 ])
 # result.accepted: number of events accepted server-side
@@ -1064,7 +909,7 @@ packages/olira-sdk-python/
     client.py            # OliraClient class (sync); AsyncOliraClient class
     queue.py             # BackgroundWorker, bounded queue
     http.py              # HTTP transport, retry logic, send_batch_direct()
-    models.py            # OliraEventType, OliraTrace, EventSpec, BatchResult, BatchError, Pydantic helpers
+    models.py            # OliraEventType, OliraTrace, LogSpec, BatchResult, BatchError, Pydantic helpers
     exceptions.py        # Typed exception hierarchy
     py.typed             # PEP 561 marker
   tests/
@@ -1170,63 +1015,7 @@ Apache 2.0.
 
 ---
 
-## 11. Event Management
-
-Customers can query and delete events for a patient using `get_events()` and `delete_events()`. This is the programmatic equivalent of correcting bad data in the Olira Console: find the events causing the incorrect PatientState, then delete them.
-
-**Scope requirement:** both methods require an API key with the `sdk:event-management` scope. This is intentionally separate from the `sdk:event-log` scope used for ingestion — it lets organisations issue ingestion-only keys that cannot delete data.
-
-### Worked Example — Bad Clinical Data
-
-A patient was logging medication doses with the wrong occurrence date (all of January recorded as January 2025 instead of 2026). Delete all `medication_dose_update` events in that window:
-
-```python
-import olira
-from olira import OliraEventType
-
-olira.init(api_key="olira_mgmt_...")
-
-# Step 1 — preview
-events = olira.get_events(
-    patient_id="p_abc",
-    event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
-    from_timestamp="2025-01-01T00:00:00Z",
-    to_timestamp="2025-01-31T23:59:59Z",
-)
-print(f"Found {events.total} events to delete")
-for e in events.events:
-    print(f"  occurred={e.timestamp}  ingested={e.ingested_at}")
-
-# Step 2 — delete
-result = olira.delete_events(
-    patient_id="p_abc",
-    event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
-    from_timestamp="2025-01-01T00:00:00Z",
-    to_timestamp="2025-01-31T23:59:59Z",
-)
-print(f"Deleted {result.deleted_count} events")
-```
-
-### Worked Example — Bad Data Load
-
-A script sent a batch of wrong events at 10am on Tuesday. Delete everything ingested in that window regardless of event type:
-
-```python
-result = olira.delete_events(
-    patient_id="p_abc",
-    ingested_after="2026-01-14T09:55:00Z",
-    ingested_before="2026-01-14T10:05:00Z",
-)
-print(f"Deleted {result.deleted_count} events")
-```
-
-### PatientState Recalculation
-
-After deleting events, the patient's PatientState will reflect stale data until Olira's backend recalculates it. Recalculation happens asynchronously — customers should expect an eventual-consistency window after a bulk delete. A future `recalculate_state(patient_id=...)` method will allow explicit triggering of recalculation.
-
----
-
-## 12. Patient Management
+## 11. Patient Management
 
 The `api:manage-patients` scope grants full CRUD access to patients in your organisation. Patients must be created before events can be logged against them.
 
@@ -1371,7 +1160,7 @@ Promotion is a deliberate product decision. When a field is promoted, the API wi
 
 ---
 
-## 13. Patient Token
+## 12. Patient Token
 
 The `sdk:patient-token` scope allows a customer backend to mint short-lived JWTs locked to a single patient. The typical use case: a provider-facing backend needs to give a patient device access to the Olira MCP Patient State server without embedding a tenant-wide API key on the device.
 
@@ -1421,7 +1210,7 @@ Request body: `{ "patient_id": "<your patient id>" }`
 
 ---
 
-## 14. Future Features
+## 13. Future Features
 
 ### OpenTelemetry Integration
 

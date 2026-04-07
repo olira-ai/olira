@@ -1,4 +1,4 @@
-"""Background worker and bounded queue for event batching and flush."""
+"""Background worker and bounded queue for log batching and flush."""
 
 import atexit
 import logging
@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from .models import Event
+from .models import LogWire
 
 logger = logging.getLogger("olira")
 
@@ -18,7 +18,7 @@ REDACTED = "olira_***"
 
 class BackgroundWorker:
     """
-    Daemon thread that drains a bounded queue, batches events, and sends via send_batch.
+    Daemon thread that drains a bounded queue, batches log entries, and sends via send_batch.
     flush() blocks until the queue is empty and in-flight batch is done.
     """
 
@@ -36,9 +36,9 @@ class BackgroundWorker:
         self._flush_interval = flush_interval
         self._max_queue_size = max_queue_size
         self._on_error = on_error
-        self._q: queue.Queue[Event | None] = queue.Queue(maxsize=max_queue_size)
+        self._q: queue.Queue[LogWire | None] = queue.Queue(maxsize=max_queue_size)
         self._lock = threading.Lock()
-        self._pending: list[Event] = []
+        self._pending: list[LogWire] = []
         self._shutdown = threading.Event()
         self._thread: threading.Thread | None = None
         self._closed = False
@@ -54,8 +54,8 @@ class BackgroundWorker:
         if not self._closed:
             self.flush()
 
-    def enqueue(self, event: Event) -> bool:
-        """Enqueue one event. Returns False if queue full (event dropped)."""
+    def enqueue(self, event: LogWire) -> bool:
+        """Enqueue one log entry. Returns False if queue full (entry dropped)."""
         try:
             self._q.put(event, block=False)
             return True

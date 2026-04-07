@@ -164,7 +164,6 @@ olira configure cursor  # Write MCP server config to .cursor/mcp.json
 | Scope                  | Description                                                    |
 | ---------------------- | -------------------------------------------------------------- |
 | `sdk:event-log`        | Log health events via `log()` and `log_batch()`                |
-| `sdk:event-management` | Query and delete events via `get_events()` / `delete_events()` |
 | `api:manage-patients`  | Create, read, update, delete patients                          |
 | `sdk:patient-token`    | Mint patient-scoped JWTs via `get_patient_token()`             |
 | `mcp:patient-state`    | Query patient state via the MCP Patient State server           |
@@ -177,7 +176,15 @@ olira configure cursor  # Write MCP server config to .cursor/mcp.json
 
 ### `OliraTrace`
 
-Links an event to an object in your own system (e.g. a conversation or message).
+`OliraTrace` is an optional provenance field you can attach to any `log()` or
+`log_batch()` call to record which object in your own system produced the event.
+
+**When to use it:** pass a trace whenever an event is generated as a side-effect
+of something else in your application — a conversation turn that surfaces a
+symptom, a questionnaire submission, an AI agent interaction. The trace is stored
+alongside the event and returned in `get_recent_event_logs` results from the MCP,
+giving you a complete line-of-sight from a raw event back to its originating
+object without any extra lookups.
 
 `object_id` is your identifier for that object — the same string you would use
 to look it up in your own database. It is stored and returned as-is and is never
@@ -185,8 +192,32 @@ interpreted or validated by Olira.
 
 | Field         | Required | Type  | Description                                                     |
 | ------------- | -------- | ----- | --------------------------------------------------------------- |
-| `object_type` | Yes      | `str` | Category of the linked object, e.g. 'conversation' or 'message' |
+| `object_type` | Yes      | `str` | Category of the linked object, e.g. `'conversation'`, `'message'`, `'questionnaire'` |
 | `object_id`   | Yes      | `str` | Your identifier for the linked object                           |
+
+**Example:**
+
+```python
+from olira import OliraTrace, OliraEventType
+
+# A symptom report extracted from a conversation turn
+olira.log(
+    event_type=OliraEventType.SYMPTOM_REPORT,
+    patient_id="patient-uuid",
+    payload={
+        "instrument": "esas_r",
+        "symptoms": [{"name": "nausea", "score": 5}],
+    },
+    trace=OliraTrace(
+        object_type="conversation",
+        object_id="conv-abc-123",   # your conversation ID
+    ),
+)
+```
+
+The trace is visible in the event log returned by `get_recent_event_logs` on the
+MCP Patient State server, so your agents can see exactly which conversation
+produced a given data point.
 
 ### `EsasItem`
 
@@ -640,10 +671,9 @@ and expires after `expires_in` seconds (default 15 minutes).
 
 ---
 
-## Events
+## Logs
 
-All event functions use `sdk:event-log` scope for logging, and
-`sdk:event-management` scope for querying and deleting.
+All log functions require `sdk:event-log` scope.
 
 ### Log a single event
 
@@ -686,27 +716,45 @@ olira.log(
 olira.flush()
 ```
 
+**With trace (provenance):**
+
+```python
+from olira import OliraEventType, OliraTrace
+
+# Attribute the event back to the conversation that produced it
+olira.log(
+    event_type=OliraEventType.SYMPTOM_REPORT,
+    patient_id="patient-uuid",
+    payload={
+        "instrument": "esas_r",
+        "symptoms": [{"name": "fatigue", "score": 6}],
+    },
+    trace=OliraTrace(object_type="conversation", object_id="conv-abc-123"),
+)
+olira.flush()
+```
+
 ### Log a batch of events
 
 #### `log_batch`
 
 ```python
-log_batch(events: list[EventSpec]) -> BatchResult
+log_batch(events: list[LogSpec]) -> BatchResult
 ```
 
 Send a batch of events directly. Module-level proxy to the singleton client.
 
 | Parameter | Required | Type              | Default |
 | --------- | -------- | ----------------- | ------- |
-| `events`  | Yes      | `list[EventSpec]` | —       |
+| `events`  | Yes      | `list[LogSpec]` | —       |
 
 **Example:**
 
 ```python
-from olira import EventSpec, OliraEventType
+from olira import LogSpec, OliraEventType
 
 result = olira.log_batch([
-    EventSpec(
+    LogSpec(
         event_type=OliraEventType.VITALS_MEASUREMENT,
         patient_id="patient-uuid",
         payload={
@@ -719,7 +767,7 @@ result = olira.log_batch([
             "collection_datetime": "2026-03-18T09:00:00Z",
         },
     ),
-    EventSpec(
+    LogSpec(
         event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
         patient_id="patient-uuid",
         payload={
@@ -730,81 +778,9 @@ result = olira.log_batch([
 print(f"Accepted: {result.accepted}, Failed: {result.failed}")
 ```
 
-### Query events
+### Log response models
 
-#### `get_events`
-
-```python
-get_events(*, patient_id: str, event_type: OliraEventType | None = None, from_timestamp: str | None = None, to_timestamp: str | None = None, ingested_after: str | None = None, ingested_before: str | None = None, limit: int = 100, offset: int = 0) -> EventQueryResult
-```
-
-Query events for a patient. Module-level proxy to the singleton client.
-
-Requires an API key with the sdk:event-management scope.
-
-| Parameter         | Required | Type            | Default |
-| ----------------- | -------- | --------------- | ------- | ------ |
-| `patient_id`      | Yes      | `str`           | —       |
-| `event_type`      | No       | `OliraEventType | None`   | `None` |
-| `from_timestamp`  | No       | `str            | None`   | `None` |
-| `to_timestamp`    | No       | `str            | None`   | `None` |
-| `ingested_after`  | No       | `str            | None`   | `None` |
-| `ingested_before` | No       | `str            | None`   | `None` |
-| `limit`           | No       | `int`           | `100`   |
-| `offset`          | No       | `int`           | `0`     |
-
-**Example:**
-
-```python
-result = olira.get_events(
-    patient_id="patient-uuid",
-    event_type=OliraEventType.SYMPTOM_REPORT,
-    limit=50,
-)
-for event in result.events:
-    print(event.event_id, event.timestamp, event.payload)
-```
-
-### Delete events
-
-#### `delete_events`
-
-```python
-delete_events(*, patient_id: str, event_type: OliraEventType | None = None, from_timestamp: str | None = None, to_timestamp: str | None = None, ingested_after: str | None = None, ingested_before: str | None = None, event_ids: list[str] | None = None) -> DeleteResult
-```
-
-Delete events by filter. Module-level proxy to the singleton client.
-
-Requires an API key with the sdk:event-management scope.
-At least one filter must be provided.
-
-| Parameter         | Required | Type            | Default |
-| ----------------- | -------- | --------------- | ------- | ------ |
-| `patient_id`      | Yes      | `str`           | —       |
-| `event_type`      | No       | `OliraEventType | None`   | `None` |
-| `from_timestamp`  | No       | `str            | None`   | `None` |
-| `to_timestamp`    | No       | `str            | None`   | `None` |
-| `ingested_after`  | No       | `str            | None`   | `None` |
-| `ingested_before` | No       | `str            | None`   | `None` |
-| `event_ids`       | No       | `list[str]      | None`   | `None` |
-
-At least one filter must be provided.
-
-**Example:**
-
-```python
-result = olira.delete_events(
-    patient_id="patient-uuid",
-    event_type=OliraEventType.SYMPTOM_REPORT,
-    from_timestamp="2026-01-01T00:00:00Z",
-    to_timestamp="2026-02-01T00:00:00Z",
-)
-print(f"Deleted {result.deleted_count} events")
-```
-
-### Event response models
-
-### `EventSpec`
+### `LogSpec`
 
 Lightweight event specification for log_batch(). Not persisted internally.
 
@@ -819,7 +795,7 @@ Lightweight event specification for log_batch(). Not persisted internally.
 
 ### `BatchResult`
 
-Result of a log_batch() call. Mirrors /v1/events/batch response.
+Result of a log_batch() call. Mirrors /v1/logs/batch response.
 
 | Field      | Required | Type               | Description           |
 | ---------- | -------- | ------------------ | --------------------- |
@@ -836,39 +812,6 @@ Per-event error from a batch response.
 | `index`   | Yes      | `int` | —           |
 | `code`    | Yes      | `str` | —           |
 | `message` | Yes      | `str` | —           |
-
-### `EventRecord`
-
-A single event record returned by get_events().
-
-| Field         | Required | Type             | Description           |
-| ------------- | -------- | ---------------- | --------------------- | ------------------- |
-| `event_id`    | Yes      | `str`            | —                     |
-| `event_type`  | Yes      | `OliraEventType` | —                     |
-| `patient_id`  | Yes      | `str`            | —                     |
-| `timestamp`   | Yes      | `str`            | —                     |
-| `ingested_at` | Yes      | `str`            | —                     |
-| `payload`     | No       | `dict[str, Any]` | — (default: `dict()`) |
-| `trace`       | No       | `OliraTrace      | None`                 | — (default: `None`) |
-
-### `EventQueryResult`
-
-Result of a get_events() call.
-
-| Field      | Required | Type                | Description |
-| ---------- | -------- | ------------------- | ----------- |
-| `events`   | Yes      | `list[EventRecord]` | —           |
-| `total`    | Yes      | `int`               | —           |
-| `has_more` | Yes      | `bool`              | —           |
-
-### `DeleteResult`
-
-Result of a delete_events() call.
-
-| Field           | Required | Type  | Description |
-| --------------- | -------- | ----- | ----------- |
-| `deleted_count` | Yes      | `int` | —           |
-| `patient_id`    | Yes      | `str` | —           |
 
 ---
 
@@ -937,7 +880,7 @@ except ValidationError as e:
 
 ---
 
-## Common Event Payloads
+## Common Log Payloads
 
 ### `symptom_report`
 

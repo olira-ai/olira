@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0a6] - 2026-04-07
+
+### Removed
+
+- **`get_events()`** and **`delete_events()`** removed from `OliraClient`, `AsyncOliraClient`, and the module-level singleton. The `sdk:event-management` scope has been retired and is no longer issued.
+- **`EventSpec`** renamed to **`LogSpec`** — update all `from olira import EventSpec` imports to `from olira import LogSpec`. `EventSpec` is no longer exported.
+- **`EventRecord`**, **`EventQueryResult`**, **`DeleteResult`** models removed from the public API and from `olira.__all__`.
+- **`sdk:event-management`** scope removed — API keys with this scope will no longer be accepted. Existing keys should be rotated; the scope flag is ignored server-side.
+
+### Changed
+
+- **Log batch route** renamed from `POST /v1/events/batch` to **`POST /v1/logs/batch`**. The old path returns `404`. Update any direct HTTP integrations accordingly.
+- **Route file** renamed from `routes/sdk/events.py` to `routes/sdk/logs.py` (internal; no customer-facing impact beyond the URL change above).
+- **Single-event endpoint removed** — `POST /v1/events` (single-event ingestion) is no longer available. All log ingestion goes through `POST /v1/logs/batch`. The SDK's `log()` method continues to work unchanged — it batches internally and calls the batch endpoint.
+- **SPEC.md**, **README.md**, **CHANGELOG.md** updated to reflect the above changes.
+
 ## [0.1.0a5] - 2026-03-19
 
 ### Changed

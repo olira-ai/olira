@@ -10,8 +10,6 @@ import httpx
 from .exceptions import AuthError, NetworkError, RateLimitError, ServerError, ValidationError
 from .models import (
     BatchResult,
-    DeleteResult,
-    EventQueryResult,
     Patient,
     PatientBatchResult,
     PatientListResult,
@@ -49,18 +47,8 @@ def _parse_retry_after(response: httpx.Response) -> int:
 
 
 def _parse_batch_result(body: dict[str, Any]) -> BatchResult:
-    """Parse /v1/events/batch response body into BatchResult."""
+    """Parse /v1/logs/batch response body into BatchResult."""
     return BatchResult.model_validate(body)
-
-
-def _parse_event_query_result(body: dict[str, Any]) -> EventQueryResult:
-    """Parse GET /v1/events response into EventQueryResult."""
-    return EventQueryResult.model_validate(body)
-
-
-def _parse_delete_result(body: dict[str, Any], patient_id: str) -> DeleteResult:
-    """Parse DELETE /v1/events response into DeleteResult."""
-    return DeleteResult.model_validate({**body, "patient_id": patient_id})
 
 
 def _parse_patient(body: dict[str, Any]) -> Patient:
@@ -79,7 +67,7 @@ def _parse_patient_token(body: dict[str, Any]) -> PatientToken:
 
 
 class HttpTransport:
-    """Sync HTTP transport: POST /v1/events and POST /v1/events/batch with retry."""
+    """Sync HTTP transport: POST /v1/logs/batch with retry."""
 
     def __init__(
         self,
@@ -108,29 +96,14 @@ class HttpTransport:
     def __exit__(self, *args: Any) -> None:
         self.close()
 
-    def send_event(self, event: dict[str, Any]) -> None:
-        """Send a single event. Raises on auth/permanent failure; retries on transient."""
-        self._request("POST", "/v1/events", json=event)
-
     def send_batch(self, events: list[dict[str, Any]]) -> dict[str, Any]:
-        """Send a batch of events (background worker path). Returns raw response dict."""
-        return self._request("POST", "/v1/events/batch", json={"events": events})  # type: ignore[no-any-return]
+        """Send a batch of logs (background worker path). Returns raw response dict."""
+        return self._request("POST", "/v1/logs/batch", json={"events": events})  # type: ignore[no-any-return]
 
     def send_batch_direct(self, events: list[dict[str, Any]]) -> BatchResult:
         """Send a batch directly (log_batch() path). Returns parsed BatchResult."""
-        raw = self._request("POST", "/v1/events/batch", json={"events": events})
+        raw = self._request("POST", "/v1/logs/batch", json={"events": events})
         return _parse_batch_result(raw)
-
-    def get_events(self, params: dict[str, Any]) -> EventQueryResult:
-        """Query events (GET /v1/events). Returns parsed EventQueryResult."""
-        raw = self._request("GET", "/v1/events", params=params)
-        return _parse_event_query_result(raw)
-
-    def delete_events(self, body: dict[str, Any]) -> DeleteResult:
-        """Delete events by filter (DELETE /v1/events). Returns parsed DeleteResult."""
-        patient_id = body.get("patient_id", "")
-        raw = self._request("DELETE", "/v1/events", json=body)
-        return _parse_delete_result(raw, patient_id)
 
     def _request(
         self,
@@ -260,7 +233,7 @@ class HttpTransport:
 
 
 class AsyncHttpTransport:
-    """Async HTTP transport: POST /v1/events and POST /v1/events/batch with retry."""
+    """Async HTTP transport: POST /v1/logs/batch with retry."""
 
     def __init__(
         self,
@@ -283,28 +256,14 @@ class AsyncHttpTransport:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def send_event(self, event: dict[str, Any]) -> None:
-        await self._request("POST", "/v1/events", json=event)
-
     async def send_batch(self, events: list[dict[str, Any]]) -> dict[str, Any]:
-        """Send a batch (background worker path). Returns raw response dict."""
-        return await self._request("POST", "/v1/events/batch", json={"events": events})  # type: ignore[no-any-return]
+        """Send a batch of logs (background worker path). Returns raw response dict."""
+        return await self._request("POST", "/v1/logs/batch", json={"events": events})  # type: ignore[no-any-return]
 
     async def send_batch_direct(self, events: list[dict[str, Any]]) -> BatchResult:
         """Send a batch directly (log_batch() path). Returns parsed BatchResult."""
-        raw = await self._request("POST", "/v1/events/batch", json={"events": events})
+        raw = await self._request("POST", "/v1/logs/batch", json={"events": events})
         return _parse_batch_result(raw)
-
-    async def get_events(self, params: dict[str, Any]) -> EventQueryResult:
-        """Query events (GET /v1/events). Returns parsed EventQueryResult."""
-        raw = await self._request("GET", "/v1/events", params=params)
-        return _parse_event_query_result(raw)
-
-    async def delete_events(self, body: dict[str, Any]) -> DeleteResult:
-        """Delete events by filter (DELETE /v1/events). Returns parsed DeleteResult."""
-        patient_id = body.get("patient_id", "")
-        raw = await self._request("DELETE", "/v1/events", json=body)
-        return _parse_delete_result(raw, patient_id)
 
     async def create_patient(self, body: dict[str, Any]) -> Patient:
         """Create a patient (POST /v1/patients). Requires api:manage-patients scope."""

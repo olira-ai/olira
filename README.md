@@ -1,6 +1,6 @@
 # Olira Python SDK
 
-Event ingestion, patient management, and patient token client for the Olira Health platform.
+Log ingestion, patient management, and patient token client for the Olira Health platform.
 
 ## Install
 
@@ -17,7 +17,6 @@ All SDK methods authenticate with an **Olira API key** (`olira_prod_...`). Creat
 | Scope | What it unlocks |
 |---|---|
 | `sdk:event-log` | Log events |
-| `sdk:event-management` | Query and delete events |
 | `api:manage-patients` | Create, read, update, delete patients |
 | `sdk:patient-token` | Mint short-lived patient-scoped JWTs |
 
@@ -88,12 +87,12 @@ olira.flush()  # block until delivery
 Send a batch directly and get back a result:
 
 ```python
-from olira import OliraClient, EventSpec, OliraEventType, EsasItem
+from olira import OliraClient, LogSpec, OliraEventType, EsasItem
 
 client = OliraClient(api_key="olira_prod_...")
 result = client.log_batch([
-    EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id=patient_id),
-    EventSpec(
+    LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id=patient_id),
+    LogSpec(
         event_type=OliraEventType.SYMPTOM_REPORT,
         patient_id=patient_id,
         payload={
@@ -103,35 +102,6 @@ result = client.log_batch([
     ),
 ])
 print(f"accepted={result.accepted}, failed={result.failed}")
-client.close()
-```
-
----
-
-## Event Management
-
-Query and delete events. Requires the `sdk:event-management` scope.
-
-```python
-from olira import OliraClient, OliraEventType
-
-client = OliraClient(api_key="olira_prod_...")
-
-# Query
-result = client.get_events(
-    patient_id=patient_id,
-    event_type=OliraEventType.USER_LOGIN,   # optional filter
-    ingested_after="2026-01-01T00:00:00Z",  # optional filter
-)
-print(f"total={result.total}, has_more={result.has_more}")
-
-# Delete by filter (at least one filter required)
-del_result = client.delete_events(
-    patient_id=patient_id,
-    event_type=OliraEventType.USER_LOGIN,
-)
-print(f"deleted={del_result.deleted_count}")
-
 client.close()
 ```
 

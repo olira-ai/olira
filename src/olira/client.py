@@ -10,11 +10,9 @@ from .http import AsyncHttpTransport, HttpTransport
 from .models import (
     BatchResult,
     CreatePatientRequest,
-    DeleteResult,
-    Event,
-    EventQueryResult,
-    EventSpec,
     ExternalIdentifier,
+    LogSpec,
+    LogWire,
     OliraEventType,
     OliraTrace,
     Patient,
@@ -98,11 +96,11 @@ class OliraClient:
     def _send_batch(self, events: list[dict[str, Any]]) -> None:
         self._transport.send_batch(events)
 
-    def _enqueue(self, event: Event) -> bool:
+    def _enqueue(self, event: LogWire) -> bool:
         if self._worker is not None:
             return self._worker.enqueue(event)
-        # Sync mode: send immediately
-        self._transport.send_event(event.model_dump(mode="json"))
+        # Sync mode: send immediately via batch endpoint
+        self._transport.send_batch([event.model_dump(mode="json")])
         return True
 
     def _emit(
@@ -113,7 +111,7 @@ class OliraClient:
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
     ) -> None:
-        event = Event(
+        event = LogWire(
             event_name=event_type.value,
             patient_id=patient_id,
             payload=payload,
@@ -135,17 +133,17 @@ class OliraClient:
         """Enqueue an event for background delivery. Returns immediately."""
         self._emit(event_type, patient_id, payload or {}, trace=trace, timestamp=timestamp)
 
-    def log_batch(self, events: list[EventSpec]) -> BatchResult:
-        """Send a batch of events directly, bypassing the background queue.
+    def log_batch(self, events: list[LogSpec]) -> BatchResult:
+        """Send a batch of logs directly, bypassing the background queue.
 
-        Sends a single /v1/events/batch request and returns a BatchResult.
+        Sends a single /v1/logs/batch request and returns a BatchResult.
         """
         if not events:
             return BatchResult(accepted=0, failed=0)
 
         wire_events: list[dict[str, Any]] = []
         for spec in events:
-            event = Event(
+            event = LogWire(
                 event_name=spec.event_type.value,
                 patient_id=spec.patient_id,
                 payload=spec.payload or {},
@@ -157,80 +155,6 @@ class OliraClient:
             wire_events.append(event.model_dump(mode="json", exclude_none=True))
 
         return self._transport.send_batch_direct(wire_events)
-
-    def get_events(
-        self,
-        *,
-        patient_id: str,
-        event_type: OliraEventType | None = None,
-        from_timestamp: str | None = None,
-        to_timestamp: str | None = None,
-        ingested_after: str | None = None,
-        ingested_before: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> EventQueryResult:
-        """Query events for a patient. Requires sdk:event-management scope."""
-        params: dict[str, Any] = {"patient_id": patient_id, "limit": limit, "offset": offset}
-        if event_type is not None:
-            params["event_type"] = event_type.value
-        if from_timestamp is not None:
-            params["from_timestamp"] = from_timestamp
-        if to_timestamp is not None:
-            params["to_timestamp"] = to_timestamp
-        if ingested_after is not None:
-            params["ingested_after"] = ingested_after
-        if ingested_before is not None:
-            params["ingested_before"] = ingested_before
-        return self._transport.get_events(params)
-
-    def delete_events(
-        self,
-        *,
-        patient_id: str,
-        event_type: OliraEventType | None = None,
-        from_timestamp: str | None = None,
-        to_timestamp: str | None = None,
-        ingested_after: str | None = None,
-        ingested_before: str | None = None,
-        event_ids: list[str] | None = None,
-    ) -> DeleteResult:
-        """Delete events by filter. Requires sdk:event-management scope.
-
-        At least one filter (event_type, timestamp range, ingested range, or event_ids)
-        must be provided to prevent accidental deletion of all patient events.
-        """
-        has_filter = any(
-            [
-                event_type is not None,
-                from_timestamp is not None,
-                to_timestamp is not None,
-                ingested_after is not None,
-                ingested_before is not None,
-                event_ids is not None,
-            ]
-        )
-        if not has_filter:
-            raise ValidationError(
-                "delete_events() requires at least one filter (event_type, from_timestamp, "
-                "to_timestamp, ingested_after, ingested_before, or event_ids). "
-                "To delete all events for a patient, provide an explicit wide date range."
-            )
-
-        body: dict[str, Any] = {"patient_id": patient_id}
-        if event_type is not None:
-            body["event_type"] = event_type.value
-        if from_timestamp is not None:
-            body["from_timestamp"] = from_timestamp
-        if to_timestamp is not None:
-            body["to_timestamp"] = to_timestamp
-        if ingested_after is not None:
-            body["ingested_after"] = ingested_after
-        if ingested_before is not None:
-            body["ingested_before"] = ingested_before
-        if event_ids is not None:
-            body["event_ids"] = event_ids
-        return self._transport.delete_events(body)
 
     def create_patient(
         self,
@@ -386,8 +310,8 @@ class AsyncOliraClient:
         self._max_retries = max_retries
         self._context = _build_context(environment, service_name)
         self._transport: AsyncHttpTransport | None = None
-        self._queue: asyncio.Queue[Event | None] = asyncio.Queue(maxsize=max_queue_size)
-        self._pending: list[Event] = []
+        self._queue: asyncio.Queue[LogWire | None] = asyncio.Queue(maxsize=max_queue_size)
+        self._pending: list[LogWire] = []
         self._lock = asyncio.Lock()
         self._worker_task: asyncio.Task[None] | None = None
         self._closed = False
@@ -444,7 +368,7 @@ class AsyncOliraClient:
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
     ) -> None:
-        event = Event(
+        event = LogWire(
             event_name=event_type.value,
             patient_id=patient_id,
             payload=payload,
@@ -469,10 +393,10 @@ class AsyncOliraClient:
         """Enqueue an event for background delivery."""
         self._emit(event_type, patient_id, payload or {}, trace=trace, timestamp=timestamp)
 
-    async def log_batch(self, events: list[EventSpec]) -> BatchResult:
-        """Send a batch of events directly, bypassing the background queue.
+    async def log_batch(self, events: list[LogSpec]) -> BatchResult:
+        """Send a batch of logs directly, bypassing the background queue.
 
-        Sends a single /v1/events/batch request and returns a BatchResult.
+        Sends a single /v1/logs/batch request and returns a BatchResult.
         """
         if not events:
             return BatchResult(accepted=0, failed=0)
@@ -483,7 +407,7 @@ class AsyncOliraClient:
 
         wire_events: list[dict[str, Any]] = []
         for spec in events:
-            event = Event(
+            event = LogWire(
                 event_name=spec.event_type.value,
                 patient_id=spec.patient_id,
                 payload=spec.payload or {},
@@ -495,84 +419,6 @@ class AsyncOliraClient:
             wire_events.append(event.model_dump(mode="json", exclude_none=True))
 
         return await self._transport.send_batch_direct(wire_events)
-
-    async def get_events(
-        self,
-        *,
-        patient_id: str,
-        event_type: OliraEventType | None = None,
-        from_timestamp: str | None = None,
-        to_timestamp: str | None = None,
-        ingested_after: str | None = None,
-        ingested_before: str | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> EventQueryResult:
-        """Query events for a patient. Requires sdk:event-management scope."""
-        if self._transport is None:
-            raise ValidationError(
-                "AsyncOliraClient must be used as an async context manager before calling get_events()"
-            )
-        params: dict[str, Any] = {"patient_id": patient_id, "limit": limit, "offset": offset}
-        if event_type is not None:
-            params["event_type"] = event_type.value
-        if from_timestamp is not None:
-            params["from_timestamp"] = from_timestamp
-        if to_timestamp is not None:
-            params["to_timestamp"] = to_timestamp
-        if ingested_after is not None:
-            params["ingested_after"] = ingested_after
-        if ingested_before is not None:
-            params["ingested_before"] = ingested_before
-        return await self._transport.get_events(params)
-
-    async def delete_events(
-        self,
-        *,
-        patient_id: str,
-        event_type: OliraEventType | None = None,
-        from_timestamp: str | None = None,
-        to_timestamp: str | None = None,
-        ingested_after: str | None = None,
-        ingested_before: str | None = None,
-        event_ids: list[str] | None = None,
-    ) -> DeleteResult:
-        """Delete events by filter. Requires sdk:event-management scope."""
-        if self._transport is None:
-            raise ValidationError(
-                "AsyncOliraClient must be used as an async context manager before calling delete_events()"
-            )
-        has_filter = any(
-            [
-                event_type is not None,
-                from_timestamp is not None,
-                to_timestamp is not None,
-                ingested_after is not None,
-                ingested_before is not None,
-                event_ids is not None,
-            ]
-        )
-        if not has_filter:
-            raise ValidationError(
-                "delete_events() requires at least one filter (event_type, from_timestamp, "
-                "to_timestamp, ingested_after, ingested_before, or event_ids). "
-                "To delete all events for a patient, provide an explicit wide date range."
-            )
-
-        body: dict[str, Any] = {"patient_id": patient_id}
-        if event_type is not None:
-            body["event_type"] = event_type.value
-        if from_timestamp is not None:
-            body["from_timestamp"] = from_timestamp
-        if to_timestamp is not None:
-            body["to_timestamp"] = to_timestamp
-        if ingested_after is not None:
-            body["ingested_after"] = ingested_after
-        if ingested_before is not None:
-            body["ingested_before"] = ingested_before
-        if event_ids is not None:
-            body["event_ids"] = event_ids
-        return await self._transport.delete_events(body)
 
     async def create_patient(
         self,
@@ -710,7 +556,7 @@ class AsyncOliraClient:
         return await self._transport.get_patient_token({"patient_id": patient_id})
 
     async def flush(self) -> None:
-        drained: list[Event] = []
+        drained: list[LogWire] = []
         while True:
             try:
                 item = self._queue.get_nowait()

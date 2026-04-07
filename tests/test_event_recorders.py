@@ -6,8 +6,8 @@ from olira import (
     BatchError,
     BatchResult,
     EsasItem,
-    EventSpec,
     LabResultItem,
+    LogSpec,
     OliraClient,
     OliraEnv,
     OliraEventType,
@@ -67,9 +67,6 @@ def _make_sync_client() -> tuple[OliraClient, list[dict]]:
     events_sent: list[dict] = []
 
     class MockTransport:
-        def send_event(self, event: dict):
-            events_sent.append(event)
-
         def send_batch(self, events: list[dict]):
             events_sent.extend(events)
 
@@ -153,9 +150,6 @@ def test_log_batch_accepted():
     batches_sent: list[list[dict]] = []
 
     class MockTransport:
-        def send_event(self, event: dict):
-            pass
-
         def send_batch(self, events: list[dict]):
             pass
 
@@ -172,9 +166,9 @@ def test_log_batch_accepted():
 
     result = client.log_batch(
         [
-            EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
-            EventSpec(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_2", payload={"results": []}),
-            EventSpec(
+            LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
+            LogSpec(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_2", payload={"results": []}),
+            LogSpec(
                 event_type=OliraEventType.SYMPTOM_REPORT,
                 patient_id="p_3",
                 payload={"instrument": "esas_r", "symptoms": []},
@@ -192,9 +186,6 @@ def test_log_batch_accepted():
 
 def test_log_batch_partial_failure():
     class MockTransport:
-        def send_event(self, event: dict):
-            pass
-
         def send_batch(self, events: list[dict]):
             pass
 
@@ -214,9 +205,9 @@ def test_log_batch_partial_failure():
 
     result = client.log_batch(
         [
-            EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
-            EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_2"),
-            EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_3"),
+            LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
+            LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_2"),
+            LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_3"),
         ]
     )
 

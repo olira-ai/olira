@@ -2,7 +2,7 @@
 
 import pytest
 
-from olira import AsyncOliraClient, BatchResult, EventSpec, OliraEnv, OliraEventType, OliraTrace
+from olira import AsyncOliraClient, BatchResult, LogSpec, OliraEnv, OliraEventType, OliraTrace
 
 
 @pytest.mark.asyncio
@@ -87,8 +87,8 @@ async def test_async_client_log_batch():
         client._transport = MockTransport()
         result = await client.log_batch(
             [
-                EventSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
-                EventSpec(
+                LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
+                LogSpec(
                     event_type=OliraEventType.SYMPTOM_REPORT,
                     patient_id="p_2",
                     payload={"instrument": "esas_r", "symptoms": []},

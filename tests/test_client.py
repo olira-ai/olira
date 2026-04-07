@@ -21,9 +21,6 @@ def test_client_log_builds_event():
     events_sent: list[dict] = []
 
     class MockTransport:
-        def send_event(self, event: dict):
-            events_sent.append(event)
-
         def send_batch(self, events: list[dict]):
             events_sent.extend(events)
 
@@ -51,9 +48,6 @@ def test_client_log_with_trace():
     events_sent: list[dict] = []
 
     class MockTransport:
-        def send_event(self, event: dict):
-            events_sent.append(event)
-
         def send_batch(self, events: list[dict]):
             events_sent.extend(events)
 

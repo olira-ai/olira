@@ -187,8 +187,8 @@ class TimePeriod(BaseModel):
 
 
 @dataclass
-class EventSpec:
-    """Lightweight event specification for log_batch(). Not persisted internally."""
+class LogSpec:
+    """Lightweight log specification for log_batch(). Not persisted internally."""
 
     event_type: OliraEventType
     patient_id: str
@@ -207,7 +207,7 @@ class BatchError(BaseModel):
 
 
 class BatchResult(BaseModel):
-    """Result of a log_batch() call. Mirrors /v1/events/batch response."""
+    """Result of a log_batch() call. Mirrors /v1/logs/batch response."""
 
     accepted: int
     failed: int
@@ -217,8 +217,8 @@ class BatchResult(BaseModel):
 # --- Internal wire format (not exported) ---
 
 
-class Event(BaseModel):
-    """Wire-format event; built by the SDK, not by customers."""
+class LogWire(BaseModel):
+    """Wire-format log entry; built by the SDK, not by customers."""
 
     event_name: str
     patient_id: str
@@ -358,33 +358,3 @@ class PatientToken(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     scopes: list[str]
-
-
-# --- Event management response types (exported) ---
-
-
-class EventRecord(BaseModel):
-    """A single event record returned by get_events()."""
-
-    event_id: str
-    event_type: OliraEventType
-    patient_id: str
-    timestamp: str
-    ingested_at: str
-    payload: dict[str, Any] = Field(default_factory=dict)
-    trace: OliraTrace | None = None
-
-
-class EventQueryResult(BaseModel):
-    """Result of a get_events() call."""
-
-    events: list[EventRecord]
-    total: int
-    has_more: bool
-
-
-class DeleteResult(BaseModel):
-    """Result of a delete_events() call."""
-
-    deleted_count: int
-    patient_id: str

@@ -3,7 +3,7 @@
 import pytest
 
 from olira import ValidationError
-from olira.models import Event, _validate_patient_id
+from olira.models import LogWire, _validate_patient_id
 
 
 def test_patient_id_empty_raises():
@@ -33,11 +33,10 @@ def test_patient_id_pseudo_ok():
     assert _validate_patient_id("subject_xyz") == "subject_xyz"
 
 
-def test_event_validates_patient_id():
+def test_log_wire_validates_patient_id():
     with pytest.raises(ValidationError):
-        Event(
+        LogWire(
             event_name="user_login",
             patient_id="user@example.com",
-            properties={},
             context={"environment": "production", "service": "", "sdk_version": "0.1.0", "sdk_language": "python"},
         )

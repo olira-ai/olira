@@ -25,7 +25,7 @@ def test_401_raises_auth_error():
         transport=httpx.MockTransport(respond_401),
     )
     with pytest.raises(AuthError, match="401"):
-        transport.send_event({"event_name": "user_login", "patient_id": "p_1", "context": {}})
+        transport.send_batch([{"event_name": "user_login", "patient_id": "p_1", "context": {}}])
     transport.close()
 
 
@@ -47,6 +47,6 @@ def test_429_parses_retry_after():
         transport=httpx.MockTransport(respond_429),
     )
     with pytest.raises(RateLimitError) as exc_info:
-        transport.send_event({"event_name": "user_login", "patient_id": "p_1", "context": {}})
+        transport.send_batch([{"event_name": "user_login", "patient_id": "p_1", "context": {}}])
     assert exc_info.value.retry_after == 120
     transport.close()
