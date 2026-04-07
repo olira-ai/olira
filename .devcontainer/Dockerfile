@@ -1,5 +1,5 @@
 # See here for image contents: https://github.com/microsoft/vscode-dev-containers/tree/v0.245.0/containers/python-3
-ARG VARIANT=3.11-bullseye
+ARG VARIANT=3.11-bookworm
 FROM mcr.microsoft.com/devcontainers/python:${VARIANT}
 
 # Install uv - fast Python package installer
