@@ -159,13 +159,13 @@ class OliraClient:
     def create_patient(
         self,
         *,
-        first_name: str,
-        last_name: str,
+        first_name: str | None = None,
+        last_name: str | None = None,
         email: str | None = None,
         phone_number: str | None = None,
         date_of_birth: str | None = None,
         sex: str = "unknown",
-        timezone: str,
+        timezone: str = "UTC",
         primary_disease_site: str | None = None,
         disease_stage: str | None = None,
         external_identifiers: list[ExternalIdentifier] | None = None,
@@ -175,6 +175,9 @@ class OliraClient:
 
         Returns a :class:`Patient` with an Olira-assigned `id`. Use that `id` in all
         subsequent calls that reference this patient.
+
+        Shell patients are supported: provide at least one of ``external_identifiers``,
+        ``email``, ``phone_number``, ``first_name``, ``last_name``, or ``date_of_birth``.
         """
         req = CreatePatientRequest(
             first_name=first_name,
@@ -423,13 +426,13 @@ class AsyncOliraClient:
     async def create_patient(
         self,
         *,
-        first_name: str,
-        last_name: str,
+        first_name: str | None = None,
+        last_name: str | None = None,
         email: str | None = None,
         phone_number: str | None = None,
         date_of_birth: str | None = None,
         sex: str = "unknown",
-        timezone: str,
+        timezone: str = "UTC",
         primary_disease_site: str | None = None,
         disease_stage: str | None = None,
         external_identifiers: list[ExternalIdentifier] | None = None,
@@ -439,6 +442,9 @@ class AsyncOliraClient:
 
         Returns a :class:`Patient` with an Olira-assigned `id`. Use that `id` in all
         subsequent calls that reference this patient.
+
+        Shell patients are supported: provide at least one of ``external_identifiers``,
+        ``email``, ``phone_number``, ``first_name``, ``last_name``, or ``date_of_birth``.
         """
         if self._transport is None:
             raise ValidationError(

@@ -7,7 +7,7 @@ The Olira Python SDK provides a typed client for logging health events,
 managing patients, and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `0.1.0a4`
+**Package:** `olira` — **Version:** `0.1.0a7`
 
 ---
 
@@ -292,12 +292,19 @@ in `log()` and `log_batch()`.
 - `OliraEventType.CLINICAL_NOTE_RECEIVED` → `"clinical_note_received"`
 - `OliraEventType.CLINICAL_FINDING_REPORTED` → `"clinical_finding_reported"`
 - `OliraEventType.PROCEDURE_RESULT_RECEIVED` → `"procedure_result_received"`
+- `OliraEventType.PROCEDURE_PERFORMED` → `"procedure_performed"`
 - `OliraEventType.GENOMIC_VARIANT_REPORTED` → `"genomic_variant_reported"`
 - `OliraEventType.IMAGING_RESULT_RECEIVED` → `"imaging_result_received"`
 - `OliraEventType.CLINICAL_MEASUREMENT_REPORTED` → `"clinical_measurement_reported"`
 - `OliraEventType.TREATMENT_RESPONSE_ASSESSMENT_REPORTED` → `"treatment_response_assessment_reported"`
 - `OliraEventType.CLINICAL_PLAN_ITEM_REPORTED` → `"clinical_plan_item_reported"`
 - `OliraEventType.CARE_ENCOUNTER_REPORTED` → `"care_encounter_reported"`
+- `OliraEventType.CARE_GOAL_REPORTED` → `"care_goal_reported"`
+- `OliraEventType.IMMUNIZATION_REPORTED` → `"immunization_reported"`
+- `OliraEventType.ALLERGY_INTOLERANCE_REPORTED` → `"allergy_intolerance_reported"`
+- `OliraEventType.FAMILY_HISTORY_REPORTED` → `"family_history_reported"`
+- `OliraEventType.DEVICE_REPORTED` → `"device_reported"`
+- `OliraEventType.MEMORY_REPORT` → `"memory_report"`
 - `OliraEventType.UNSTRUCTURED_REPORT_RECEIVED` → `"unstructured_report_received"`
 
 **Questionnaires**
@@ -338,7 +345,7 @@ in `log()` and `log_batch()`.
 **Profile**
 
 - `OliraEventType.DEMOGRAPHICS_UPDATED` → `"demographics_updated"`
-- `OliraEventType.CONDITION_UPDATED` → `"condition_updated"`
+- `OliraEventType.CONDITION_RECORDED` → `"condition_recorded"`
 - `OliraEventType.PREFERENCES_UPDATED` → `"preferences_updated"`
 - `OliraEventType.EMERGENCY_CONTACT_UPDATED` → `"emergency_contact_updated"`
 - `OliraEventType.CARE_TEAM_UPDATED` → `"care_team_updated"`
@@ -358,7 +365,20 @@ All patient functions require an API key with `api:manage-patients` scope.
 #### `create_patient`
 
 ```python
-create_patient(*, first_name: str, last_name: str, email: str | None = None, phone_number: str | None = None, date_of_birth: str | None = None, sex: str = 'unknown', timezone: str, primary_disease_site: str | None = None, disease_stage: str | None = None, external_identifiers: list[ExternalIdentifier] | None = None, metadata: dict[str, Any] | None = None) -> Patient
+create_patient(
+    *,
+    first_name: str | None = None,
+    last_name: str | None = None,
+    email: str | None = None,
+    phone_number: str | None = None,
+    date_of_birth: str | None = None,
+    sex: str = "unknown",
+    timezone: str = "UTC",
+    primary_disease_site: str | None = None,
+    disease_stage: str | None = None,
+    external_identifiers: list[ExternalIdentifier] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> Patient
 ```
 
 Create a patient. Module-level proxy to the singleton client.
@@ -366,29 +386,35 @@ Create a patient. Module-level proxy to the singleton client.
 Requires an API key with the api:manage-patients scope. Returns a :class:`Patient`
 with an Olira-assigned `id` — use it in all subsequent calls for this patient.
 
-| Parameter              | Required | Type                      | Default     |
-| ---------------------- | -------- | ------------------------- | ----------- | ------ |
-| `first_name`           | Yes      | `str`                     | —           |
-| `last_name`            | Yes      | `str`                     | —           |
-| `email`                | No       | `str                      | None`       | `None` |
-| `phone_number`         | No       | `str                      | None`       | `None` |
-| `date_of_birth`        | No       | `str                      | None`       | `None` |
-| `sex`                  | No       | `str`                     | `'unknown'` |
-| `timezone`             | Yes      | `str`                     | —           |
-| `primary_disease_site` | No       | `str                      | None`       | `None` |
-| `disease_stage`        | No       | `str                      | None`       | `None` |
-| `external_identifiers` | No       | `list[ExternalIdentifier] | None`       | `None` |
-| `metadata`             | No       | `dict[str, Any]           | None`       | `None` |
+**Anchor rule (validation):** You must provide **at least one** of: a non-empty `external_identifiers` list, `email`, non-empty `phone_number`, `first_name`, `last_name`, or `date_of_birth`. Omitting all of these raises a validation error. This allows **shell** patients (for example, an external EMR id only) until demographics are synced or entered later via `update_patient`.
 
-**Example:**
+| Parameter              | Required | Type                             | Default     |
+| ---------------------- | -------- | -------------------------------- | ----------- |
+| `first_name`           | No       | `str \| None`                    | `None`      |
+| `last_name`            | No       | `str \| None`                    | `None`      |
+| `email`                | No       | `str \| None`                    | `None`      |
+| `phone_number`         | No       | `str \| None`                    | `None`      |
+| `date_of_birth`        | No       | `str \| None`                    | `None`      |
+| `sex`                  | No       | `str`                            | `'unknown'` |
+| `timezone`             | No       | `str`                            | `'UTC'`     |
+| `primary_disease_site` | No       | `str \| None`                    | `None`      |
+| `disease_stage`        | No       | `str \| None`                    | `None`      |
+| `external_identifiers` | No       | `list[ExternalIdentifier] \| None` | `None` (sent as `[]`) |
+| `metadata`             | No       | `dict[str, Any] \| None`         | `None`      |
+
+`date_of_birth` must be ISO 8601 when provided (for example `1985-03-22T00:00:00Z`).
+
+**Examples:**
 
 ```python
 from olira import ExternalIdentifier
 
+# Full demographics
 patient = olira.create_patient(
     first_name="Jane",
     last_name="Smith",
     email="jane@example.com",
+    date_of_birth="1985-03-22T00:00:00Z",
     sex="female",
     timezone="America/New_York",
     primary_disease_site="breast",
@@ -396,6 +422,15 @@ patient = olira.create_patient(
     external_identifiers=[ExternalIdentifier(system="epic", value="MRN-12345")],
 )
 print(patient.id)  # Olira-assigned ID — use in all subsequent calls
+```
+
+```python
+from olira import ExternalIdentifier
+
+# Shell patient: external id only (names / DOB omitted until available)
+patient = olira.create_patient(
+    external_identifiers=[ExternalIdentifier(system="epic", value="Patient/abc123")],
+)
 ```
 
 ### List patients
@@ -540,11 +575,19 @@ Returns a :class:`PatientBatchResult` with items (successes) and errors (failure
 **Example:**
 
 ```python
-from olira import CreatePatientRequest
+from olira import CreatePatientRequest, ExternalIdentifier
 
 result = olira.create_patients_batch([
-    CreatePatientRequest(first_name="Alice", last_name="Jones", sex="female", timezone="UTC"),
-    CreatePatientRequest(first_name="Bob", last_name="Lee", sex="male", timezone="UTC"),
+    CreatePatientRequest(
+        first_name="Alice",
+        last_name="Jones",
+        date_of_birth="1990-01-15T00:00:00Z",
+        sex="female",
+        timezone="UTC",
+    ),
+    CreatePatientRequest(
+        external_identifiers=[ExternalIdentifier(system="epic", value="Patient/shell-1")],
+    ),
 ])
 print(f"Created {result.count}, errors: {len(result.errors)}")
 ```
@@ -562,24 +605,23 @@ Links a patient to their ID in an external system (e.g. Epic MRN, Flatiron ID, F
 
 ### `CreatePatientRequest`
 
-Request body for creating a patient.
+Request body for creating a patient (including batch create).
 
-All fields map directly to the patient record. Olira assigns a stable `id`
-to the patient at creation time — it is returned in the :class:`Patient` response.
+Olira assigns a stable `id` at creation time — it is returned on the :class:`Patient` response. The same **anchor rule** as `create_patient` applies: at least one of `external_identifiers` (non-empty), `email`, `phone_number`, `first_name`, `last_name`, or `date_of_birth` must be set. Optional demographics support **shell** patients.
 
-| Field                  | Required | Type                       | Description              |
-| ---------------------- | -------- | -------------------------- | ------------------------ | ----------------------------------------------------------------------- |
-| `first_name`           | Yes      | `str`                      | —                        |
-| `last_name`            | Yes      | `str`                      | —                        |
-| `email`                | No       | `str                       | None`                    | — (default: `None`)                                                     |
-| `phone_number`         | No       | `str                       | None`                    | — (default: `None`)                                                     |
-| `date_of_birth`        | No       | `str                       | None`                    | ISO 8601 datetime string, e.g. '1985-03-22T00:00:00Z' (default: `None`) |
-| `sex`                  | No       | `str`                      | — (default: `'unknown'`) |
-| `timezone`             | Yes      | `str`                      | —                        |
-| `primary_disease_site` | No       | `str                       | None`                    | — (default: `None`)                                                     |
-| `disease_stage`        | No       | `str                       | None`                    | — (default: `None`)                                                     |
-| `external_identifiers` | No       | `list[ExternalIdentifier]` | — (default: `list()`)    |
-| `metadata`             | No       | `dict[str, Any]            | None`                    | — (default: `None`)                                                     |
+| Field                  | Required | Type                             | Description |
+| ---------------------- | -------- | -------------------------------- | ----------- |
+| `first_name`           | No       | `str \| None`                    | Given name; omit for shell patients. |
+| `last_name`            | No       | `str \| None`                    | Family name; omit for shell patients. |
+| `email`                | No       | `str \| None`                    | —           |
+| `phone_number`         | No       | `str \| None`                    | —           |
+| `date_of_birth`        | No       | `str \| None`                    | ISO 8601 when set, e.g. `1985-03-22T00:00:00Z`. |
+| `sex`                  | No       | `str`                            | Default `'unknown'`. |
+| `timezone`             | No       | `str`                            | Default `'UTC'`. |
+| `primary_disease_site` | No       | `str \| None`                    | —           |
+| `disease_stage`        | No       | `str \| None`                    | —           |
+| `external_identifiers` | No       | `list[ExternalIdentifier]`       | Default `[]`. Non-empty list satisfies the anchor rule. |
+| `metadata`             | No       | `dict[str, Any] \| None`         | —           |
 
 ### `UpdatePatientRequest`
 
@@ -607,22 +649,24 @@ A patient in your organisation.
 `id` is the Olira-assigned identifier for this patient, returned at creation
 time. Use it in all subsequent calls that reference this patient.
 
+Demographics may be absent for shell patients created with only an external id or partial data; `first_name`, `last_name`, and `sex` are then `None`.
+
 | Field                  | Required | Type                       | Description           |
-| ---------------------- | -------- | -------------------------- | --------------------- | ------------------- |
-| `id`                   | Yes      | `str`                      | —                     |
-| `first_name`           | Yes      | `str`                      | —                     |
-| `last_name`            | Yes      | `str`                      | —                     |
-| `sex`                  | Yes      | `str`                      | —                     |
-| `timezone`             | Yes      | `str`                      | —                     |
-| `status`               | Yes      | `str`                      | —                     |
-| `email`                | No       | `str                       | None`                 | — (default: `None`) |
-| `phone_number`         | No       | `str                       | None`                 | — (default: `None`) |
-| `date_of_birth`        | No       | `str                       | None`                 | — (default: `None`) |
-| `primary_disease_site` | No       | `str                       | None`                 | — (default: `None`) |
-| `disease_stage`        | No       | `str                       | None`                 | — (default: `None`) |
-| `created_at`           | No       | `str                       | None`                 | — (default: `None`) |
-| `external_identifiers` | No       | `list[ExternalIdentifier]` | — (default: `list()`) |
-| `metadata`             | No       | `dict[str, Any]            | None`                 | — (default: `None`) |
+| ---------------------- | -------- | -------------------------- | --------------------- |
+| `id`                   | Yes      | `str`                      | Olira-assigned id.   |
+| `first_name`           | No       | `str \| None`              | `None` if unknown.   |
+| `last_name`            | No       | `str \| None`              | `None` if unknown.   |
+| `sex`                  | No       | `str \| None`              | `None` if unknown.   |
+| `timezone`             | Yes      | `str`                      | IANA timezone.       |
+| `status`               | Yes      | `str`                      | Account status.      |
+| `email`                | No       | `str \| None`              | —                     |
+| `phone_number`         | No       | `str \| None`              | —                     |
+| `date_of_birth`        | No       | `str \| None`              | ISO 8601 when set.   |
+| `primary_disease_site` | No       | `str \| None`              | —                     |
+| `disease_stage`        | No       | `str \| None`              | —                     |
+| `created_at`           | No       | `str \| None`              | —                     |
+| `external_identifiers` | No       | `list[ExternalIdentifier]` | May be empty.        |
+| `metadata`             | No       | `dict[str, Any] \| None`   | —                     |
 
 ### `PatientListResult`
 

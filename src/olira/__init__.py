@@ -152,13 +152,13 @@ def log_batch(events: list[LogSpec]) -> BatchResult:
 
 def create_patient(
     *,
-    first_name: str,
-    last_name: str,
+    first_name: str | None = None,
+    last_name: str | None = None,
     email: str | None = None,
     phone_number: str | None = None,
     date_of_birth: str | None = None,
     sex: str = "unknown",
-    timezone: str,
+    timezone: str = "UTC",
     primary_disease_site: str | None = None,
     disease_stage: str | None = None,
     external_identifiers: list[ExternalIdentifier] | None = None,
@@ -168,6 +168,8 @@ def create_patient(
 
     Requires an API key with the api:manage-patients scope. Returns a :class:`Patient`
     with an Olira-assigned `id` — use it in all subsequent calls for this patient.
+    Shell patients: pass at least one of ``external_identifiers``, ``email``,
+    ``phone_number``, ``first_name``, ``last_name``, or ``date_of_birth``.
     """
     return _get_client().create_patient(
         first_name=first_name,

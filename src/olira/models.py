@@ -56,12 +56,19 @@ class OliraEventType(StrEnum):
     CLINICAL_NOTE_RECEIVED = "clinical_note_received"
     CLINICAL_FINDING_REPORTED = "clinical_finding_reported"
     PROCEDURE_RESULT_RECEIVED = "procedure_result_received"
+    PROCEDURE_PERFORMED = "procedure_performed"
     GENOMIC_VARIANT_REPORTED = "genomic_variant_reported"
     IMAGING_RESULT_RECEIVED = "imaging_result_received"
     CLINICAL_MEASUREMENT_REPORTED = "clinical_measurement_reported"
     TREATMENT_RESPONSE_ASSESSMENT_REPORTED = "treatment_response_assessment_reported"
     CLINICAL_PLAN_ITEM_REPORTED = "clinical_plan_item_reported"
     CARE_ENCOUNTER_REPORTED = "care_encounter_reported"
+    CARE_GOAL_REPORTED = "care_goal_reported"
+    IMMUNIZATION_REPORTED = "immunization_reported"
+    ALLERGY_INTOLERANCE_REPORTED = "allergy_intolerance_reported"
+    FAMILY_HISTORY_REPORTED = "family_history_reported"
+    DEVICE_REPORTED = "device_reported"
+    MEMORY_REPORT = "memory_report"
     UNSTRUCTURED_REPORT_RECEIVED = "unstructured_report_received"
 
     # Questionnaires
@@ -96,7 +103,7 @@ class OliraEventType(StrEnum):
 
     # Profile
     DEMOGRAPHICS_UPDATED = "demographics_updated"
-    CONDITION_UPDATED = "condition_updated"
+    CONDITION_RECORDED = "condition_recorded"
     PREFERENCES_UPDATED = "preferences_updated"
     EMERGENCY_CONTACT_UPDATED = "emergency_contact_updated"
     CARE_TEAM_UPDATED = "care_team_updated"
@@ -258,12 +265,14 @@ class ExternalIdentifier(BaseModel):
 class CreatePatientRequest(BaseModel):
     """Request body for creating a patient.
 
-    All fields map directly to the patient record. Olira assigns a stable `id`
-    to the patient at creation time — it is returned in the :class:`Patient` response.
+    Demographics are optional so you can create **shell** patients (e.g. external id
+    only), matching the API. You must send at least one of: ``external_identifiers``,
+    ``email``, ``phone_number``, ``first_name``, ``last_name``, or ``date_of_birth``.
+    Olira assigns a stable ``id`` at creation time — it is returned in the :class:`Patient` response.
     """
 
-    first_name: str
-    last_name: str
+    first_name: str | None = Field(default=None, description="Given name; omit for shell patients.")
+    last_name: str | None = Field(default=None, description="Family name; omit for shell patients.")
     email: str | None = None
     phone_number: str | None = None
     date_of_birth: str | None = Field(
@@ -271,11 +280,35 @@ class CreatePatientRequest(BaseModel):
         description="ISO 8601 datetime string, e.g. '1985-03-22T00:00:00Z'",
     )
     sex: str = "unknown"
-    timezone: str
+    timezone: str = Field(default="UTC", description="IANA timezone, e.g. America/New_York")
     primary_disease_site: str | None = None
     disease_stage: str | None = None
     external_identifiers: list[ExternalIdentifier] = Field(default_factory=list)
     metadata: dict[str, Any] | None = None
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def _strip_names(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s if s else None
+        raise ValueError(f"Expected a string, got {type(v).__name__}")
+
+    @model_validator(mode="after")
+    def _require_anchor_field(self) -> Self:
+        has_ext = bool(self.external_identifiers)
+        has_email = self.email is not None
+        has_phone = bool(self.phone_number and str(self.phone_number).strip())
+        has_name = self.first_name is not None or self.last_name is not None
+        has_dob = bool(self.date_of_birth and str(self.date_of_birth).strip())
+        if not any((has_ext, has_email, has_phone, has_name, has_dob)):
+            raise ValueError(
+                "Provide at least one of: external_identifiers, email, phone_number, "
+                "first_name, last_name, or date_of_birth"
+            )
+        return self
 
 
 class UpdatePatientRequest(BaseModel):
@@ -307,9 +340,9 @@ class Patient(BaseModel):
     """
 
     id: str
-    first_name: str
-    last_name: str
-    sex: str
+    first_name: str | None = None
+    last_name: str | None = None
+    sex: str | None = None
     timezone: str
     status: str
     email: str | None = None
