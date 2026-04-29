@@ -391,3 +391,164 @@ class PatientToken(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     scopes: list[str]
+
+
+# --- State-read response types (exported) ---
+
+
+class StableModule(BaseModel):
+    """One stable state module (demographics, condition_diagnosis, medications, user_preferences)."""
+
+    module_type: str
+    payload: dict[str, Any] | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class StableDataResult(BaseModel):
+    """Result of get_stable_data(). Modules keyed by module_type."""
+
+    patient_id: str
+    modules: dict[str, StableModule]
+
+
+class EventStateModuleSummary(BaseModel):
+    """Metadata entry for a single event state module returned by list_event_state_modules()."""
+
+    module_type: str
+    updated_at: str | None = None
+    created_at: str | None = None
+
+
+class EventStateModuleResult(BaseModel):
+    """Result of get_event_state_module()."""
+
+    patient_id: str
+    module_type: str
+    payload: dict[str, Any] | list[Any] | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class SummaryMeta(BaseModel):
+    """Metadata entry for a summary returned by list_summaries().
+
+    ``has_blocks`` reflects the unified block list (current v2 model).
+    ``has_temp`` reflects whether live append-only TEMP entries exist.
+    """
+
+    summary_type: str
+    summary_id: str
+    has_blocks: bool = False
+    has_temp: bool = False
+
+
+class SummaryBlockMeta(BaseModel):
+    """Metadata for one block within a summary returned by list_summary_blocks()."""
+
+    block_id: str | None = None
+    block_name: str | None = None
+    has_result: bool = False
+
+
+class SummaryBlocksListResult(BaseModel):
+    """Result of list_summary_blocks(). Blocks come from the unified block list."""
+
+    patient_id: str
+    summary_type: str
+    blocks: list[SummaryBlockMeta] = Field(default_factory=list)
+
+
+class SummaryResult(BaseModel):
+    """Result of get_summary().
+
+    ``content`` holds the unified block list under the key ``blocks`` (current v2 model),
+    plus ``temp`` entries when present. Legacy snapshots may also include ``week``,
+    ``long_term``, or ``persistent`` keys.
+    """
+
+    patient_id: str
+    summary_type: str
+    summary_id: str | None = None
+    valid_from: str | None = None
+    valid_to: str | None = None
+    content: dict[str, Any] = Field(default_factory=dict)
+
+
+class SummaryBlockResult(BaseModel):
+    """Result of get_summary_block()."""
+
+    patient_id: str
+    summary_type: str
+    block_id: str
+    content: str | None = None
+    confidences: dict[str, float] | None = None
+    updated_at: str | None = None
+
+
+class SummaryRecentEventsResult(BaseModel):
+    """Result of get_summary_recent_events(). Entries are the TEMP segment string list."""
+
+    patient_id: str
+    summary_type: str
+    entries: list[str] = Field(default_factory=list)
+    count: int = 0
+    total_count: int = 0
+
+
+class EventLogEntry(BaseModel):
+    """One event log entry returned by get_event_logs()."""
+
+    id: str
+    type: str | None = None
+    timestamp: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    trace: OliraTrace | None = None
+
+
+class EventLogsResult(BaseModel):
+    """Result of get_event_logs()."""
+
+    patient_id: str
+    count: int
+    event_logs: list[EventLogEntry] = Field(default_factory=list)
+
+
+class StateTransitionEntry(BaseModel):
+    """One state transition entry returned by get_state_transitions()."""
+
+    id: str
+    trigger: str | None = None
+    event_log_type: str | None = None
+    status: str | None = None
+    triggered_at: str | None = None
+    completed_at: str | None = None
+    source_event_log_id: str | None = None
+    event_log_payload: dict[str, Any] | None = None
+    changes: dict[str, Any] | None = None
+
+
+class StateTransitionsResult(BaseModel):
+    """Result of get_state_transitions()."""
+
+    patient_id: str
+    count: int
+    state_transitions: list[StateTransitionEntry] = Field(default_factory=list)
+
+
+class MemoryEntry(BaseModel):
+    """One memory record returned by read_memories()."""
+
+    memory_id: str
+    content: str
+    metadata: dict[str, Any] | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class MemoriesResult(BaseModel):
+    """Result of read_memories()."""
+
+    patient_id: str
+    count: int
+    results: list[MemoryEntry] = Field(default_factory=list)

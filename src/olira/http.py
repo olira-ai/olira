@@ -3,17 +3,26 @@
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
 from .exceptions import AuthError, NetworkError, RateLimitError, ServerError, ValidationError
 from .models import (
     BatchResult,
+    EventLogsResult,
+    EventStateModuleResult,
+    MemoriesResult,
     Patient,
     PatientBatchResult,
     PatientListResult,
     PatientToken,
+    StableDataResult,
+    StateTransitionsResult,
+    SummaryBlockResult,
+    SummaryBlocksListResult,
+    SummaryRecentEventsResult,
+    SummaryResult,
 )
 
 logger = logging.getLogger("olira")
@@ -231,6 +240,54 @@ class HttpTransport:
         raw = self._request("POST", "/v1/auth/token", json=body)
         return _parse_patient_token(raw)
 
+    # --- State-read methods (sdk:state-read scope) ---
+
+    def get_stable_data(self, patient_id: str, params: dict[str, Any]) -> StableDataResult:
+        raw = self._request("GET", f"/v1/state/{patient_id}/stable", params=params)
+        return StableDataResult.model_validate(raw)
+
+    def list_event_state_modules(self, patient_id: str) -> list[Any]:
+        raw = self._request("GET", f"/v1/state/{patient_id}/event-modules")
+        return cast(list[Any], raw.get("modules", []))
+
+    def get_event_state_module(self, patient_id: str, module_type: str) -> EventStateModuleResult:
+        raw = self._request("GET", f"/v1/state/{patient_id}/event-modules/{module_type}")
+        return EventStateModuleResult.model_validate(raw)
+
+    def list_summaries(self, patient_id: str) -> list[Any]:
+        raw = self._request("GET", f"/v1/state/{patient_id}/summaries")
+        return cast(list[Any], raw.get("summaries", []))
+
+    def list_summary_blocks(self, patient_id: str, summary_type: str) -> SummaryBlocksListResult:
+        raw = self._request("GET", f"/v1/state/{patient_id}/summaries/{summary_type}/blocks")
+        return SummaryBlocksListResult.model_validate(raw)
+
+    def get_summary(self, patient_id: str, summary_type: str) -> SummaryResult:
+        raw = self._request("GET", f"/v1/state/{patient_id}/summaries/{summary_type}")
+        return SummaryResult.model_validate(raw)
+
+    def get_summary_block(self, patient_id: str, summary_type: str, block_id: str) -> SummaryBlockResult:
+        raw = self._request("GET", f"/v1/state/{patient_id}/summaries/{summary_type}/blocks/{block_id}")
+        return SummaryBlockResult.model_validate(raw)
+
+    def get_summary_recent_events(
+        self, patient_id: str, summary_type: str, params: dict[str, Any]
+    ) -> SummaryRecentEventsResult:
+        raw = self._request("GET", f"/v1/state/{patient_id}/summaries/{summary_type}/recent", params=params)
+        return SummaryRecentEventsResult.model_validate(raw)
+
+    def get_event_logs(self, patient_id: str, params: dict[str, Any]) -> EventLogsResult:
+        raw = self._request("GET", f"/v1/state/{patient_id}/event-logs", params=params)
+        return EventLogsResult.model_validate(raw)
+
+    def get_state_transitions(self, patient_id: str, params: dict[str, Any]) -> StateTransitionsResult:
+        raw = self._request("GET", f"/v1/state/{patient_id}/state-transitions", params=params)
+        return StateTransitionsResult.model_validate(raw)
+
+    def read_memories(self, patient_id: str, params: dict[str, Any]) -> MemoriesResult:
+        raw = self._request("GET", f"/v1/state/{patient_id}/memories", params=params)
+        return MemoriesResult.model_validate(raw)
+
 
 class AsyncHttpTransport:
     """Async HTTP transport: POST /v1/logs/batch with retry."""
@@ -298,6 +355,54 @@ class AsyncHttpTransport:
         """Mint a patient-scoped JWT (POST /v1/auth/token). Requires sdk:patient-token scope."""
         raw = await self._request("POST", "/v1/auth/token", json=body)
         return _parse_patient_token(raw)
+
+    # --- State-read methods (sdk:state-read scope) ---
+
+    async def get_stable_data(self, patient_id: str, params: dict[str, Any]) -> StableDataResult:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/stable", params=params)
+        return StableDataResult.model_validate(raw)
+
+    async def list_event_state_modules(self, patient_id: str) -> list[Any]:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/event-modules")
+        return cast(list[Any], raw.get("modules", []))
+
+    async def get_event_state_module(self, patient_id: str, module_type: str) -> EventStateModuleResult:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/event-modules/{module_type}")
+        return EventStateModuleResult.model_validate(raw)
+
+    async def list_summaries(self, patient_id: str) -> list[Any]:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/summaries")
+        return cast(list[Any], raw.get("summaries", []))
+
+    async def list_summary_blocks(self, patient_id: str, summary_type: str) -> SummaryBlocksListResult:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/summaries/{summary_type}/blocks")
+        return SummaryBlocksListResult.model_validate(raw)
+
+    async def get_summary(self, patient_id: str, summary_type: str) -> SummaryResult:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/summaries/{summary_type}")
+        return SummaryResult.model_validate(raw)
+
+    async def get_summary_block(self, patient_id: str, summary_type: str, block_id: str) -> SummaryBlockResult:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/summaries/{summary_type}/blocks/{block_id}")
+        return SummaryBlockResult.model_validate(raw)
+
+    async def get_summary_recent_events(
+        self, patient_id: str, summary_type: str, params: dict[str, Any]
+    ) -> SummaryRecentEventsResult:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/summaries/{summary_type}/recent", params=params)
+        return SummaryRecentEventsResult.model_validate(raw)
+
+    async def get_event_logs(self, patient_id: str, params: dict[str, Any]) -> EventLogsResult:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/event-logs", params=params)
+        return EventLogsResult.model_validate(raw)
+
+    async def get_state_transitions(self, patient_id: str, params: dict[str, Any]) -> StateTransitionsResult:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/state-transitions", params=params)
+        return StateTransitionsResult.model_validate(raw)
+
+    async def read_memories(self, patient_id: str, params: dict[str, Any]) -> MemoriesResult:
+        raw = await self._request("GET", f"/v1/state/{patient_id}/memories", params=params)
+        return MemoriesResult.model_validate(raw)
 
     async def _request(
         self,

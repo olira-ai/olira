@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0a8] - 2026-04-29
+
+### Added
+
+- **Patient State — Read** (`sdk:state-read` scope): 11 new methods on `OliraClient` and `AsyncOliraClient` for reading compiled patient state directly from Python without calling the MCP JSON-RPC interface:
+  - `get_stable_data(patient_id, modules=None)` — demographics, condition/diagnosis, medications, preferences
+  - `list_event_state_modules(patient_id)` — list active event state module types
+  - `get_event_state_module(patient_id, module_type)` — symptoms, emotional state, adherence, activity, engagement
+  - `list_summaries(patient_id)` — list available summary types with segment availability flags
+  - `list_summary_blocks(patient_id, summary_type)` — list blocks within a summary (week / long_term)
+  - `get_summary(patient_id, summary_type, segment="week")` — compiled AI summary snapshot
+  - `get_summary_block(patient_id, summary_type, block_id, segment="week")` — single block with confidence scores
+  - `get_summary_recent_events(patient_id, summary_type, limit=50)` — live TEMP segment entries
+  - `get_event_logs(patient_id, since=None, limit=50, event_types=None, trace_type=None, trace_id=None)` — event log with optional trace, type, and time filtering
+  - `get_state_transitions(patient_id, ...)` — state transitions driven by events, with trace-based resolution
+  - `read_memories(patient_id, query=None, limit=100)` — patient memories with optional text search
+- **16 new response models** exported from `olira`: `StableDataResult`, `StableModule`, `EventStateModuleSummary`, `EventStateModuleResult`, `SummaryMeta`, `SummaryBlockMeta`, `SummaryBlocksListResult`, `SummaryResult`, `SummaryBlockResult`, `SummaryRecentEventsResult`, `EventLogEntry`, `EventLogsResult`, `StateTransitionEntry`, `StateTransitionsResult`, `MemoryEntry`, `MemoriesResult`.
+- All 11 methods available as module-level proxy functions on the singleton (`olira.get_event_logs(...)` etc.).
+
 ## [0.1.0a7] - 2026-04-17
 
 ### Added

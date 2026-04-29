@@ -16,9 +16,15 @@ from .models import (
     BatchResult,
     CreatePatientRequest,
     EsasItem,
+    EventLogEntry,
+    EventLogsResult,
+    EventStateModuleResult,
+    EventStateModuleSummary,
     ExternalIdentifier,
     LabResultItem,
     LogSpec,
+    MemoriesResult,
+    MemoryEntry,
     OliraEventType,
     OliraTrace,
     Patient,
@@ -27,6 +33,16 @@ from .models import (
     PatientListResult,
     PatientToken,
     PerformingLab,
+    StableDataResult,
+    StableModule,
+    StateTransitionEntry,
+    StateTransitionsResult,
+    SummaryBlockMeta,
+    SummaryBlockResult,
+    SummaryBlocksListResult,
+    SummaryMeta,
+    SummaryRecentEventsResult,
+    SummaryResult,
     TimePeriod,
     UpdatePatientRequest,
 )
@@ -63,6 +79,23 @@ __all__ = [
     "PatientBatchResult",
     "PatientListResult",
     "PatientToken",
+    # State-read response types
+    "StableModule",
+    "StableDataResult",
+    "EventStateModuleSummary",
+    "EventStateModuleResult",
+    "SummaryMeta",
+    "SummaryBlockMeta",
+    "SummaryBlocksListResult",
+    "SummaryResult",
+    "SummaryBlockResult",
+    "SummaryRecentEventsResult",
+    "EventLogEntry",
+    "EventLogsResult",
+    "StateTransitionEntry",
+    "StateTransitionsResult",
+    "MemoryEntry",
+    "MemoriesResult",
     # Module-level log functions
     "init",
     "flush",
@@ -76,6 +109,18 @@ __all__ = [
     "update_patient",
     "delete_patient",
     "get_patient_token",
+    # Module-level state-read functions
+    "get_stable_data",
+    "list_event_state_modules",
+    "get_event_state_module",
+    "list_summaries",
+    "list_summary_blocks",
+    "get_summary",
+    "get_summary_block",
+    "get_summary_recent_events",
+    "get_event_logs",
+    "get_state_transitions",
+    "read_memories",
 ]
 
 # Module-level singleton
@@ -271,3 +316,128 @@ def get_patient_token(*, patient_id: str) -> PatientToken:
     The returned JWT can be used as a Bearer token with the Olira MCP Patient State server.
     """
     return _get_client().get_patient_token(patient_id=patient_id)
+
+
+# --- State-read module-level proxies (sdk:state-read scope) ---
+
+
+def get_stable_data(*, patient_id: str, modules: list[str] | None = None) -> StableDataResult:
+    """Get stable patient data. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope. Pass ``modules`` to fetch only specific modules:
+    ``demographics``, ``condition_diagnosis``, ``medications``, ``user_preferences``.
+    """
+    return _get_client().get_stable_data(patient_id=patient_id, modules=modules)
+
+
+def list_event_state_modules(*, patient_id: str) -> list[EventStateModuleSummary]:
+    """List event state module types present for the patient. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().list_event_state_modules(patient_id=patient_id)
+
+
+def get_event_state_module(*, patient_id: str, module_type: str) -> EventStateModuleResult:
+    """Get a specific event state module by type. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().get_event_state_module(patient_id=patient_id, module_type=module_type)
+
+
+def list_summaries(*, patient_id: str) -> list[SummaryMeta]:
+    """List available summaries for the patient. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().list_summaries(patient_id=patient_id)
+
+
+def list_summary_blocks(*, patient_id: str, summary_type: str) -> SummaryBlocksListResult:
+    """List blocks within a specific summary. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().list_summary_blocks(patient_id=patient_id, summary_type=summary_type)
+
+
+def get_summary(*, patient_id: str, summary_type: str) -> SummaryResult:
+    """Get a summary snapshot. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope. Returns ``content["blocks"]`` (unified v2 model)
+    plus ``content["temp"]`` when live entries are present.
+    """
+    return _get_client().get_summary(patient_id=patient_id, summary_type=summary_type)
+
+
+def get_summary_block(*, patient_id: str, summary_type: str, block_id: str) -> SummaryBlockResult:
+    """Get a specific block from a summary. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().get_summary_block(patient_id=patient_id, summary_type=summary_type, block_id=block_id)
+
+
+def get_summary_recent_events(*, patient_id: str, summary_type: str, limit: int = 50) -> SummaryRecentEventsResult:
+    """Get recent TEMP events for a summary type. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().get_summary_recent_events(patient_id=patient_id, summary_type=summary_type, limit=limit)
+
+
+def get_event_logs(
+    *,
+    patient_id: str,
+    since: str | None = None,
+    limit: int = 50,
+    event_types: list[str] | None = None,
+    trace_type: str | None = None,
+    trace_id: str | None = None,
+) -> EventLogsResult:
+    """Get event logs for the patient. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().get_event_logs(
+        patient_id=patient_id,
+        since=since,
+        limit=limit,
+        event_types=event_types,
+        trace_type=trace_type,
+        trace_id=trace_id,
+    )
+
+
+def get_state_transitions(
+    *,
+    patient_id: str,
+    since: str | None = None,
+    event_log_type: str | None = None,
+    trace_type: str | None = None,
+    trace_id: str | None = None,
+    status: str = "complete",
+    limit: int = 50,
+) -> StateTransitionsResult:
+    """Get state transitions for the patient. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().get_state_transitions(
+        patient_id=patient_id,
+        since=since,
+        event_log_type=event_log_type,
+        trace_type=trace_type,
+        trace_id=trace_id,
+        status=status,
+        limit=limit,
+    )
+
+
+def read_memories(*, patient_id: str, query: str | None = None, limit: int = 100) -> MemoriesResult:
+    """Read memories for the patient. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope. Pass ``query`` for text search; omit to list all.
+    """
+    return _get_client().read_memories(patient_id=patient_id, query=query, limit=limit)

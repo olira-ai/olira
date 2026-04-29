@@ -10,15 +10,26 @@ from .http import AsyncHttpTransport, HttpTransport
 from .models import (
     BatchResult,
     CreatePatientRequest,
+    EventLogsResult,
+    EventStateModuleResult,
+    EventStateModuleSummary,
     ExternalIdentifier,
     LogSpec,
     LogWire,
+    MemoriesResult,
     OliraEventType,
     OliraTrace,
     Patient,
     PatientBatchResult,
     PatientListResult,
     PatientToken,
+    StableDataResult,
+    StateTransitionsResult,
+    SummaryBlockResult,
+    SummaryBlocksListResult,
+    SummaryMeta,
+    SummaryRecentEventsResult,
+    SummaryResult,
     UpdatePatientRequest,
 )
 from .queue import BackgroundWorker
@@ -269,6 +280,135 @@ class OliraClient:
         Bearer token.  It locks access to the specified patient for 15 minutes.
         """
         return self._transport.get_patient_token({"patient_id": patient_id})
+
+    # --- State-read methods (sdk:state-read scope) ---
+
+    def get_stable_data(
+        self,
+        *,
+        patient_id: str,
+        modules: list[str] | None = None,
+    ) -> StableDataResult:
+        """Get stable patient data (demographics, condition, medications, preferences).
+
+        Requires sdk:state-read scope. Pass ``modules`` to fetch only specific modules.
+        """
+        params: dict[str, Any] = {}
+        if modules:
+            params["modules"] = ",".join(modules)
+        return self._transport.get_stable_data(patient_id, params)
+
+    def list_event_state_modules(self, *, patient_id: str) -> list[EventStateModuleSummary]:
+        """List event state module types present for the patient. Requires sdk:state-read scope."""
+        raw = self._transport.list_event_state_modules(patient_id)
+        return [EventStateModuleSummary.model_validate(m) for m in raw]
+
+    def get_event_state_module(self, *, patient_id: str, module_type: str) -> EventStateModuleResult:
+        """Get a specific event state module by type. Requires sdk:state-read scope."""
+        return self._transport.get_event_state_module(patient_id, module_type)
+
+    def list_summaries(self, *, patient_id: str) -> list[SummaryMeta]:
+        """List available summaries for the patient. Requires sdk:state-read scope."""
+        raw = self._transport.list_summaries(patient_id)
+        return [SummaryMeta.model_validate(s) for s in raw]
+
+    def list_summary_blocks(self, *, patient_id: str, summary_type: str) -> SummaryBlocksListResult:
+        """List blocks within a specific summary. Requires sdk:state-read scope."""
+        return self._transport.list_summary_blocks(patient_id, summary_type)
+
+    def get_summary(
+        self,
+        *,
+        patient_id: str,
+        summary_type: str,
+    ) -> SummaryResult:
+        """Get a summary snapshot. Requires sdk:state-read scope.
+
+        Returns the unified block list under ``content["blocks"]`` (v2 model),
+        plus ``content["temp"]`` when live entries are present.
+        """
+        return self._transport.get_summary(patient_id, summary_type)
+
+    def get_summary_block(
+        self,
+        *,
+        patient_id: str,
+        summary_type: str,
+        block_id: str,
+    ) -> SummaryBlockResult:
+        """Get a specific block from a summary. Requires sdk:state-read scope."""
+        return self._transport.get_summary_block(patient_id, summary_type, block_id)
+
+    def get_summary_recent_events(
+        self,
+        *,
+        patient_id: str,
+        summary_type: str,
+        limit: int = 50,
+    ) -> SummaryRecentEventsResult:
+        """Get recent TEMP events for a summary type. Requires sdk:state-read scope."""
+        return self._transport.get_summary_recent_events(patient_id, summary_type, {"limit": limit})
+
+    def get_event_logs(
+        self,
+        *,
+        patient_id: str,
+        since: str | None = None,
+        limit: int = 50,
+        event_types: list[str] | None = None,
+        trace_type: str | None = None,
+        trace_id: str | None = None,
+    ) -> EventLogsResult:
+        """Get event logs for the patient. Requires sdk:state-read scope."""
+        params: dict[str, Any] = {"limit": limit}
+        if since:
+            params["since"] = since
+        if event_types:
+            params["event_types"] = ",".join(event_types)
+        if trace_type:
+            params["trace_type"] = trace_type
+        if trace_id:
+            params["trace_id"] = trace_id
+        return self._transport.get_event_logs(patient_id, params)
+
+    def get_state_transitions(
+        self,
+        *,
+        patient_id: str,
+        since: str | None = None,
+        event_log_type: str | None = None,
+        trace_type: str | None = None,
+        trace_id: str | None = None,
+        status: str = "complete",
+        limit: int = 50,
+    ) -> StateTransitionsResult:
+        """Get state transitions for the patient. Requires sdk:state-read scope."""
+        params: dict[str, Any] = {"status": status, "limit": limit}
+        if since:
+            params["since"] = since
+        if event_log_type:
+            params["event_log_type"] = event_log_type
+        if trace_type:
+            params["trace_type"] = trace_type
+        if trace_id:
+            params["trace_id"] = trace_id
+        return self._transport.get_state_transitions(patient_id, params)
+
+    def read_memories(
+        self,
+        *,
+        patient_id: str,
+        query: str | None = None,
+        limit: int = 100,
+    ) -> MemoriesResult:
+        """Read memories for the patient. Requires sdk:state-read scope.
+
+        Pass ``query`` for text-based search; omit to list all memories up to ``limit``.
+        """
+        params: dict[str, Any] = {"limit": limit}
+        if query:
+            params["query"] = query
+        return self._transport.read_memories(patient_id, params)
 
     def flush(self) -> None:
         """Block until all queued events are sent (or failed)."""
@@ -560,6 +700,147 @@ class AsyncOliraClient:
                 "AsyncOliraClient must be used as an async context manager before calling get_patient_token()"
             )
         return await self._transport.get_patient_token({"patient_id": patient_id})
+
+    # --- State-read methods (sdk:state-read scope) ---
+
+    def _require_transport(self, method: str) -> AsyncHttpTransport:
+        if self._transport is None:
+            raise ValidationError(
+                f"AsyncOliraClient must be used as an async context manager before calling {method}()"
+            )
+        return self._transport
+
+    async def get_stable_data(
+        self,
+        *,
+        patient_id: str,
+        modules: list[str] | None = None,
+    ) -> StableDataResult:
+        """Get stable patient data. Requires sdk:state-read scope."""
+        transport = self._require_transport("get_stable_data")
+        params: dict[str, Any] = {}
+        if modules:
+            params["modules"] = ",".join(modules)
+        return await transport.get_stable_data(patient_id, params)
+
+    async def list_event_state_modules(self, *, patient_id: str) -> list[EventStateModuleSummary]:
+        """List event state module types present for the patient. Requires sdk:state-read scope."""
+        transport = self._require_transport("list_event_state_modules")
+        raw = await transport.list_event_state_modules(patient_id)
+        return [EventStateModuleSummary.model_validate(m) for m in raw]
+
+    async def get_event_state_module(self, *, patient_id: str, module_type: str) -> EventStateModuleResult:
+        """Get a specific event state module by type. Requires sdk:state-read scope."""
+        transport = self._require_transport("get_event_state_module")
+        return await transport.get_event_state_module(patient_id, module_type)
+
+    async def list_summaries(self, *, patient_id: str) -> list[SummaryMeta]:
+        """List available summaries for the patient. Requires sdk:state-read scope."""
+        transport = self._require_transport("list_summaries")
+        raw = await transport.list_summaries(patient_id)
+        return [SummaryMeta.model_validate(s) for s in raw]
+
+    async def list_summary_blocks(self, *, patient_id: str, summary_type: str) -> SummaryBlocksListResult:
+        """List blocks within a specific summary. Requires sdk:state-read scope."""
+        transport = self._require_transport("list_summary_blocks")
+        return await transport.list_summary_blocks(patient_id, summary_type)
+
+    async def get_summary(
+        self,
+        *,
+        patient_id: str,
+        summary_type: str,
+    ) -> SummaryResult:
+        """Get a summary snapshot. Requires sdk:state-read scope.
+
+        Returns the unified block list under ``content["blocks"]`` (v2 model),
+        plus ``content["temp"]`` when live entries are present.
+        """
+        transport = self._require_transport("get_summary")
+        return await transport.get_summary(patient_id, summary_type)
+
+    async def get_summary_block(
+        self,
+        *,
+        patient_id: str,
+        summary_type: str,
+        block_id: str,
+    ) -> SummaryBlockResult:
+        """Get a specific block from a summary. Requires sdk:state-read scope."""
+        transport = self._require_transport("get_summary_block")
+        return await transport.get_summary_block(patient_id, summary_type, block_id)
+
+    async def get_summary_recent_events(
+        self,
+        *,
+        patient_id: str,
+        summary_type: str,
+        limit: int = 50,
+    ) -> SummaryRecentEventsResult:
+        """Get recent TEMP events for a summary type. Requires sdk:state-read scope."""
+        transport = self._require_transport("get_summary_recent_events")
+        return await transport.get_summary_recent_events(patient_id, summary_type, {"limit": limit})
+
+    async def get_event_logs(
+        self,
+        *,
+        patient_id: str,
+        since: str | None = None,
+        limit: int = 50,
+        event_types: list[str] | None = None,
+        trace_type: str | None = None,
+        trace_id: str | None = None,
+    ) -> EventLogsResult:
+        """Get event logs for the patient. Requires sdk:state-read scope."""
+        transport = self._require_transport("get_event_logs")
+        params: dict[str, Any] = {"limit": limit}
+        if since:
+            params["since"] = since
+        if event_types:
+            params["event_types"] = ",".join(event_types)
+        if trace_type:
+            params["trace_type"] = trace_type
+        if trace_id:
+            params["trace_id"] = trace_id
+        return await transport.get_event_logs(patient_id, params)
+
+    async def get_state_transitions(
+        self,
+        *,
+        patient_id: str,
+        since: str | None = None,
+        event_log_type: str | None = None,
+        trace_type: str | None = None,
+        trace_id: str | None = None,
+        status: str = "complete",
+        limit: int = 50,
+    ) -> StateTransitionsResult:
+        """Get state transitions for the patient. Requires sdk:state-read scope."""
+        transport = self._require_transport("get_state_transitions")
+        params: dict[str, Any] = {"status": status, "limit": limit}
+        if since:
+            params["since"] = since
+        if event_log_type:
+            params["event_log_type"] = event_log_type
+        if trace_type:
+            params["trace_type"] = trace_type
+        if trace_id:
+            params["trace_id"] = trace_id
+        return await transport.get_state_transitions(patient_id, params)
+
+    async def read_memories(
+        self,
+        *,
+        patient_id: str,
+        query: str | None = None,
+        limit: int = 100,
+    ) -> MemoriesResult:
+        """Read memories for the patient. Requires sdk:state-read scope."""
+        transport = self._require_transport("read_memories")
+        params: dict[str, Any] = {"limit": limit}
+        if query:
+            params["query"] = query
+        return await transport.read_memories(patient_id, params)
 
     async def flush(self) -> None:
         drained: list[LogWire] = []

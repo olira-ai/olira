@@ -7,7 +7,7 @@ The Olira Python SDK provides a typed client for logging health events,
 managing patients, and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `0.1.0a7`
+**Package:** `olira` — **Version:** `0.1.0a8`
 
 ---
 
@@ -166,6 +166,7 @@ olira configure cursor  # Write MCP server config to .cursor/mcp.json
 | `sdk:event-log`        | Log health events via `log()` and `log_batch()`                |
 | `api:manage-patients`  | Create, read, update, delete patients                          |
 | `sdk:patient-token`    | Mint patient-scoped JWTs via `get_patient_token()`             |
+| `sdk:state-read`       | Read patient state — stable data, event modules, summaries, event logs, state transitions, memories |
 | `mcp:patient-state`    | Query patient state via the MCP Patient State server           |
 
 ---
@@ -888,6 +889,587 @@ token = olira.get_patient_token(patient_id="patient-uuid")
 # Pass token.access_token to your frontend / AI agent
 print(f"Token expires in {token.expires_in}s")
 ```
+
+---
+
+## Patient State — Read
+
+The state-read methods give Python backends direct access to the same compiled patient state that the [MCP Patient State server](https://olira.ai/api-docs) exposes to AI agents — without going through JSON-RPC. They are a REST-backed mirror of the MCP tools, returning raw structured data rather than agent-formatted text.
+
+All state-read functions require an API key with the `sdk:state-read` scope.
+
+| SDK method | MCP tool equivalent |
+| --- | --- |
+| `get_stable_data` | `get_stable_data` |
+| `list_event_state_modules` | `list_event_state_modules` |
+| `get_event_state_module` | `get_event_state_module` |
+| `list_summaries` | `list_summaries_and_blocks` (list mode) |
+| `list_summary_blocks` | `list_summaries_and_blocks` (blocks mode) |
+| `get_summary` | `get_summary` |
+| `get_summary_block` | `get_summary_block` |
+| `get_summary_recent_events` | `get_summary_recent_events` |
+| `get_event_logs` | `get_event_logs` |
+| `get_state_transitions` | `get_state_transitions` |
+| `read_memories` | `read_memories` (list-all mode) |
+
+**Key differences from the MCP:**
+- Returns raw structured data — no pretty-printed markdown rendering
+- `read_memories(query=...)` uses MongoDB text search; the MCP uses Qdrant semantic search
+- `write_memory` is not exposed — memory writes remain MCP/agent-only
+
+---
+
+### Stable data
+
+#### `get_stable_data`
+
+```python
+get_stable_data(*, patient_id: str, modules: list[str] | None = None) -> StableDataResult
+```
+
+Get stable patient data (demographics, condition/diagnosis, medications, preferences). Mirrors `get_stable_data` on the MCP.
+
+| Parameter    | Required | Type            | Default |
+| ------------ | -------- | --------------- | ------- |
+| `patient_id` | Yes      | `str`           | —       |
+| `modules`    | No       | `list[str] \| None` | `None` (all) |
+
+Valid module names (`StableModuleType`): `demographics`, `condition_diagnosis`, `medications`, `user_preferences`, `emergency_contact`, `care_team`, `insurance`, `social`, `pharmacy`, `procedures`, `allergies`, `immunizations`, `devices`, `family_history`. Which are populated depends on what data has been ingested for this patient. Omit `modules` to fetch all.
+
+**Example:**
+
+```python
+result = olira.get_stable_data(patient_id="patient-uuid")
+demo = result.modules.get("demographics")
+if demo:
+    print(demo.payload)
+```
+
+**Mock response:**
+
+```json
+{
+  "patient_id": "507f1f77bcf86cd799439011",
+  "modules": {
+    "demographics": {
+      "module_type": "demographics",
+      "payload": {"value": {"first_name": "Jane", "last_name": "Smith", "date_of_birth": "1975-06-15", "sex": "female", "timezone": "America/New_York"}},
+      "created_at": "2026-01-10T08:00:00+00:00",
+      "updated_at": "2026-03-18T14:22:00+00:00"
+    },
+    "condition_diagnosis": {
+      "module_type": "condition_diagnosis",
+      "payload": {"value": {"primary_disease_site": "breast", "disease_stage": "Stage II"}},
+      "created_at": "2026-01-10T08:00:00+00:00",
+      "updated_at": "2026-01-10T08:00:00+00:00"
+    }
+  }
+}
+```
+
+---
+
+### Event state modules
+
+#### `list_event_state_modules`
+
+```python
+list_event_state_modules(*, patient_id: str) -> list[EventStateModuleSummary]
+```
+
+List event state module types present for the patient.
+
+**Example:**
+
+```python
+modules = olira.list_event_state_modules(patient_id="patient-uuid")
+for m in modules:
+    print(m.module_type, m.updated_at)
+```
+
+**Mock response (list items):**
+
+```json
+[
+  {"module_type": "symptoms", "updated_at": "2026-03-18T10:00:00+00:00", "created_at": "2026-01-10T08:00:00+00:00"},
+  {"module_type": "adherence", "updated_at": "2026-03-17T09:30:00+00:00", "created_at": "2026-01-10T08:00:00+00:00"},
+  {"module_type": "engagement", "updated_at": "2026-03-18T12:00:00+00:00", "created_at": "2026-01-10T08:00:00+00:00"}
+]
+```
+
+#### `get_event_state_module`
+
+```python
+get_event_state_module(*, patient_id: str, module_type: str) -> EventStateModuleResult
+```
+
+Get a specific event state module by type. Mirrors `get_event_state_module` on the MCP.
+
+Valid module types (`EventStateModuleType`): `symptoms`, `emotional_state`, `adherence`, `physical_activity`, `engagement`, `heart`, `sleep`, `lab_results`, `vitals`, `clinical_context`, `questionnaires`, `conversations`, `glucose`. Use `list_event_state_modules()` to discover which are present and populated for a specific patient.
+
+**Example:**
+
+```python
+module = olira.get_event_state_module(patient_id="patient-uuid", module_type="symptoms")
+print(module.payload)
+```
+
+**Mock response:**
+
+```json
+{
+  "patient_id": "507f1f77bcf86cd799439011",
+  "module_type": "symptoms",
+  "payload": {
+    "week_symptoms": [
+      {"name": "pain", "score": 4, "ctcae_grade": 1, "updated_at": "2026-03-18T10:00:00+00:00"},
+      {"name": "fatigue", "score": 6, "ctcae_grade": 2, "updated_at": "2026-03-18T10:00:00+00:00"}
+    ],
+    "functional_class_history": []
+  },
+  "created_at": "2026-01-10T08:00:00+00:00",
+  "updated_at": "2026-03-18T10:00:00+00:00"
+}
+```
+
+> **Note:** Payload shape is module-type-specific and org-configured. The `symptoms` module uses `week_symptoms` / `functional_class_history`; other modules have different shapes. Treat `payload` as an opaque dict — its structure mirrors what the MCP's `get_event_state_module` returns in `format: "raw"` mode.
+
+---
+
+### Summaries
+
+#### `list_summaries`
+
+```python
+list_summaries(*, patient_id: str) -> list[SummaryMeta]
+```
+
+List available summary types for the patient.
+
+**Example:**
+
+```python
+summaries = olira.list_summaries(patient_id="patient-uuid")
+for s in summaries:
+    print(s.summary_type, s.has_blocks, s.has_temp)
+```
+
+**Mock response (list items):**
+
+```json
+[
+  {"summary_type": "symptom_snapshot", "summary_id": "66f1a2b3c4d5e6f7a8b9c0d1", "has_blocks": true, "has_temp": true},
+  {"summary_type": "medication_snapshot", "summary_id": "66f1a2b3c4d5e6f7a8b9c0d2", "has_blocks": true, "has_temp": true}
+]
+```
+
+#### `list_summary_blocks`
+
+```python
+list_summary_blocks(*, patient_id: str, summary_type: str) -> SummaryBlocksListResult
+```
+
+List blocks within a specific summary. Returns the unified block list (`content.blocks`).
+
+**Example:**
+
+```python
+result = olira.list_summary_blocks(patient_id="patient-uuid", summary_type="symptom_snapshot")
+for block in result.blocks:
+    print(block.block_id, block.has_result)
+```
+
+#### `get_summary`
+
+```python
+get_summary(*, patient_id: str, summary_type: str) -> SummaryResult
+```
+
+Get a compiled summary snapshot. Returns the unified block list under `content["blocks"]`
+plus live TEMP entries under `content["temp"]` when present.
+
+| Parameter      | Required | Type  | Default |
+| -------------- | -------- | ----- | ------- |
+| `patient_id`   | Yes      | `str` | —       |
+| `summary_type` | Yes      | `str` | —       |
+
+**Example:**
+
+```python
+summary = olira.get_summary(
+    patient_id="patient-uuid",
+    summary_type="symptom_snapshot",
+)
+print(summary.content)
+```
+
+**Mock response:**
+
+```json
+{
+  "patient_id": "507f1f77bcf86cd799439011",
+  "summary_type": "symptom_snapshot",
+  "summary_id": "66f1a2b3c4d5e6f7a8b9c0d1",
+  "valid_from": "2026-03-11T00:00:00+00:00",
+  "valid_to": "2026-03-18T00:00:00+00:00",
+  "content": {
+    "blocks": [
+      {"id": "symptom_overview", "name": "Symptom Overview", "text": "Patient reported moderate pain (4/10) and significant fatigue (6/10) over the past 7 days."},
+      {"id": "symptom_trends", "name": "Symptom Trends", "text": "Fatigue has been stable week-over-week. Pain has increased from 3/10 to 4/10."}
+    ],
+    "temp": [
+      "2026-03-18 10:00 — symptom_report: pain 4/10, fatigue 6/10 (esas_r)"
+    ]
+  }
+}
+```
+
+#### `get_summary_block`
+
+```python
+get_summary_block(*, patient_id: str, summary_type: str, block_id: str) -> SummaryBlockResult
+```
+
+Get a specific block from the unified block list.
+
+**Example:**
+
+```python
+block = olira.get_summary_block(
+    patient_id="patient-uuid",
+    summary_type="symptom_snapshot",
+    block_id="symptom_overview",
+)
+print(block.content, block.confidences)
+```
+
+#### `get_summary_recent_events`
+
+```python
+get_summary_recent_events(*, patient_id: str, summary_type: str, limit: int = 50) -> SummaryRecentEventsResult
+```
+
+Get live TEMP entries for a summary (appended as events arrive, no AI processing lag).
+
+**Example:**
+
+```python
+recent = olira.get_summary_recent_events(
+    patient_id="patient-uuid",
+    summary_type="symptom_snapshot",
+    limit=10,
+)
+for entry in recent.entries:
+    print(entry)
+```
+
+**Mock response:**
+
+```json
+{
+  "patient_id": "507f1f77bcf86cd799439011",
+  "summary_type": "symptom_snapshot",
+  "entries": [
+    "2026-03-18 10:00 — symptom_report: pain 4/10, fatigue 6/10 (esas_r)",
+    "2026-03-17 09:15 — symptom_report: nausea 2/10, pain 3/10 (esas_r)"
+  ],
+  "count": 2,
+  "total_count": 14
+}
+```
+
+---
+
+### Event logs & state transitions
+
+#### `get_event_logs`
+
+```python
+get_event_logs(
+    *,
+    patient_id: str,
+    since: str | None = None,
+    limit: int = 50,
+    event_types: list[str] | None = None,
+    trace_type: str | None = None,
+    trace_id: str | None = None,
+) -> EventLogsResult
+```
+
+Get event logs with optional filters.
+
+| Parameter     | Required | Type              | Default |
+| ------------- | -------- | ----------------- | ------- |
+| `patient_id`  | Yes      | `str`             | —       |
+| `since`       | No       | `str \| None`     | `None`  |
+| `limit`       | No       | `int`             | `50`    |
+| `event_types` | No       | `list[str] \| None` | `None` |
+| `trace_type`  | No       | `str \| None`     | `None`  |
+| `trace_id`    | No       | `str \| None`     | `None`  |
+
+**Examples:**
+
+```python
+# Recent symptom and vitals events
+logs = olira.get_event_logs(
+    patient_id="patient-uuid",
+    since="2026-03-11T00:00:00Z",
+    event_types=["symptom_report", "vitals_measurement"],
+)
+
+# Events tied to a specific conversation
+logs = olira.get_event_logs(
+    patient_id="patient-uuid",
+    trace_type="conversation",
+    trace_id="conv-abc-123",
+)
+for entry in logs.event_logs:
+    print(entry.type, entry.timestamp, entry.payload)
+```
+
+**Mock response:**
+
+```json
+{
+  "patient_id": "507f1f77bcf86cd799439011",
+  "count": 2,
+  "event_logs": [
+    {
+      "id": "66f1a2b3c4d5e6f7a8b9c0d3",
+      "type": "symptom_report",
+      "timestamp": "2026-03-18T10:00:00+00:00",
+      "payload": {"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 4}, {"name": "fatigue", "score": 6}]},
+      "trace": {"object_type": "conversation", "object_id": "conv-abc-123"}
+    },
+    {
+      "id": "66f1a2b3c4d5e6f7a8b9c0d4",
+      "type": "moods_report",
+      "timestamp": "2026-03-18T10:01:00+00:00",
+      "payload": {"moods": [{"mood": "anxious", "intensity": 3}]},
+      "trace": {"object_type": "conversation", "object_id": "conv-abc-123"}
+    }
+  ]
+}
+```
+
+#### `get_state_transitions`
+
+```python
+get_state_transitions(
+    *,
+    patient_id: str,
+    since: str | None = None,
+    event_log_type: str | None = None,
+    trace_type: str | None = None,
+    trace_id: str | None = None,
+    status: str = "complete",
+    limit: int = 50,
+) -> StateTransitionsResult
+```
+
+Get state transitions driven by events. When `trace_type` / `trace_id` are supplied, the server first resolves matching EventLog IDs, then returns transitions driven by those events.
+
+**Example:**
+
+```python
+transitions = olira.get_state_transitions(
+    patient_id="patient-uuid",
+    trace_type="conversation",
+    trace_id="conv-abc-123",
+)
+for t in transitions.state_transitions:
+    print(t.event_log_type, t.triggered_at, t.changes)
+```
+
+---
+
+### Memories
+
+#### `read_memories`
+
+```python
+read_memories(*, patient_id: str, query: str | None = None, limit: int = 100) -> MemoriesResult
+```
+
+Read patient memories. Pass `query` for text-based search; omit to list all.
+
+> **Note:** `query` uses MongoDB substring search, not the semantic (vector) search the MCP uses. For semantic retrieval, use `read_memories` on the MCP server directly. List-all (no `query`) is identical between the SDK and MCP.
+
+| Parameter    | Required | Type          | Default |
+| ------------ | -------- | ------------- | ------- |
+| `patient_id` | Yes      | `str`         | —       |
+| `query`      | No       | `str \| None` | `None`  |
+| `limit`      | No       | `int`         | `100`   |
+
+**Example:**
+
+```python
+memories = olira.read_memories(patient_id="patient-uuid", query="fatigue")
+for m in memories.results:
+    print(m.memory_id, m.content)
+```
+
+**Mock response:**
+
+```json
+{
+  "patient_id": "507f1f77bcf86cd799439011",
+  "count": 2,
+  "results": [
+    {
+      "memory_id": "mem-001",
+      "content": "Patient reports fatigue worsens in the afternoon after chemotherapy sessions.",
+      "metadata": null,
+      "created_at": "2026-03-01T09:00:00+00:00",
+      "updated_at": "2026-03-01T09:00:00+00:00"
+    },
+    {
+      "memory_id": "mem-002",
+      "content": "Patient mentioned fatigue is interfering with daily activities, especially cooking.",
+      "metadata": null,
+      "created_at": "2026-03-10T14:30:00+00:00",
+      "updated_at": "2026-03-10T14:30:00+00:00"
+    }
+  ]
+}
+```
+
+---
+
+### State-read response models
+
+### `StableModule`
+
+| Field         | Type                    | Description                   |
+| ------------- | ----------------------- | ----------------------------- |
+| `module_type` | `str`                   | Module key                    |
+| `payload`     | `dict \| None`          | Raw module data               |
+| `created_at`  | `str \| None`           | ISO 8601 timestamp            |
+| `updated_at`  | `str \| None`           | ISO 8601 timestamp            |
+
+### `StableDataResult`
+
+| Field       | Type                        | Description              |
+| ----------- | --------------------------- | ------------------------ |
+| `patient_id` | `str`                      | Patient ID               |
+| `modules`   | `dict[str, StableModule]`   | Modules keyed by type    |
+
+### `EventStateModuleSummary`
+
+| Field         | Type          | Description        |
+| ------------- | ------------- | ------------------ |
+| `module_type` | `str`         | Module type key    |
+| `updated_at`  | `str \| None` | ISO 8601 timestamp |
+| `created_at`  | `str \| None` | ISO 8601 timestamp |
+
+### `EventStateModuleResult`
+
+| Field         | Type                        | Description        |
+| ------------- | --------------------------- | ------------------ |
+| `patient_id`  | `str`                       | Patient ID         |
+| `module_type` | `str`                       | Module type        |
+| `payload`     | `dict \| list \| None`      | Module data        |
+| `created_at`  | `str \| None`               | ISO 8601 timestamp |
+| `updated_at`  | `str \| None`               | ISO 8601 timestamp |
+
+### `SummaryMeta`
+
+| Field          | Type   | Description                       |
+| -------------- | ------ | --------------------------------- |
+| `summary_type` | `str`  | Summary type key                  |
+| `summary_id`   | `str`  | MongoDB document ID               |
+| `has_blocks`   | `bool` | Unified block list available      |
+| `has_temp`     | `bool` | TEMP (live) entries available     |
+
+### `SummaryResult`
+
+| Field          | Type              | Description                             |
+| -------------- | ----------------- | --------------------------------------- |
+| `patient_id`   | `str`             | Patient ID                              |
+| `summary_type` | `str`             | Summary type                            |
+| `summary_id`   | `str \| None`     | MongoDB document ID                     |
+| `valid_from`   | `str \| None`     | Summary coverage start (ISO 8601)       |
+| `valid_to`     | `str \| None`     | Summary coverage end (ISO 8601)         |
+| `content`      | `dict[str, Any]`  | `"blocks"` → unified block list; `"temp"` → live TEMP entries |
+
+### `SummaryBlockResult`
+
+| Field          | Type                    | Description             |
+| -------------- | ----------------------- | ----------------------- |
+| `patient_id`   | `str`                   | Patient ID              |
+| `summary_type` | `str`                   | Summary type            |
+| `block_id`     | `str`                   | Block identifier        |
+| `content`      | `str \| None`           | Generated block text (raw, without MCP's pretty-print header) |
+| `confidences`  | `dict[str, float] \| None` | Confidence scores    |
+| `updated_at`   | `str \| None`           | ISO 8601 timestamp      |
+
+### `SummaryRecentEventsResult`
+
+| Field          | Type         | Description                        |
+| -------------- | ------------ | ---------------------------------- |
+| `patient_id`   | `str`        | Patient ID                         |
+| `summary_type` | `str`        | Summary type                       |
+| `entries`      | `list[str]`  | TEMP entries (most recent `limit`) |
+| `count`        | `int`        | Number of entries returned         |
+| `total_count`  | `int`        | Total TEMP entries in store        |
+
+### `EventLogEntry`
+
+| Field       | Type                 | Description         |
+| ----------- | -------------------- | ------------------- |
+| `id`        | `str`                | MongoDB document ID |
+| `type`      | `str \| None`        | Event type string   |
+| `timestamp` | `str \| None`        | ISO 8601 timestamp  |
+| `payload`   | `dict[str, Any]`     | Event payload       |
+| `trace`     | `OliraTrace \| None` | Provenance trace    |
+
+### `EventLogsResult`
+
+| Field        | Type                   | Description       |
+| ------------ | ---------------------- | ----------------- |
+| `patient_id` | `str`                  | Patient ID        |
+| `count`      | `int`                  | Number of entries |
+| `event_logs` | `list[EventLogEntry]`  | Event log entries |
+
+### `StateTransitionEntry`
+
+| Field                 | Type                   | Description                    |
+| --------------------- | ---------------------- | ------------------------------ |
+| `id`                  | `str`                  | MongoDB document ID            |
+| `trigger`             | `str \| None`          | `event_log` or `summary_block` |
+| `event_log_type`      | `str \| None`          | Originating event type         |
+| `status`              | `str \| None`          | `complete`, `pending`, `failed`|
+| `triggered_at`        | `str \| None`          | ISO 8601 timestamp             |
+| `completed_at`        | `str \| None`          | ISO 8601 timestamp             |
+| `source_event_log_id` | `str \| None`          | Originating EventLog ID        |
+| `event_log_payload`   | `dict \| None`         | Payload from the source event  |
+| `changes`             | `dict \| None`         | State changes applied          |
+
+### `StateTransitionsResult`
+
+| Field               | Type                          | Description       |
+| ------------------- | ----------------------------- | ----------------- |
+| `patient_id`        | `str`                         | Patient ID        |
+| `count`             | `int`                         | Number of entries |
+| `state_transitions` | `list[StateTransitionEntry]`  | Transitions       |
+
+### `MemoryEntry`
+
+| Field        | Type               | Description          |
+| ------------ | ------------------ | -------------------- |
+| `memory_id`  | `str`              | Memory identifier    |
+| `content`    | `str`              | Memory text          |
+| `metadata`   | `dict \| None`     | Optional metadata    |
+| `created_at` | `str \| None`      | ISO 8601 timestamp   |
+| `updated_at` | `str \| None`      | ISO 8601 timestamp   |
+
+### `MemoriesResult`
+
+| Field        | Type                 | Description       |
+| ------------ | -------------------- | ----------------- |
+| `patient_id` | `str`                | Patient ID        |
+| `count`      | `int`                | Number of results |
+| `results`    | `list[MemoryEntry]`  | Memory records    |
 
 ---
 
