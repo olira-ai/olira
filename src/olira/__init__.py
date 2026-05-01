@@ -16,16 +16,18 @@ from .models import (
     BatchResult,
     CreatePatientRequest,
     EsasItem,
-    EventLogEntry,
-    EventLogsResult,
+    EventEntry,
+    EventsResult,
     EventStateModuleResult,
     EventStateModuleSummary,
     ExternalIdentifier,
     LabResultItem,
+    LogEntry,
     LogSpec,
+    LogsResult,
     MemoriesResult,
     MemoryEntry,
-    OliraEventType,
+    OliraLogType,
     OliraTrace,
     Patient,
     PatientBatchItem,
@@ -35,16 +37,14 @@ from .models import (
     PerformingLab,
     StableDataResult,
     StableModule,
-    StateTransitionEntry,
-    StateTransitionsResult,
-    SummaryBlockMeta,
-    SummaryBlockResult,
-    SummaryBlocksListResult,
-    SummaryMeta,
-    SummaryRecentEventsResult,
-    SummaryResult,
     TimePeriod,
     UpdatePatientRequest,
+    ViewBlockMeta,
+    ViewBlockResult,
+    ViewBlocksListResult,
+    ViewMeta,
+    ViewRecentEventsResult,
+    ViewResult,
 )
 from .version import __version__
 
@@ -59,8 +59,8 @@ __all__ = [
     "ValidationError",
     "ServerError",
     "NetworkError",
-    # Event types and helpers
-    "OliraEventType",
+    # Log types and helpers
+    "OliraLogType",
     "OliraTrace",
     "EsasItem",
     "LabResultItem",
@@ -84,16 +84,16 @@ __all__ = [
     "StableDataResult",
     "EventStateModuleSummary",
     "EventStateModuleResult",
-    "SummaryMeta",
-    "SummaryBlockMeta",
-    "SummaryBlocksListResult",
-    "SummaryResult",
-    "SummaryBlockResult",
-    "SummaryRecentEventsResult",
-    "EventLogEntry",
-    "EventLogsResult",
-    "StateTransitionEntry",
-    "StateTransitionsResult",
+    "ViewMeta",
+    "ViewBlockMeta",
+    "ViewBlocksListResult",
+    "ViewResult",
+    "ViewBlockResult",
+    "ViewRecentEventsResult",
+    "LogEntry",
+    "LogsResult",
+    "EventEntry",
+    "EventsResult",
     "MemoryEntry",
     "MemoriesResult",
     # Module-level log functions
@@ -113,13 +113,13 @@ __all__ = [
     "get_stable_data",
     "list_event_state_modules",
     "get_event_state_module",
-    "list_summaries",
-    "list_summary_blocks",
-    "get_summary",
-    "get_summary_block",
-    "get_summary_recent_events",
-    "get_event_logs",
-    "get_state_transitions",
+    "list_views",
+    "list_view_blocks",
+    "get_view",
+    "get_view_block",
+    "get_view_recent_events",
+    "get_logs",
+    "get_events",
     "read_memories",
 ]
 
@@ -163,26 +163,26 @@ def init(
 
 def _get_client() -> OliraClient:
     if _client is None:
-        raise OliraError("olira.init() must be called before logging events")
+        raise OliraError("olira.init() must be called before logging")
     return _client
 
 
 def flush() -> None:
-    """Block until all queued events are sent."""
+    """Block until all queued logs are sent."""
     _get_client().flush()
 
 
 def log(
     *,
-    event_type: OliraEventType,
+    log_type: OliraLogType,
     patient_id: str,
     payload: dict[str, Any] | None = None,
     trace: OliraTrace | None = None,
     timestamp: str | None = None,
 ) -> None:
-    """Enqueue an event for background delivery. Module-level proxy to the singleton client."""
+    """Enqueue a log for background delivery. Module-level proxy to the singleton client."""
     _get_client().log(
-        event_type=event_type,
+        log_type=log_type,
         patient_id=patient_id,
         payload=payload,
         trace=trace,
@@ -191,7 +191,7 @@ def log(
 
 
 def log_batch(events: list[LogSpec]) -> BatchResult:
-    """Send a batch of events directly. Module-level proxy to the singleton client."""
+    """Send a batch of logs directly. Module-level proxy to the singleton client."""
     return _get_client().log_batch(events)
 
 
@@ -346,88 +346,88 @@ def get_event_state_module(*, patient_id: str, module_type: str) -> EventStateMo
     return _get_client().get_event_state_module(patient_id=patient_id, module_type=module_type)
 
 
-def list_summaries(*, patient_id: str) -> list[SummaryMeta]:
-    """List available summaries for the patient. Module-level proxy to the singleton client.
+def list_views(*, patient_id: str) -> list[ViewMeta]:
+    """List available views for the patient. Module-level proxy to the singleton client.
 
     Requires sdk:state-read scope.
     """
-    return _get_client().list_summaries(patient_id=patient_id)
+    return _get_client().list_views(patient_id=patient_id)
 
 
-def list_summary_blocks(*, patient_id: str, summary_type: str) -> SummaryBlocksListResult:
-    """List blocks within a specific summary. Module-level proxy to the singleton client.
+def list_view_blocks(*, patient_id: str, view_type: str) -> ViewBlocksListResult:
+    """List blocks within a specific view. Module-level proxy to the singleton client.
 
     Requires sdk:state-read scope.
     """
-    return _get_client().list_summary_blocks(patient_id=patient_id, summary_type=summary_type)
+    return _get_client().list_view_blocks(patient_id=patient_id, view_type=view_type)
 
 
-def get_summary(*, patient_id: str, summary_type: str) -> SummaryResult:
-    """Get a summary snapshot. Module-level proxy to the singleton client.
+def get_view(*, patient_id: str, view_type: str) -> ViewResult:
+    """Get a view snapshot. Module-level proxy to the singleton client.
 
     Requires sdk:state-read scope. Returns ``content["blocks"]`` (unified v2 model)
     plus ``content["temp"]`` when live entries are present.
     """
-    return _get_client().get_summary(patient_id=patient_id, summary_type=summary_type)
+    return _get_client().get_view(patient_id=patient_id, view_type=view_type)
 
 
-def get_summary_block(*, patient_id: str, summary_type: str, block_id: str) -> SummaryBlockResult:
-    """Get a specific block from a summary. Module-level proxy to the singleton client.
-
-    Requires sdk:state-read scope.
-    """
-    return _get_client().get_summary_block(patient_id=patient_id, summary_type=summary_type, block_id=block_id)
-
-
-def get_summary_recent_events(*, patient_id: str, summary_type: str, limit: int = 50) -> SummaryRecentEventsResult:
-    """Get recent TEMP events for a summary type. Module-level proxy to the singleton client.
+def get_view_block(*, patient_id: str, view_type: str, block_id: str) -> ViewBlockResult:
+    """Get a specific block from a view. Module-level proxy to the singleton client.
 
     Requires sdk:state-read scope.
     """
-    return _get_client().get_summary_recent_events(patient_id=patient_id, summary_type=summary_type, limit=limit)
+    return _get_client().get_view_block(patient_id=patient_id, view_type=view_type, block_id=block_id)
 
 
-def get_event_logs(
+def get_view_recent_events(*, patient_id: str, view_type: str, limit: int = 50) -> ViewRecentEventsResult:
+    """Get recent TEMP events for a view type. Module-level proxy to the singleton client.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().get_view_recent_events(patient_id=patient_id, view_type=view_type, limit=limit)
+
+
+def get_logs(
     *,
     patient_id: str,
     since: str | None = None,
     limit: int = 50,
-    event_types: list[str] | None = None,
+    log_types: list[str] | None = None,
     trace_type: str | None = None,
     trace_id: str | None = None,
-) -> EventLogsResult:
-    """Get event logs for the patient. Module-level proxy to the singleton client.
+) -> LogsResult:
+    """Get logs for the patient. Module-level proxy to the singleton client.
 
     Requires sdk:state-read scope.
     """
-    return _get_client().get_event_logs(
+    return _get_client().get_logs(
         patient_id=patient_id,
         since=since,
         limit=limit,
-        event_types=event_types,
+        log_types=log_types,
         trace_type=trace_type,
         trace_id=trace_id,
     )
 
 
-def get_state_transitions(
+def get_events(
     *,
     patient_id: str,
     since: str | None = None,
-    event_log_type: str | None = None,
+    log_type: str | None = None,
     trace_type: str | None = None,
     trace_id: str | None = None,
     status: str = "complete",
     limit: int = 50,
-) -> StateTransitionsResult:
-    """Get state transitions for the patient. Module-level proxy to the singleton client.
+) -> EventsResult:
+    """Get events for the patient. Module-level proxy to the singleton client.
 
     Requires sdk:state-read scope.
     """
-    return _get_client().get_state_transitions(
+    return _get_client().get_events(
         patient_id=patient_id,
         since=since,
-        event_log_type=event_log_type,
+        log_type=log_type,
         trace_type=trace_type,
         trace_id=trace_id,
         status=status,

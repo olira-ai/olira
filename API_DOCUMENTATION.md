@@ -1,5 +1,6 @@
 > **Maintained by:** Olira Engineering  
-> **Published at:** `olira.ai/api-docs` → Python SDK tab
+> **Published at:** `olira.ai/api-docs` → Python SDK tab  
+> **Status:** **BETA** — SDK APIs and this reference may change between releases.
 
 # Olira Python SDK — API Reference
 
@@ -9,16 +10,15 @@ managing patients, and minting patient-scoped tokens for use with the
 
 **Package:** `olira` — **Version:** `0.1.0a8`
 
----
 
 ## Related docs
 
 | Doc | What it covers | Why you need it |
 | --- | -------------- | --------------- |
+| **Authentication** (`olira.ai/api-docs` → Authentication tab) | API keys, patient tokens, **scopes**, auth errors | Choose scopes when creating keys; mint patient tokens for device-facing calls |
 | **MCP Patient State** (`olira.ai/api-docs` → MCP tab) | Tools for querying patient health state from AI agents | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
 | **CLI** (`olira.ai/api-docs` → CLI tab) | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server |
 
----
 
 ## Getting Started
 
@@ -84,52 +84,6 @@ Initialize the SDK. API key can be passed or set via OLIRA_API_KEY env var.
 | `on_error`       | No       | `str`      | `'drop'`                      |
 | `async_flush`    | No       | `bool`     | `True`                        |
 
----
-
-## Authentication
-
-### API Keys — server-side use
-
-Create API keys in the Olira Console or with the CLI:
-
-```bash
-olira keys create --name "my-backend" --scopes sdk:event-log api:manage-patients
-```
-
-Pass the key to `init()` or set `OLIRA_API_KEY`:
-
-```python
-olira.init(api_key="YOUR_OLIRA_API_KEY")
-```
-
-Keys are shown only once at creation. Store them in a secrets manager.
-
-### Patient Tokens — client-side use
-
-For patient-facing requests (e.g. from a mobile app calling the
-[MCP Patient State server](https://olira.ai/api-docs) directly),
-mint a short-lived patient-scoped JWT server-side. The API key used here must
-carry the `sdk:patient-token` scope.
-
-```python
-token = olira.get_patient_token(patient_id="patient-uuid")
-# token.access_token is a short-lived Bearer token locked to that patient
-```
-
-Pass `token.access_token` as the Bearer token from your client.
-Tokens expire after `token.expires_in` seconds (default 15 minutes).
-
-### Auth error responses
-
-| Status | Exception         | Meaning                                  |
-| ------ | ----------------- | ---------------------------------------- |
-| 401    | `AuthError`       | Invalid or expired token                 |
-| 403    | `AuthError`       | Token does not have the required scope   |
-| 429    | `RateLimitError`  | Rate limit exceeded; check `retry_after` |
-| 422    | `ValidationError` | Malformed request or payload             |
-| 5xx    | `ServerError`     | Server-side failure after retries        |
-
----
 
 ## Olira CLI
 
@@ -157,19 +111,6 @@ olira keys revoke my-key
 olira configure cursor  # Write MCP server config to .cursor/mcp.json
 ```
 
----
-
-## Scopes
-
-| Scope                  | Description                                                    |
-| ---------------------- | -------------------------------------------------------------- |
-| `sdk:event-log`        | Log health events via `log()` and `log_batch()`                |
-| `api:manage-patients`  | Create, read, update, delete patients                          |
-| `sdk:patient-token`    | Mint patient-scoped JWTs via `get_patient_token()`             |
-| `sdk:state-read`       | Read patient state — stable data, event modules, summaries, event logs, state transitions, memories |
-| `mcp:patient-state`    | Query patient state via the MCP Patient State server           |
-
----
 
 ## Models
 
@@ -199,11 +140,11 @@ interpreted or validated by Olira.
 **Example:**
 
 ```python
-from olira import OliraTrace, OliraEventType
+from olira import OliraTrace, OliraLogType
 
 # A symptom report extracted from a conversation turn
 olira.log(
-    event_type=OliraEventType.SYMPTOM_REPORT,
+    log_type=OliraLogType.SYMPTOM_REPORT,
     patient_id="patient-uuid",
     payload={
         "instrument": "esas_r",
@@ -220,49 +161,6 @@ The trace is visible in the event log returned by `get_recent_event_logs` on the
 MCP Patient State server, so your agents can see exactly which conversation
 produced a given data point.
 
-### `EsasItem`
-
-Single ESAS-r symptom item (name + score 0–10).
-Shape matches EsasSymptomItem in common-models util.py.
-Optional type/snomed_code/meddra_code used for matching server-side.
-
-| Field         | Required | Type  | Description                                     |
-| ------------- | -------- | ----- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `name`        | Yes      | `str` | ESAS item name (display); not used for matching |
-| `score`       | Yes      | `int` | Score 0–10                                      |
-| `type`        | No       | `str  | None`                                           | Symptom type for matching when snomed_code and meddra_code unset (e.g. pain, nausea) (default: `None`) |
-| `snomed_code` | No       | `str  | None`                                           | SNOMED CT code; first choice for matching (default: `None`)                                            |
-| `meddra_code` | No       | `str  | None`                                           | MedDRA code; used when snomed_code unset (default: `None`)                                             |
-
-### `LabResultItem`
-
-One result item from lab_results_received.results[] (with or without LOINC).
-Shape matches LabResultItem in common-models util.py.
-At least one of loinc_code or test_name; at least one of value_numeric or value_string.
-
-| Field                  | Required | Type   | Description                                                 |
-| ---------------------- | -------- | ------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `loinc_code`           | No       | `str   | None`                                                       | LOINC code when available; test_name/specimen resolved server-side (default: `None`) |
-| `test_name`            | No       | `str   | None`                                                       | Required when loinc_code not provided (default: `None`)                              |
-| `specimen_type`        | No       | `str   | None`                                                       | Optional when no LOINC (default: `None`)                                             |
-| `test_category`        | No       | `str   | None`                                                       | e.g. hematology, metabolic, lipid (default: `None`)                                  |
-| `value_numeric`        | No       | `float | None`                                                       | Quantitative result (default: `None`)                                                |
-| `value_string`         | No       | `str   | None`                                                       | Non-quantitative result (default: `None`)                                            |
-| `unit`                 | No       | `str`  | Unit of measure (prefer explicit e.g. g/dL) (default: `''`) |
-| `abnormal_flag`        | No       | `str   | None`                                                       | H, L, N, HH, LL (default: `None`)                                                    |
-| `reference_range_low`  | No       | `float | None`                                                       | — (default: `None`)                                                                  |
-| `reference_range_high` | No       | `float | None`                                                       | — (default: `None`)                                                                  |
-| `result_status`        | No       | `str   | None`                                                       | final, preliminary, corrected (default: `None`)                                      |
-
-### `PerformingLab`
-
-Performing lab from lab_results_received envelope. Shape matches common-models util.py.
-
-| Field         | Required | Type | Description |
-| ------------- | -------- | ---- | ----------- | ------------------- |
-| `name`        | No       | `str | None`       | — (default: `None`) |
-| `clia_number` | No       | `str | None`       | — (default: `None`) |
-
 ### `TimePeriod`
 
 Time range in ISO 8601 datetimes. Wire-compatible with PeriodRange in common-models util.py.
@@ -272,90 +170,89 @@ Time range in ISO 8601 datetimes. Wire-compatible with PeriodRange in common-mod
 | `start_datetime` | Yes      | `str` | —           |
 | `end_datetime`   | Yes      | `str` | —           |
 
-### `OliraEventType`
+### `OliraLogType`
 
-`StrEnum` of all supported event types. Use these constants as `event_type`
+`StrEnum` of all supported log types. Use these constants as `log_type`
 in `log()` and `log_batch()`.
 
 **Symptom reports**
 
-- `OliraEventType.SYMPTOM_REPORT` → `"symptom_report"`
-- `OliraEventType.SYMPTOM_FREE_TEXT` → `"symptom_free_text"`
-- `OliraEventType.SYMPTOM_DETAIL` → `"symptom_detail"`
-- `OliraEventType.MOODS_REPORT` → `"moods_report"`
-- `OliraEventType.FUNCTIONAL_CLASS_REPORTED` → `"functional_class_reported"`
-- `OliraEventType.HEALTH_METRIC_REPORTED` → `"health_metric_reported"`
+- `OliraLogType.SYMPTOM_REPORT` → `"symptom_report"`
+- `OliraLogType.SYMPTOM_FREE_TEXT` → `"symptom_free_text"`
+- `OliraLogType.SYMPTOM_DETAIL` → `"symptom_detail"`
+- `OliraLogType.MOODS_REPORT` → `"moods_report"`
+- `OliraLogType.FUNCTIONAL_CLASS_REPORTED` → `"functional_class_reported"`
+- `OliraLogType.HEALTH_METRIC_REPORTED` → `"health_metric_reported"`
 
 **Lab & clinical**
 
-- `OliraEventType.LAB_RESULTS_RECEIVED` → `"lab_results_received"`
-- `OliraEventType.VITALS_MEASUREMENT` → `"vitals_measurement"`
-- `OliraEventType.CLINICAL_NOTE_RECEIVED` → `"clinical_note_received"`
-- `OliraEventType.CLINICAL_FINDING_REPORTED` → `"clinical_finding_reported"`
-- `OliraEventType.PROCEDURE_RESULT_RECEIVED` → `"procedure_result_received"`
-- `OliraEventType.PROCEDURE_PERFORMED` → `"procedure_performed"`
-- `OliraEventType.GENOMIC_VARIANT_REPORTED` → `"genomic_variant_reported"`
-- `OliraEventType.IMAGING_RESULT_RECEIVED` → `"imaging_result_received"`
-- `OliraEventType.CLINICAL_MEASUREMENT_REPORTED` → `"clinical_measurement_reported"`
-- `OliraEventType.TREATMENT_RESPONSE_ASSESSMENT_REPORTED` → `"treatment_response_assessment_reported"`
-- `OliraEventType.CLINICAL_PLAN_ITEM_REPORTED` → `"clinical_plan_item_reported"`
-- `OliraEventType.CARE_ENCOUNTER_REPORTED` → `"care_encounter_reported"`
-- `OliraEventType.CARE_GOAL_REPORTED` → `"care_goal_reported"`
-- `OliraEventType.IMMUNIZATION_REPORTED` → `"immunization_reported"`
-- `OliraEventType.ALLERGY_INTOLERANCE_REPORTED` → `"allergy_intolerance_reported"`
-- `OliraEventType.FAMILY_HISTORY_REPORTED` → `"family_history_reported"`
-- `OliraEventType.DEVICE_REPORTED` → `"device_reported"`
-- `OliraEventType.MEMORY_REPORT` → `"memory_report"`
-- `OliraEventType.UNSTRUCTURED_REPORT_RECEIVED` → `"unstructured_report_received"`
+- `OliraLogType.LAB_RESULTS_RECEIVED` → `"lab_results_received"`
+- `OliraLogType.VITALS_MEASUREMENT` → `"vitals_measurement"`
+- `OliraLogType.CLINICAL_NOTE_RECEIVED` → `"clinical_note_received"`
+- `OliraLogType.CLINICAL_FINDING_REPORTED` → `"clinical_finding_reported"`
+- `OliraLogType.PROCEDURE_RESULT_RECEIVED` → `"procedure_result_received"`
+- `OliraLogType.PROCEDURE_PERFORMED` → `"procedure_performed"`
+- `OliraLogType.GENOMIC_VARIANT_REPORTED` → `"genomic_variant_reported"`
+- `OliraLogType.IMAGING_RESULT_RECEIVED` → `"imaging_result_received"`
+- `OliraLogType.CLINICAL_MEASUREMENT_REPORTED` → `"clinical_measurement_reported"`
+- `OliraLogType.TREATMENT_RESPONSE_ASSESSMENT_REPORTED` → `"treatment_response_assessment_reported"`
+- `OliraLogType.CLINICAL_PLAN_ITEM_REPORTED` → `"clinical_plan_item_reported"`
+- `OliraLogType.CARE_ENCOUNTER_REPORTED` → `"care_encounter_reported"`
+- `OliraLogType.CARE_GOAL_REPORTED` → `"care_goal_reported"`
+- `OliraLogType.IMMUNIZATION_REPORTED` → `"immunization_reported"`
+- `OliraLogType.ALLERGY_INTOLERANCE_REPORTED` → `"allergy_intolerance_reported"`
+- `OliraLogType.FAMILY_HISTORY_REPORTED` → `"family_history_reported"`
+- `OliraLogType.DEVICE_REPORTED` → `"device_reported"`
+- `OliraLogType.MEMORY_REPORT` → `"memory_report"`
+- `OliraLogType.UNSTRUCTURED_REPORT_RECEIVED` → `"unstructured_report_received"`
 
 **Questionnaires**
 
-- `OliraEventType.QUESTIONNAIRE_RESPONSE` → `"questionnaire_response"`
-- `OliraEventType.QUESTIONNAIRE_ITEM_RESPONSE` → `"questionnaire_item_response"`
+- `OliraLogType.QUESTIONNAIRE_RESPONSE` → `"questionnaire_response"`
+- `OliraLogType.QUESTIONNAIRE_ITEM_RESPONSE` → `"questionnaire_item_response"`
 
 **Conversations**
 
-- `OliraEventType.CONVERSATION_COMPLETED` → `"conversation_completed"`
-- `OliraEventType.CONVERSATION_TURN_LOGGED` → `"conversation_turn_logged"`
+- `OliraLogType.CONVERSATION_COMPLETED` → `"conversation_completed"`
+- `OliraLogType.CONVERSATION_TURN_LOGGED` → `"conversation_turn_logged"`
 
 **Passive data**
 
-- `OliraEventType.HEART_RATE_DATA_RECEIVED` → `"heart_rate_data_received"`
-- `OliraEventType.SLEEP_DATA_RECEIVED` → `"sleep_data_received"`
-- `OliraEventType.ACTIVITY_DATA_RECEIVED` → `"activity_data_received"`
-- `OliraEventType.CGM_READING_RECEIVED` → `"cgm_reading_received"`
-- `OliraEventType.SPO2_READING_RECEIVED` → `"spo2_reading_received"`
-- `OliraEventType.WEIGHT_MEASUREMENT_RECEIVED` → `"weight_measurement_received"`
+- `OliraLogType.HEART_RATE_DATA_RECEIVED` → `"heart_rate_data_received"`
+- `OliraLogType.SLEEP_DATA_RECEIVED` → `"sleep_data_received"`
+- `OliraLogType.ACTIVITY_DATA_RECEIVED` → `"activity_data_received"`
+- `OliraLogType.CGM_READING_RECEIVED` → `"cgm_reading_received"`
+- `OliraLogType.SPO2_READING_RECEIVED` → `"spo2_reading_received"`
+- `OliraLogType.WEIGHT_MEASUREMENT_RECEIVED` → `"weight_measurement_received"`
 
 **Medications**
 
-- `OliraEventType.MEDICATION_ACTION` → `"medication_action"`
-- `OliraEventType.MEDICATION_DOSE_UPDATE` → `"medication_dose_update"`
-- `OliraEventType.MEDICATION_ADVERSE_EVENT_REPORTED` → `"medication_adverse_event_reported"`
+- `OliraLogType.MEDICATION_ACTION` → `"medication_action"`
+- `OliraLogType.MEDICATION_DOSE_UPDATE` → `"medication_dose_update"`
+- `OliraLogType.MEDICATION_ADVERSE_EVENT_REPORTED` → `"medication_adverse_event_reported"`
 
 **Engagement**
 
-- `OliraEventType.USER_LOGIN` → `"user_login"`
-- `OliraEventType.USER_LOGOUT` → `"user_logout"`
-- `OliraEventType.CONTENT_INTERACTED` → `"content_interacted"`
-- `OliraEventType.NOTIFICATION_INTERACTED` → `"notification_interacted"`
-- `OliraEventType.TASK_UPDATED` → `"task_updated"`
-- `OliraEventType.INTERACTION_FEEDBACK` → `"interaction_feedback"`
-- `OliraEventType.FEATURE_USED` → `"feature_used"`
+- `OliraLogType.USER_LOGIN` → `"user_login"`
+- `OliraLogType.USER_LOGOUT` → `"user_logout"`
+- `OliraLogType.CONTENT_INTERACTED` → `"content_interacted"`
+- `OliraLogType.NOTIFICATION_INTERACTED` → `"notification_interacted"`
+- `OliraLogType.TASK_UPDATED` → `"task_updated"`
+- `OliraLogType.INTERACTION_FEEDBACK` → `"interaction_feedback"`
+- `OliraLogType.FEATURE_USED` → `"feature_used"`
 
 **Profile**
 
-- `OliraEventType.DEMOGRAPHICS_UPDATED` → `"demographics_updated"`
-- `OliraEventType.CONDITION_RECORDED` → `"condition_recorded"`
-- `OliraEventType.PREFERENCES_UPDATED` → `"preferences_updated"`
-- `OliraEventType.EMERGENCY_CONTACT_UPDATED` → `"emergency_contact_updated"`
-- `OliraEventType.CARE_TEAM_UPDATED` → `"care_team_updated"`
-- `OliraEventType.INSURANCE_UPDATED` → `"insurance_updated"`
-- `OliraEventType.SOCIAL_UPDATED` → `"social_updated"`
-- `OliraEventType.PHARMACY_UPDATED` → `"pharmacy_updated"`
-- `OliraEventType.TREATMENT_PHASE_CHANGED` → `"treatment_phase_changed"`
+- `OliraLogType.DEMOGRAPHICS_UPDATED` → `"demographics_updated"`
+- `OliraLogType.CONDITION_RECORDED` → `"condition_recorded"`
+- `OliraLogType.PREFERENCES_UPDATED` → `"preferences_updated"`
+- `OliraLogType.EMERGENCY_CONTACT_UPDATED` → `"emergency_contact_updated"`
+- `OliraLogType.CARE_TEAM_UPDATED` → `"care_team_updated"`
+- `OliraLogType.INSURANCE_UPDATED` → `"insurance_updated"`
+- `OliraLogType.SOCIAL_UPDATED` → `"social_updated"`
+- `OliraLogType.PHARMACY_UPDATED` → `"pharmacy_updated"`
+- `OliraLogType.TREATMENT_PHASE_CHANGED` → `"treatment_phase_changed"`
 
----
 
 ## Patients
 
@@ -714,7 +611,6 @@ and expires after `expires_in` seconds (default 15 minutes).
 | `expires_in`   | Yes      | `int`       | —                       |
 | `scopes`       | Yes      | `list[str]` | —                       |
 
----
 
 ## Logs
 
@@ -725,14 +621,14 @@ All log functions require `sdk:event-log` scope.
 #### `log`
 
 ```python
-log(*, event_type: OliraEventType, patient_id: str, payload: dict[str, Any] | None = None, trace: OliraTrace | None = None, timestamp: str | None = None) -> None
+log(*, log_type: OliraLogType, patient_id: str, payload: dict[str, Any] | None = None, trace: OliraTrace | None = None, timestamp: str | None = None) -> None
 ```
 
 Enqueue an event for background delivery. Module-level proxy to the singleton client.
 
 | Parameter    | Required | Type             | Default |
-| ------------ | -------- | ---------------- | ------- | ------ |
-| `event_type` | Yes      | `OliraEventType` | —       |
+| ------------ | -------- | ---------------- | ------- |
+| `log_type` | Yes      | `OliraLogType` | —       |
 | `patient_id` | Yes      | `str`            | —       |
 | `payload`    | No       | `dict[str, Any]  | None`   | `None` |
 | `trace`      | No       | `OliraTrace      | None`   | `None` |
@@ -745,10 +641,10 @@ process exit to ensure delivery.
 
 ```python
 import olira
-from olira import OliraEventType
+from olira import OliraLogType
 
 olira.log(
-    event_type=OliraEventType.SYMPTOM_REPORT,
+    log_type=OliraLogType.SYMPTOM_REPORT,
     patient_id="patient-uuid",
     payload={
         "instrument": "esas_r",
@@ -764,11 +660,11 @@ olira.flush()
 **With trace (provenance):**
 
 ```python
-from olira import OliraEventType, OliraTrace
+from olira import OliraLogType, OliraTrace
 
 # Attribute the event back to the conversation that produced it
 olira.log(
-    event_type=OliraEventType.SYMPTOM_REPORT,
+    log_type=OliraLogType.SYMPTOM_REPORT,
     patient_id="patient-uuid",
     payload={
         "instrument": "esas_r",
@@ -796,11 +692,11 @@ Send a batch of events directly. Module-level proxy to the singleton client.
 **Example:**
 
 ```python
-from olira import LogSpec, OliraEventType
+from olira import LogSpec, OliraLogType
 
 result = olira.log_batch([
     LogSpec(
-        event_type=OliraEventType.VITALS_MEASUREMENT,
+        log_type=OliraLogType.VITALS_MEASUREMENT,
         patient_id="patient-uuid",
         payload={
             "measurements": {"systolic_bp_mmhg": 128, "diastolic_bp_mmhg": 82,
@@ -813,7 +709,7 @@ result = olira.log_batch([
         },
     ),
     LogSpec(
-        event_type=OliraEventType.MEDICATION_DOSE_UPDATE,
+        log_type=OliraLogType.MEDICATION_DOSE_UPDATE,
         patient_id="patient-uuid",
         payload={
             "medication_adherence": [{"status": "taken", "medication_name": "Ondansetron 4mg"}],
@@ -830,8 +726,8 @@ print(f"Accepted: {result.accepted}, Failed: {result.failed}")
 Lightweight event specification for log_batch(). Not persisted internally.
 
 | Field             | Required | Type             | Description |
-| ----------------- | -------- | ---------------- | ----------- | ------------------- |
-| `event_type`      | Yes      | `OliraEventType` | —           |
+| ----------------- | -------- | ---------------- | ----------- |
+| `log_type`      | Yes      | `OliraLogType` | —           |
 | `patient_id`      | Yes      | `str`            | —           |
 | `payload`         | No       | `dict[str, Any]  | None`       | — (default: `None`) |
 | `trace`           | No       | `OliraTrace      | None`       | — (default: `None`) |
@@ -858,7 +754,6 @@ Per-event error from a batch response.
 | `code`    | Yes      | `str` | —           |
 | `message` | Yes      | `str` | —           |
 
----
 
 ## Patient Token
 
@@ -890,7 +785,6 @@ token = olira.get_patient_token(patient_id="patient-uuid")
 print(f"Token expires in {token.expires_in}s")
 ```
 
----
 
 ## Patient State — Read
 
@@ -903,19 +797,19 @@ All state-read functions require an API key with the `sdk:state-read` scope.
 | `get_stable_data` | `get_stable_data` |
 | `list_event_state_modules` | `list_event_state_modules` |
 | `get_event_state_module` | `get_event_state_module` |
-| `list_summaries` | `list_summaries_and_blocks` (list mode) |
-| `list_summary_blocks` | `list_summaries_and_blocks` (blocks mode) |
-| `get_summary` | `get_summary` |
-| `get_summary_block` | `get_summary_block` |
-| `get_summary_recent_events` | `get_summary_recent_events` |
-| `get_event_logs` | `get_event_logs` |
-| `get_state_transitions` | `get_state_transitions` |
+| `list_views` | `list_views_and_blocks` (list mode) |
+| `list_view_blocks` | `list_views_and_blocks` (blocks mode) |
+| `get_view` | `get_view` |
+| `get_view_block` | `get_view_block` |
+| `get_view_recent_events` | `get_view_recent_events` |
+| `get_logs` | `get_logs` |
+| `get_events` | `get_events` |
 | `read_memories` | `read_memories` (list-all mode) |
 
 **Key differences from the MCP:**
 - Returns raw structured data — no pretty-printed markdown rendering
 - `read_memories(query=...)` uses MongoDB text search; the MCP uses Qdrant semantic search
-- `write_memory` is not exposed — memory writes remain MCP/agent-only
+- The SDK does not expose memory writes; use ingestion APIs and platform workflows to persist new clinical facts
 
 ---
 
@@ -1036,71 +930,71 @@ print(module.payload)
 
 ---
 
-### Summaries
+### Patient views
 
-#### `list_summaries`
+#### `list_views`
 
 ```python
-list_summaries(*, patient_id: str) -> list[SummaryMeta]
+list_views(*, patient_id: str) -> list[ViewMeta]
 ```
 
-List available summary types for the patient.
+List available view types for the patient.
 
 **Example:**
 
 ```python
-summaries = olira.list_summaries(patient_id="patient-uuid")
-for s in summaries:
-    print(s.summary_type, s.has_blocks, s.has_temp)
+views = olira.list_views(patient_id="patient-uuid")
+for v in views:
+    print(v.view_type, v.has_blocks, v.has_temp)
 ```
 
 **Mock response (list items):**
 
 ```json
 [
-  {"summary_type": "symptom_snapshot", "summary_id": "66f1a2b3c4d5e6f7a8b9c0d1", "has_blocks": true, "has_temp": true},
-  {"summary_type": "medication_snapshot", "summary_id": "66f1a2b3c4d5e6f7a8b9c0d2", "has_blocks": true, "has_temp": true}
+  {"view_type": "symptom_snapshot", "view_id": "66f1a2b3c4d5e6f7a8b9c0d1", "has_blocks": true, "has_temp": true},
+  {"view_type": "medication_snapshot", "view_id": "66f1a2b3c4d5e6f7a8b9c0d2", "has_blocks": true, "has_temp": true}
 ]
 ```
 
-#### `list_summary_blocks`
+#### `list_view_blocks`
 
 ```python
-list_summary_blocks(*, patient_id: str, summary_type: str) -> SummaryBlocksListResult
+list_view_blocks(*, patient_id: str, view_type: str) -> ViewBlocksListResult
 ```
 
-List blocks within a specific summary. Returns the unified block list (`content.blocks`).
+List blocks within a specific view. Returns the unified block list (`content.blocks`).
 
 **Example:**
 
 ```python
-result = olira.list_summary_blocks(patient_id="patient-uuid", summary_type="symptom_snapshot")
+result = olira.list_view_blocks(patient_id="patient-uuid", view_type="symptom_snapshot")
 for block in result.blocks:
     print(block.block_id, block.has_result)
 ```
 
-#### `get_summary`
+#### `get_view`
 
 ```python
-get_summary(*, patient_id: str, summary_type: str) -> SummaryResult
+get_view(*, patient_id: str, view_type: str) -> ViewResult
 ```
 
-Get a compiled summary snapshot. Returns the unified block list under `content["blocks"]`
+Get a compiled patient view snapshot. Returns the unified block list under `content["blocks"]`
 plus live TEMP entries under `content["temp"]` when present.
 
-| Parameter      | Required | Type  | Default |
-| -------------- | -------- | ----- | ------- |
-| `patient_id`   | Yes      | `str` | —       |
-| `summary_type` | Yes      | `str` | —       |
+| Parameter    | Required | Type  | Default |
+| ------------ | -------- | ----- | ------- |
+| `patient_id` | Yes      | `str` | —       |
+| `view_type`  | Yes      | `str` | —       |
 
 **Example:**
 
 ```python
-summary = olira.get_summary(
+view = olira.get_view(
     patient_id="patient-uuid",
-    summary_type="symptom_snapshot",
+    view_type="symptom_snapshot",
 )
-print(summary.content)
+print(view.content)
 ```
 
 **Mock response:**
@@ -1108,8 +1002,8 @@ print(summary.content)
 ```json
 {
   "patient_id": "507f1f77bcf86cd799439011",
-  "summary_type": "symptom_snapshot",
-  "summary_id": "66f1a2b3c4d5e6f7a8b9c0d1",
+  "view_type": "symptom_snapshot",
+  "view_id": "66f1a2b3c4d5e6f7a8b9c0d1",
   "valid_from": "2026-03-11T00:00:00+00:00",
   "valid_to": "2026-03-18T00:00:00+00:00",
   "content": {
@@ -1124,10 +1018,10 @@ print(summary.content)
 }
 ```
 
-#### `get_summary_block`
+#### `get_view_block`
 
 ```python
-get_summary_block(*, patient_id: str, summary_type: str, block_id: str) -> SummaryBlockResult
+get_view_block(*, patient_id: str, view_type: str, block_id: str) -> ViewBlockResult
 ```
 
 Get a specific block from the unified block list.
@@ -1135,28 +1029,28 @@ Get a specific block from the unified block list.
 **Example:**
 
 ```python
-block = olira.get_summary_block(
+block = olira.get_view_block(
     patient_id="patient-uuid",
-    summary_type="symptom_snapshot",
+    view_type="symptom_snapshot",
     block_id="symptom_overview",
 )
 print(block.content, block.confidences)
 ```
 
-#### `get_summary_recent_events`
+#### `get_view_recent_events`
 
 ```python
-get_summary_recent_events(*, patient_id: str, summary_type: str, limit: int = 50) -> SummaryRecentEventsResult
+get_view_recent_events(*, patient_id: str, view_type: str, limit: int = 50) -> ViewRecentEventsResult
 ```
 
-Get live TEMP entries for a summary (appended as events arrive, no AI processing lag).
+Get live TEMP entries for a view (appended as events arrive, no AI processing lag).
 
 **Example:**
 
 ```python
-recent = olira.get_summary_recent_events(
+recent = olira.get_view_recent_events(
     patient_id="patient-uuid",
-    summary_type="symptom_snapshot",
+    view_type="symptom_snapshot",
     limit=10,
 )
 for entry in recent.entries:
@@ -1168,7 +1062,7 @@ for entry in recent.entries:
 ```json
 {
   "patient_id": "507f1f77bcf86cd799439011",
-  "summary_type": "symptom_snapshot",
+  "view_type": "symptom_snapshot",
   "entries": [
     "2026-03-18 10:00 — symptom_report: pain 4/10, fatigue 6/10 (esas_r)",
     "2026-03-17 09:15 — symptom_report: nausea 2/10, pain 3/10 (esas_r)"
@@ -1180,20 +1074,20 @@ for entry in recent.entries:
 
 ---
 
-### Event logs & state transitions
+### Logs & events
 
-#### `get_event_logs`
+#### `get_logs`
 
 ```python
-get_event_logs(
+get_logs(
     *,
     patient_id: str,
     since: str | None = None,
     limit: int = 50,
-    event_types: list[str] | None = None,
+    log_types: list[str] | None = None,
     trace_type: str | None = None,
     trace_id: str | None = None,
-) -> EventLogsResult
+) -> LogsResult
 ```
 
 Get event logs with optional filters.
@@ -1203,7 +1097,7 @@ Get event logs with optional filters.
 | `patient_id`  | Yes      | `str`             | —       |
 | `since`       | No       | `str \| None`     | `None`  |
 | `limit`       | No       | `int`             | `50`    |
-| `event_types` | No       | `list[str] \| None` | `None` |
+| `log_types` | No       | `list[str] \| None` | `None` |
 | `trace_type`  | No       | `str \| None`     | `None`  |
 | `trace_id`    | No       | `str \| None`     | `None`  |
 
@@ -1211,19 +1105,19 @@ Get event logs with optional filters.
 
 ```python
 # Recent symptom and vitals events
-logs = olira.get_event_logs(
+logs = olira.get_logs(
     patient_id="patient-uuid",
     since="2026-03-11T00:00:00Z",
-    event_types=["symptom_report", "vitals_measurement"],
+    log_types=["symptom_report", "vitals_measurement"],
 )
 
 # Events tied to a specific conversation
-logs = olira.get_event_logs(
+logs = olira.get_logs(
     patient_id="patient-uuid",
     trace_type="conversation",
     trace_id="conv-abc-123",
 )
-for entry in logs.event_logs:
+for entry in logs.logs:
     print(entry.type, entry.timestamp, entry.payload)
 ```
 
@@ -1233,7 +1127,7 @@ for entry in logs.event_logs:
 {
   "patient_id": "507f1f77bcf86cd799439011",
   "count": 2,
-  "event_logs": [
+  "logs": [
     {
       "id": "66f1a2b3c4d5e6f7a8b9c0d3",
       "type": "symptom_report",
@@ -1252,33 +1146,33 @@ for entry in logs.event_logs:
 }
 ```
 
-#### `get_state_transitions`
+#### `get_events`
 
 ```python
-get_state_transitions(
+get_events(
     *,
     patient_id: str,
     since: str | None = None,
-    event_log_type: str | None = None,
+    log_type: str | None = None,
     trace_type: str | None = None,
     trace_id: str | None = None,
     status: str = "complete",
     limit: int = 50,
-) -> StateTransitionsResult
+) -> EventsResult
 ```
 
-Get state transitions driven by events. When `trace_type` / `trace_id` are supplied, the server first resolves matching EventLog IDs, then returns transitions driven by those events.
+Get events driven by logs. When `trace_type` / `trace_id` / `log_type` are supplied, the server first resolves matching EventLog IDs where applicable, then returns events driven by those logs.
 
 **Example:**
 
 ```python
-transitions = olira.get_state_transitions(
+events = olira.get_events(
     patient_id="patient-uuid",
     trace_type="conversation",
     trace_id="conv-abc-123",
 )
-for t in transitions.state_transitions:
-    print(t.event_log_type, t.triggered_at, t.changes)
+for t in events.events:
+    print(t.log_type, t.triggered_at, t.changes)
 ```
 
 ---
@@ -1372,48 +1266,48 @@ for m in memories.results:
 | `created_at`  | `str \| None`               | ISO 8601 timestamp |
 | `updated_at`  | `str \| None`               | ISO 8601 timestamp |
 
-### `SummaryMeta`
+### `ViewMeta`
 
-| Field          | Type   | Description                       |
-| -------------- | ------ | --------------------------------- |
-| `summary_type` | `str`  | Summary type key                  |
-| `summary_id`   | `str`  | MongoDB document ID               |
-| `has_blocks`   | `bool` | Unified block list available      |
-| `has_temp`     | `bool` | TEMP (live) entries available     |
+| Field        | Type   | Description                   |
+| ------------ | ------ | ----------------------------- |
+| `view_type`  | `str`  | View type key                 |
+| `view_id`    | `str`  | MongoDB document ID           |
+| `has_blocks` | `bool` | Unified block list available  |
+| `has_temp`   | `bool` | TEMP (live) entries available |
 
-### `SummaryResult`
+### `ViewResult`
 
-| Field          | Type              | Description                             |
-| -------------- | ----------------- | --------------------------------------- |
-| `patient_id`   | `str`             | Patient ID                              |
-| `summary_type` | `str`             | Summary type                            |
-| `summary_id`   | `str \| None`     | MongoDB document ID                     |
-| `valid_from`   | `str \| None`     | Summary coverage start (ISO 8601)       |
-| `valid_to`     | `str \| None`     | Summary coverage end (ISO 8601)         |
-| `content`      | `dict[str, Any]`  | `"blocks"` → unified block list; `"temp"` → live TEMP entries |
+| Field        | Type              | Description                             |
+| ------------ | ----------------- | --------------------------------------- |
+| `patient_id` | `str`             | Patient ID                              |
+| `view_type`  | `str`             | View type                               |
+| `view_id`    | `str \| None`     | MongoDB document ID                     |
+| `valid_from` | `str \| None`     | View coverage start (ISO 8601)          |
+| `valid_to`   | `str \| None`     | View coverage end (ISO 8601)            |
+| `content`    | `dict[str, Any]`  | `"blocks"` → unified block list; `"temp"` → live TEMP entries |
 
-### `SummaryBlockResult`
+### `ViewBlockResult`
 
-| Field          | Type                    | Description             |
-| -------------- | ----------------------- | ----------------------- |
-| `patient_id`   | `str`                   | Patient ID              |
-| `summary_type` | `str`                   | Summary type            |
-| `block_id`     | `str`                   | Block identifier        |
-| `content`      | `str \| None`           | Generated block text (raw, without MCP's pretty-print header) |
-| `confidences`  | `dict[str, float] \| None` | Confidence scores    |
-| `updated_at`   | `str \| None`           | ISO 8601 timestamp      |
+| Field         | Type                       | Description             |
+| ------------- | -------------------------- | ----------------------- |
+| `patient_id`  | `str`                      | Patient ID              |
+| `view_type`   | `str`                      | View type               |
+| `block_id`    | `str`                      | Block identifier        |
+| `content`     | `str \| None`              | Generated block text (raw, without MCP's pretty-print header) |
+| `confidences` | `dict[str, float] \| None` | Confidence scores       |
+| `updated_at`  | `str \| None`              | ISO 8601 timestamp      |
 
-### `SummaryRecentEventsResult`
+### `ViewRecentEventsResult`
 
-| Field          | Type         | Description                        |
-| -------------- | ------------ | ---------------------------------- |
-| `patient_id`   | `str`        | Patient ID                         |
-| `summary_type` | `str`        | Summary type                       |
-| `entries`      | `list[str]`  | TEMP entries (most recent `limit`) |
-| `count`        | `int`        | Number of entries returned         |
-| `total_count`  | `int`        | Total TEMP entries in store        |
+| Field        | Type        | Description                        |
+| ------------ | ----------- | ---------------------------------- |
+| `patient_id` | `str`       | Patient ID                         |
+| `view_type`  | `str`       | View type                          |
+| `entries`    | `list[str]` | TEMP entries (most recent `limit`) |
+| `count`      | `int`       | Number of entries returned         |
+| `total_count`| `int`       | Total TEMP entries in store        |
 
-### `EventLogEntry`
+### `LogEntry`
 
 | Field       | Type                 | Description         |
 | ----------- | -------------------- | ------------------- |
@@ -1423,35 +1317,35 @@ for m in memories.results:
 | `payload`   | `dict[str, Any]`     | Event payload       |
 | `trace`     | `OliraTrace \| None` | Provenance trace    |
 
-### `EventLogsResult`
+### `LogsResult`
 
-| Field        | Type                   | Description       |
-| ------------ | ---------------------- | ----------------- |
-| `patient_id` | `str`                  | Patient ID        |
-| `count`      | `int`                  | Number of entries |
-| `event_logs` | `list[EventLogEntry]`  | Event log entries |
+| Field        | Type              | Description       |
+| ------------ | ----------------- | ----------------- |
+| `patient_id` | `str`             | Patient ID        |
+| `count`      | `int`             | Number of entries |
+| `logs`       | `list[LogEntry]`  | Event log entries |
 
-### `StateTransitionEntry`
+### `EventEntry`
 
-| Field                 | Type                   | Description                    |
-| --------------------- | ---------------------- | ------------------------------ |
-| `id`                  | `str`                  | MongoDB document ID            |
-| `trigger`             | `str \| None`          | `event_log` or `summary_block` |
-| `event_log_type`      | `str \| None`          | Originating event type         |
-| `status`              | `str \| None`          | `complete`, `pending`, `failed`|
-| `triggered_at`        | `str \| None`          | ISO 8601 timestamp             |
-| `completed_at`        | `str \| None`          | ISO 8601 timestamp             |
-| `source_event_log_id` | `str \| None`          | Originating EventLog ID        |
-| `event_log_payload`   | `dict \| None`         | Payload from the source event  |
-| `changes`             | `dict \| None`         | State changes applied          |
+| Field                 | Type           | Description                    |
+| --------------------- | -------------- | ------------------------------ |
+| `id`                  | `str`          | MongoDB document ID            |
+| `trigger`             | `str \| None`  | `event_log` or `summary_block` |
+| `log_type`            | `str \| None`  | Originating event type         |
+| `status`              | `str \| None`  | `complete`, `pending`, `failed`|
+| `triggered_at`        | `str \| None`  | ISO 8601 timestamp             |
+| `completed_at`        | `str \| None`  | ISO 8601 timestamp             |
+| `source_event_log_id` | `str \| None`  | Originating EventLog ID        |
+| `log_payload`         | `dict \| None` | Payload from the source event  |
+| `changes`             | `dict \| None` | State changes applied          |
 
-### `StateTransitionsResult`
+### `EventsResult`
 
-| Field               | Type                          | Description       |
-| ------------------- | ----------------------------- | ----------------- |
-| `patient_id`        | `str`                         | Patient ID        |
-| `count`             | `int`                         | Number of entries |
-| `state_transitions` | `list[StateTransitionEntry]`  | Transitions       |
+| Field        | Type                  | Description       |
+| ------------ | --------------------- | ----------------- |
+| `patient_id` | `str`                 | Patient ID        |
+| `count`      | `int`                 | Number of entries |
+| `events`     | `list[EventEntry]`    | Events |
 
 ### `MemoryEntry`
 
@@ -1471,7 +1365,6 @@ for m in memories.results:
 | `count`      | `int`                | Number of results |
 | `results`    | `list[MemoryEntry]`  | Memory records    |
 
----
 
 ## Error Handling
 
@@ -1493,7 +1386,7 @@ from olira import AuthError, RateLimitError, ValidationError
 import time
 
 try:
-    olira.log(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="...", payload={...})
+    olira.log(log_type=OliraLogType.SYMPTOM_REPORT, patient_id="...", payload={...})
     olira.flush()
 except AuthError:
     print("Invalid or revoked API key — check your credentials")
@@ -1504,7 +1397,6 @@ except ValidationError as e:
     print(f"Validation error: {e}")
 ```
 
----
 
 ## Common Log Payloads
 
@@ -1512,7 +1404,7 @@ except ValidationError as e:
 
 ```python
 olira.log(
-    event_type=OliraEventType.SYMPTOM_REPORT,
+    log_type=OliraLogType.SYMPTOM_REPORT,
     patient_id="patient-uuid",
     payload={
         "instrument": "esas_r",
@@ -1529,7 +1421,7 @@ olira.log(
 
 ```python
 olira.log(
-    event_type=OliraEventType.LAB_RESULTS_RECEIVED,
+    log_type=OliraLogType.LAB_RESULTS_RECEIVED,
     patient_id="patient-uuid",
     payload={
         "collection_datetime": "2026-03-18T07:30:00Z",
@@ -1552,7 +1444,7 @@ olira.log(
 
 ```python
 olira.log(
-    event_type=OliraEventType.MEDICATION_ACTION,
+    log_type=OliraLogType.MEDICATION_ACTION,
     patient_id="patient-uuid",
     payload={
         "medications": [
@@ -1575,7 +1467,7 @@ olira.log(
 
 ```python
 olira.log(
-    event_type=OliraEventType.CONVERSATION_COMPLETED,
+    log_type=OliraLogType.CONVERSATION_COMPLETED,
     patient_id="patient-uuid",
     payload={
         "conversation_id": "conv-abc-123",

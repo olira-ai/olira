@@ -36,7 +36,7 @@ def test_patient_id_pseudo_ok():
 def test_log_wire_validates_patient_id():
     with pytest.raises(ValidationError):
         LogWire(
-            event_name="user_login",
+            log_type="user_login",
             patient_id="user@example.com",
             context={"environment": "production", "service": "", "sdk_version": "0.1.0", "sdk_language": "python"},
         )

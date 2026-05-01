@@ -2,7 +2,7 @@
 
 import pytest
 
-from olira import AsyncOliraClient, BatchResult, LogSpec, OliraEnv, OliraEventType, OliraTrace
+from olira import AsyncOliraClient, BatchResult, LogSpec, OliraEnv, OliraLogType, OliraTrace
 
 
 @pytest.mark.asyncio
@@ -23,11 +23,11 @@ async def test_async_client_context_manager():
         environment=OliraEnv.DEVELOPMENT,
     ) as client:
         client._transport = transport
-        await client.log(event_type=OliraEventType.USER_LOGIN, patient_id="p_async_123")
+        await client.log(log_type=OliraLogType.USER_LOGIN, patient_id="p_async_123")
         await client.flush()
 
     assert len(events_sent) == 1
-    assert events_sent[0]["event_name"] == "user_login"
+    assert events_sent[0]["log_type"] == "user_login"
     assert events_sent[0]["patient_id"] == "p_async_123"
     assert events_sent[0]["context"]["environment"] == "development"
 
@@ -56,14 +56,14 @@ async def test_async_client_log_with_payload():
             ],
         }
         await client.log(
-            event_type=OliraEventType.SYMPTOM_REPORT,
+            log_type=OliraLogType.SYMPTOM_REPORT,
             patient_id="subj_1",
             payload=payload,
         )
         await client.flush()
 
     assert len(events_sent) == 1
-    assert events_sent[0]["event_name"] == "symptom_report"
+    assert events_sent[0]["log_type"] == "symptom_report"
     assert events_sent[0]["payload"]["instrument"] == "esas_r"
     assert len(events_sent[0]["payload"]["symptoms"]) == 2
 
@@ -87,9 +87,9 @@ async def test_async_client_log_batch():
         client._transport = MockTransport()
         result = await client.log_batch(
             [
-                LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
+                LogSpec(log_type=OliraLogType.USER_LOGIN, patient_id="p_1"),
                 LogSpec(
-                    event_type=OliraEventType.SYMPTOM_REPORT,
+                    log_type=OliraLogType.SYMPTOM_REPORT,
                     patient_id="p_2",
                     payload={"instrument": "esas_r", "symptoms": []},
                 ),
@@ -100,8 +100,8 @@ async def test_async_client_log_batch():
     assert result.failed == 0
     assert len(batches_sent) == 1
     assert len(batches_sent[0]) == 2
-    assert batches_sent[0][0]["event_name"] == "user_login"
-    assert batches_sent[0][1]["event_name"] == "symptom_report"
+    assert batches_sent[0][0]["log_type"] == "user_login"
+    assert batches_sent[0][1]["log_type"] == "symptom_report"
 
 
 @pytest.mark.asyncio
@@ -119,7 +119,7 @@ async def test_async_log_with_trace():
         client._transport = MockTransport()
         trace = OliraTrace(object_type="conversation", object_id="conv_42")
         await client.log(
-            event_type=OliraEventType.CONVERSATION_COMPLETED,
+            log_type=OliraLogType.CONVERSATION_COMPLETED,
             patient_id="p_xyz",
             payload={"duration_seconds": 60},
             trace=trace,

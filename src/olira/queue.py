@@ -62,21 +62,21 @@ class BackgroundWorker:
         except queue.Full:
             self._notify_error(
                 Exception("Event queue full; event dropped"),
-                [event.event_name],
+                [event.log_type],
             )
             return False
 
-    def _notify_error(self, error: Exception, event_names: list[str]) -> None:
+    def _notify_error(self, error: Exception, log_types: list[str]) -> None:
         if self._on_error == "drop":
             logger.debug(
-                "Events dropped: %s (names only)",
-                event_names[:5],
+                "Events dropped: %s (log_type only)",
+                log_types[:5],
                 exc_info=error,
             )
         elif self._on_error == "raise":
             raise error
         elif callable(self._on_error):
-            self._on_error(error, event_names)
+            self._on_error(error, log_types)
 
     def _run(self) -> None:
         last_flush = time.monotonic()
@@ -113,7 +113,7 @@ class BackgroundWorker:
             payloads = [e.model_dump(mode="json") for e in batch]
             self._send_batch(payloads)
         except Exception as e:
-            self._notify_error(e, [e.event_name for e in batch])
+            self._notify_error(e, [e.log_type for e in batch])
 
     def flush(self) -> None:
         """Block until queue is empty and current batch is sent."""

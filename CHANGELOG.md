@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0a9] - 2026-05-01
+
+### Changed
+
+- **Logging API (breaking):** Rename `OliraEventType` → **`OliraLogType`** (`OliraEventType` remains as a deprecated alias). Use **`log_type=`** on `log()` / `AsyncOliraClient.log()` and on **`LogSpec`** (was `event_type`). **`get_logs`** filter argument is **`log_types=`** (still serialized to the REST query parameter `event_types`).
+- **Patient State — Read (breaking):** Align SDK method and model names with MCP / REST **views**, **logs**, and **events** terminology:
+  - `list_summaries` → `list_views`, `list_summary_blocks` → `list_view_blocks`, `get_summary` → `get_view`, `get_summary_block` → `get_view_block`, `get_summary_recent_events` → `get_view_recent_events`
+  - `get_event_logs` → `get_logs`, `get_state_transitions` → `get_events` (parameter `event_log_type` → `log_type`; response fields `event_logs` → `logs`, `state_transitions` → `events`; transition fields `event_log_type` → `log_type`, `event_log_payload` → `log_payload`)
+  - Models: `SummaryMeta` → `ViewMeta`, `SummaryResult` → `ViewResult`, etc.
+- **Log wire JSON** (`LogWire`, HTTP transport): Batch requests send **`{"logs": [...]}`** only. Each entry uses **`log_type`** and **`log_id`** (replacing `events` / `event_name` / `event_id`). Direct HTTP clients must use the new keys.
+
 ## [0.1.0a8] - 2026-04-29
 
 ### Added
@@ -19,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `get_summary_block(patient_id, summary_type, block_id, segment="week")` — single block with confidence scores
   - `get_summary_recent_events(patient_id, summary_type, limit=50)` — live TEMP segment entries
   - `get_event_logs(patient_id, since=None, limit=50, event_types=None, trace_type=None, trace_id=None)` — event log with optional trace, type, and time filtering
-  - `get_state_transitions(patient_id, ...)` — state transitions driven by events, with trace-based resolution
+  - `get_state_transitions(patient_id, ...)` — events driven by logs, with trace-based resolution
   - `read_memories(patient_id, query=None, limit=100)` — patient memories with optional text search
 - **16 new response models** exported from `olira`: `StableDataResult`, `StableModule`, `EventStateModuleSummary`, `EventStateModuleResult`, `SummaryMeta`, `SummaryBlockMeta`, `SummaryBlocksListResult`, `SummaryResult`, `SummaryBlockResult`, `SummaryRecentEventsResult`, `EventLogEntry`, `EventLogsResult`, `StateTransitionEntry`, `StateTransitionsResult`, `MemoryEntry`, `MemoriesResult`.
 - All 11 methods available as module-level proxy functions on the singleton (`olira.get_event_logs(...)` etc.).
@@ -32,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **`CONDITION_UPDATED`** renamed to **`CONDITION_RECORDED`** to match the platform event catalog. Update any `OliraEventType.CONDITION_UPDATED` references to `OliraEventType.CONDITION_RECORDED`.
+- **`CONDITION_UPDATED`** renamed to **`CONDITION_RECORDED`** to match the platform event catalog. Update any `OliraEventType.CONDITION_UPDATED` references to `OliraLogType.CONDITION_RECORDED` (or `OliraEventType.CONDITION_RECORDED`).
 
 ## [0.1.0a6] - 2026-04-07
 

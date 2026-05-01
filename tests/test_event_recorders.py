@@ -10,7 +10,7 @@ from olira import (
     LogSpec,
     OliraClient,
     OliraEnv,
-    OliraEventType,
+    OliraLogType,
     OliraTrace,
     PerformingLab,
     ValidationError,
@@ -89,12 +89,12 @@ def test_log_symptom_report_wire_format():
         ],
     }
     client.log(
-        event_type=OliraEventType.SYMPTOM_REPORT,
+        log_type=OliraLogType.SYMPTOM_REPORT,
         patient_id="p_abc",
         payload=payload,
     )
     assert len(events_sent) == 1
-    assert events_sent[0]["event_name"] == "symptom_report"
+    assert events_sent[0]["log_type"] == "symptom_report"
     assert events_sent[0]["patient_id"] == "p_abc"
     props = events_sent[0]["payload"]
     assert props["instrument"] == "esas_r"
@@ -104,9 +104,9 @@ def test_log_symptom_report_wire_format():
 
 def test_log_user_login_minimal():
     client, events_sent = _make_sync_client()
-    client.log(event_type=OliraEventType.USER_LOGIN, patient_id="p_123")
+    client.log(log_type=OliraLogType.USER_LOGIN, patient_id="p_123")
     assert len(events_sent) == 1
-    assert events_sent[0]["event_name"] == "user_login"
+    assert events_sent[0]["log_type"] == "user_login"
     assert events_sent[0]["patient_id"] == "p_123"
     client.close()
 
@@ -115,7 +115,7 @@ def test_log_with_trace():
     client, events_sent = _make_sync_client()
     trace = OliraTrace(object_type="conversation", object_id="conv_789")
     client.log(
-        event_type=OliraEventType.CONVERSATION_COMPLETED,
+        log_type=OliraLogType.CONVERSATION_COMPLETED,
         patient_id="p_xyz",
         payload={"duration_seconds": 142},
         trace=trace,
@@ -134,7 +134,7 @@ def test_log_lab_results_with_performing_lab():
         "performing_lab": lab.model_dump(exclude_none=True),
     }
     client.log(
-        event_type=OliraEventType.LAB_RESULTS_RECEIVED,
+        log_type=OliraLogType.LAB_RESULTS_RECEIVED,
         patient_id="p_1",
         payload=payload,
     )
@@ -166,10 +166,10 @@ def test_log_batch_accepted():
 
     result = client.log_batch(
         [
-            LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
-            LogSpec(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_2", payload={"results": []}),
+            LogSpec(log_type=OliraLogType.USER_LOGIN, patient_id="p_1"),
+            LogSpec(log_type=OliraLogType.LAB_RESULTS_RECEIVED, patient_id="p_2", payload={"results": []}),
             LogSpec(
-                event_type=OliraEventType.SYMPTOM_REPORT,
+                log_type=OliraLogType.SYMPTOM_REPORT,
                 patient_id="p_3",
                 payload={"instrument": "esas_r", "symptoms": []},
             ),
@@ -205,9 +205,9 @@ def test_log_batch_partial_failure():
 
     result = client.log_batch(
         [
-            LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
-            LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_2"),
-            LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_3"),
+            LogSpec(log_type=OliraLogType.USER_LOGIN, patient_id="p_1"),
+            LogSpec(log_type=OliraLogType.USER_LOGIN, patient_id="p_2"),
+            LogSpec(log_type=OliraLogType.USER_LOGIN, patient_id="p_3"),
         ]
     )
 
@@ -230,5 +230,5 @@ def test_log_batch_empty_returns_zero():
 def test_log_pii_guard_raises():
     client, _ = _make_sync_client()
     with pytest.raises(ValidationError, match="email"):
-        client.log(event_type=OliraEventType.USER_LOGIN, patient_id="user@example.com")
+        client.log(log_type=OliraLogType.USER_LOGIN, patient_id="user@example.com")
     client.close()

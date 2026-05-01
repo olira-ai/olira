@@ -76,21 +76,21 @@ class OliraEnv(StrEnum):
 
 ```python
 import olira
-from olira import OliraEventType, OliraTrace
+from olira import OliraLogType, OliraTrace
 
 # Minimal — only the API key is required
 olira.init(api_key="olira_prod_...")   # or set OLIRA_API_KEY env var
 
 # Minimal log — payload is a free-form dict
 olira.log(
-    event_type=OliraEventType.SYMPTOM_REPORT,
+    log_type=OliraLogType.SYMPTOM_REPORT,
     patient_id="p_123",
     payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 4}]},
 )
 
 # With trace (links event to an internal Olira object)
 olira.log(
-    event_type=OliraEventType.CONVERSATION_COMPLETED,
+    log_type=OliraLogType.CONVERSATION_COMPLETED,
     patient_id="p_123",
     trace=OliraTrace(object_type="conversation", object_id="conv_789"),
     payload={"duration_seconds": 142},
@@ -108,7 +108,7 @@ payload = {
     "instrument": "esas_r",
     "symptoms": [EsasItem(name="pain", score=4).model_dump()],
 }
-olira.log(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_123", payload=payload)
+olira.log(log_type=OliraLogType.SYMPTOM_REPORT, patient_id="p_123", payload=payload)
 ```
 
 Optional `init` parameters:
@@ -131,7 +131,7 @@ Use `OliraClient` directly when you need more than one instance:
 - **Different configurations** — e.g. one client with `async_flush=False` for a Lambda handler and another with a longer timeout for a batch job.
 
 ```python
-from olira import OliraClient, OliraEnv, OliraEventType
+from olira import OliraClient, OliraEnv, OliraLogType
 
 # Minimal
 client = OliraClient(api_key="olira_prod_...")
@@ -152,7 +152,7 @@ client = OliraClient(
 
 # Single event via log()
 client.log(
-    event_type=OliraEventType.LAB_RESULTS_RECEIVED,
+    log_type=OliraLogType.LAB_RESULTS_RECEIVED,
     patient_id="p_456",
     payload={"results": [{"loinc_code": "718-7", "unit": "g/dL", "value_numeric": 11.2}]},
 )
@@ -162,11 +162,11 @@ client.flush()
 ### Async Client
 
 ```python
-from olira import AsyncOliraClient, OliraEventType
+from olira import AsyncOliraClient, OliraLogType
 
 async with AsyncOliraClient(api_key=...) as client:
     await client.log(
-        event_type=OliraEventType.SYMPTOM_REPORT,
+        log_type=OliraLogType.SYMPTOM_REPORT,
         patient_id="p_789",
         payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
     )
@@ -180,13 +180,13 @@ async with AsyncOliraClient(api_key=...) as client:
 For bulk submissions where the caller already has a list of events. Sends a single `/v1/logs/batch` request directly, **bypassing the background queue**, and returns a `BatchResult`.
 
 ```python
-from olira import LogSpec, BatchResult, OliraEventType
+from olira import LogSpec, BatchResult, OliraLogType
 
 result: BatchResult = olira.log_batch([
-    LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
-    LogSpec(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_2",
+    LogSpec(log_type=OliraLogType.USER_LOGIN, patient_id="p_1"),
+    LogSpec(log_type=OliraLogType.LAB_RESULTS_RECEIVED, patient_id="p_2",
               payload={"results": [...]}),
-    LogSpec(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_3",
+    LogSpec(log_type=OliraLogType.SYMPTOM_REPORT, patient_id="p_3",
               payload={"instrument": "esas_r", "symptoms": [...]}),
 ])
 
@@ -200,7 +200,7 @@ for err in result.errors:
 
 | Name             | Kind      | Description                                                           |
 | ---------------- | --------- | --------------------------------------------------------------------- |
-| `OliraEventType` | StrEnum   | 47 customer-facing event types (string values match common-models)    |
+| `OliraLogType` | StrEnum   | customer-facing log types    |
 | `OliraTrace`     | BaseModel | Links event to an internal Olira object (`object_type` + `object_id`) |
 | `LogSpec`        | dataclass | Lightweight log spec for `log_batch()`                                |
 | `BatchResult`    | dataclass | Result of `log_batch()` — `accepted`, `failed`, `errors`              |
@@ -212,13 +212,13 @@ for err in result.errors:
 
 ---
 
-## 4. Event Model
+## 4. Log model
 
-### Required Fields (every event)
+### Required Fields (every log)
 
 | Field        | Type             | Notes                                                                        |
 | ------------ | ---------------- | ---------------------------------------------------------------------------- |
-| `event_name` | `OliraEventType` | Derived from `OliraEventType.value`; customers pass `event_type=` to `log()` |
+| `log_type` | `OliraLogType` | Derived from `OliraLogType.value`; customers pass `log_type=` to `log()` (serialized as `log_type` on the wire) |
 | `patient_id` | `str`            | The Olira-assigned `id` returned when you created the patient. See [Patient ID Resolution](#patient-id-resolution) below. |
 
 ### Optional Fields
@@ -229,7 +229,7 @@ for err in result.errors:
 | `payload`         | `dict[str, JSON]` | `{}`                 | Free-form event payload                 |
 | `trace`           | `OliraTrace`      | `None`               | Links event to an internal Olira object |
 | `idempotency_key` | `str`             | Auto-generated UUID4 | See note below                          |
-| `event_id`        | `str`             | Auto-generated UUID4 | Client-generated event identifier       |
+| `log_id`            | `str`             | Auto-generated UUID4 | Client-generated log identifier (`log_id` on the wire)       |
 
 #### `idempotency_key`
 
@@ -242,7 +242,7 @@ The SDK auto-generates a UUID4 per event. **For `log()` users this field is invi
 ```python
 client.log_batch([
     LogSpec(
-        event_type=OliraEventType.LAB_RESULTS_RECEIVED,
+        log_type=OliraLogType.LAB_RESULTS_RECEIVED,
         patient_id="p_123",
         payload={...},
         idempotency_key=f"lab-result-{db_record.id}",  # stable, derived from source
@@ -274,13 +274,13 @@ Relevant for: outbox pattern, event replay pipeline, bulk historical backfill �
 
 ### Wire Format (single event)
 
-**Minimal** — `olira.log(event_type=OliraEventType.USER_LOGIN, patient_id="p_abc")`:
+**Minimal** — `olira.log(log_type=OliraLogType.USER_LOGIN, patient_id="p_abc")`:
 
 ```json
 {
-  "event_name": "user_login",
+  "log_type": "user_login",
   "patient_id": "p_abc",
-  "event_id": "e1a2b3c4-...",
+  "log_id": "e1a2b3c4-...",
   "idempotency_key": "c6f8b1...",
   "payload": {},
   "context": {
@@ -294,14 +294,14 @@ Relevant for: outbox pattern, event replay pipeline, bulk historical backfill �
 
 `timestamp` is omitted when not supplied — the server uses ingestion time. `trace` is omitted when `None`.
 
-**With payload and trace** — `olira.log(event_type=OliraEventType.CONVERSATION_COMPLETED, patient_id="p_abc", payload={...}, trace=OliraTrace(...))`:
+**With payload and trace** — `olira.log(log_type=OliraLogType.CONVERSATION_COMPLETED, patient_id="p_abc", payload={...}, trace=OliraTrace(...))`:
 
 ```json
 {
-  "event_name": "conversation_completed",
+  "log_type": "conversation_completed",
   "patient_id": "p_abc",
   "timestamp": "2026-02-26T08:15:00Z",
-  "event_id": "e1a2b3c4-...",
+  "log_id": "e1a2b3c4-...",
   "idempotency_key": "c6f8b1...",
   "payload": {
     "duration_seconds": 142
@@ -319,24 +319,24 @@ Relevant for: outbox pattern, event replay pipeline, bulk historical backfill �
 }
 ```
 
-`payload` maps directly to the `payload` argument of `log()`. `event_id` and `idempotency_key` are auto-generated UUID4s.
+`payload` maps directly to the `payload` argument of `log()`. `log_id` and `idempotency_key` are auto-generated UUID4s.
 
-### How SDK events map to internal EventLog documents
+### How SDK wire fields map to internal EventLog documents
 
 The ingestion endpoint translates wire fields into the internal `EventLog` document schema. The mapping is not 1-to-1:
 
 | SDK wire field    | `EventLog` field  | Notes                                                                                                                     |
 | ----------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `event_name`      | `type`            | Ingestion endpoint maps the string value to the `EventLogType` enum                                                       |
+| `log_type`        | `type`            | Ingestion endpoint maps the string value to the `EventLogType` enum                                                       |
 | `patient_id`      | `user_id`         | Resolved server-side via `PatientUser._id` (ObjectId) lookup scoped to the calling organisation |
 | `payload`         | `payload`         | Direct pass-through                                                                                                       |
 | `trace`           | `trace`           | Direct; `object_type` string is mapped to `ObjectType` enum                                                               |
 | `timestamp`       | `timestamp`       | Event occurrence time. Client-provided; server substitutes ingestion time when absent (see caveat below)                  |
-| `event_id`        | `event_id`        | Customer-facing UUID4. Persisted by the ingestion endpoint.                                                               |
+| `log_id`          | `event_id`        | Customer-facing UUID4 on the wire (`log_id`); stored as `event_id` on the document.                                                               |
 | `idempotency_key` | _(not persisted)_ | `EventLogBase` currently has no `idempotency_key` field — server-side deduplication is not yet implemented                |
 | _(server-set)_    | `ingested_at`     | Server ingestion timestamp. Always set at insert time; never accepted from the wire payload                               |
 
-The `EventLog` document gets a MongoDB `_id` (ObjectId) assigned by Beanie on insert. This is the server's internal record identifier and is never exposed in the public SDK API. Use `event_id` to reference events externally.
+The `EventLog` document gets a MongoDB `_id` (ObjectId) assigned by Beanie on insert. This is the server's internal record identifier and is never exposed in the public SDK API. Use the wire `log_id` (persisted as `event_id`) to reference logs externally.
 
 **`timestamp` caveat:** `timestamp` is the event occurrence time (when the thing happened in the real world). If the SDK caller does not provide it, the server falls back to ingestion time — so `timestamp` and `ingested_at` will be identical.
 
@@ -347,7 +347,7 @@ The `EventLog` document gets a MongoDB `_id` (ObjectId) assigned by Beanie on in
 ```python
 # patient_id is always the Olira-assigned id returned by create_patient():
 patient = client.create_patient(first_name="Jane", last_name="Smith", ...)
-olira.log(event_type=OliraEventType.USER_LOGIN, patient_id=patient.id)
+olira.log(log_type=OliraLogType.USER_LOGIN, patient_id=patient.id)
 ```
 
 Patients must be created via `create_patient()` (or the Console) before events can be logged against them. Store the returned `id` from `create_patient()` — it is the value you use in `log()` and all other calls.
@@ -365,12 +365,12 @@ Customers are responsible for pseudonymisation. The SDK documentation clearly wa
 
 ## 5. Event Types & Payload Schemas
 
-Customers call `olira.log(event_type=OliraEventType.X, patient_id=..., payload={...})` for all event types. The `payload` is a free-form `dict` — structure is defined per event type below and validated server-side (HTTP 422 on mismatch).
+Customers call `olira.log(log_type=OliraLogType.X, patient_id=..., payload={...})` for all log types. The `payload` is a free-form `dict` — structure is defined per log type below and validated server-side (HTTP 422 on mismatch).
 
 **Validation strategy:**
 
 - `patient_id` PII guard and 512 KB payload limit are enforced client-side (raise `ValidationError` before any network call).
-- `event_type` must be a valid `OliraEventType` — enforced by the enum type annotation.
+- `log_type` must be a valid `OliraLogType` — enforced by the enum type annotation.
 - Payload structure is **not** validated client-side. Customers who want pre-validation can use the exported Pydantic helper models (e.g. `EsasItem`, `LabResultItem`) to construct and validate payloads, then call `.model_dump()` before passing to `log()`.
 
 **Schema source of truth:** Payload shapes align with `packages/common-models/src/olira_common_models/schemas/personalization/util.py`. The SDK does not depend on common-models so it remains public and PyPI-installable; it defines compatible Pydantic models locally.
@@ -403,12 +403,12 @@ class EsasItem(BaseModel):
 **Example:**
 
 ```python
-from olira import EsasItem, OliraEventType
+from olira import EsasItem, OliraLogType
 
 items = [EsasItem(name="pain", score=4), EsasItem(name="nausea", score=2), EsasItem(name="anxiety", score=5)]
 payload = {"instrument": "esas_r", "symptoms": [i.model_dump() for i in items], "recall_period": "past_24h"}
 
-client.log(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_abc123", payload=payload)
+client.log(log_type=OliraLogType.SYMPTOM_REPORT, patient_id="p_abc123", payload=payload)
 ```
 
 ### 5.2 Lab & Clinical
@@ -443,7 +443,7 @@ class PerformingLab(BaseModel):
 **Example:**
 
 ```python
-from olira import LabResultItem, PerformingLab, OliraEventType
+from olira import LabResultItem, PerformingLab, OliraLogType
 
 result = LabResultItem(loinc_code="718-7", test_name="Hemoglobin", value_numeric=11.2, unit="g/dL", abnormal_flag="L")
 payload = {
@@ -452,7 +452,7 @@ payload = {
     "collection_datetime": "2026-02-26T07:30:00Z",
     "performing_lab": PerformingLab(name="Acme Lab").model_dump(exclude_none=True),
 }
-client.log(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_abc123", payload=payload)
+client.log(log_type=OliraLogType.LAB_RESULTS_RECEIVED, patient_id="p_abc123", payload=payload)
 ```
 
 ### 5.3 Questionnaires
@@ -474,7 +474,7 @@ client.log(event_type=OliraEventType.LAB_RESULTS_RECEIVED, patient_id="p_abc123"
 **Example:**
 
 ```python
-from olira import OliraEventType, OliraTrace
+from olira import OliraLogType, OliraTrace
 
 trace = OliraTrace(object_type="conversation", object_id="conv_789")
 payload = {
@@ -485,7 +485,7 @@ payload = {
         {"speaker_label": "patient", "text": "A bit tired, pain is around a 4.", "turn_index": 1},
     ],
 }
-client.log(event_type=OliraEventType.CONVERSATION_COMPLETED, patient_id="p_abc123", payload=payload, trace=trace)
+client.log(log_type=OliraLogType.CONVERSATION_COMPLETED, patient_id="p_abc123", payload=payload, trace=trace)
 ```
 
 ### 5.5 Passive Data
@@ -504,7 +504,7 @@ client.log(event_type=OliraEventType.CONVERSATION_COMPLETED, patient_id="p_abc12
 **Example:**
 
 ```python
-from olira import TimePeriod, OliraEventType
+from olira import TimePeriod, OliraLogType
 
 payload = {
     **TimePeriod(start_datetime="2026-02-25T22:10:00Z", end_datetime="2026-02-26T06:45:00Z").model_dump(),
@@ -514,7 +514,7 @@ payload = {
     "rem_sleep_minutes": 88,
     "awake_minutes": 20,
 }
-client.log(event_type=OliraEventType.SLEEP_DATA_RECEIVED, patient_id="p_abc123", payload=payload)
+client.log(log_type=OliraLogType.SLEEP_DATA_RECEIVED, patient_id="p_abc123", payload=payload)
 ```
 
 ### 5.6 Medication
@@ -530,7 +530,7 @@ client.log(event_type=OliraEventType.SLEEP_DATA_RECEIVED, patient_id="p_abc123",
 **Example:**
 
 ```python
-from olira import OliraEventType
+from olira import OliraLogType
 
 payload = {
     "action": "add",
@@ -545,7 +545,7 @@ payload = {
         "start_date": "2026-02-26",
     }]
 }
-client.log(event_type=OliraEventType.MEDICATION_ACTION, patient_id="p_abc123", payload=payload)
+client.log(log_type=OliraLogType.MEDICATION_ACTION, patient_id="p_abc123", payload=payload)
 ```
 
 ### 5.7 Engagement
@@ -563,10 +563,10 @@ client.log(event_type=OliraEventType.MEDICATION_ACTION, patient_id="p_abc123", p
 **Example:**
 
 ```python
-from olira import OliraEventType
+from olira import OliraLogType
 
 client.log(
-    event_type=OliraEventType.FEATURE_USED,
+    log_type=OliraLogType.FEATURE_USED,
     patient_id="p_abc123",
     payload={"feature_name": "symptom_tracker", "session_id": "sess_001", "dwell_time_seconds": 45},
 )
@@ -591,10 +591,10 @@ All profile events are patch-style: include only the fields that changed. Omitte
 **Example:**
 
 ```python
-from olira import OliraEventType
+from olira import OliraLogType
 
 client.log(
-    event_type=OliraEventType.DEMOGRAPHICS_UPDATED,
+    log_type=OliraLogType.DEMOGRAPHICS_UPDATED,
     patient_id="p_abc123",
     payload={"dob": "1972-04-15", "sex": "female", "language": "en"},
 )
@@ -625,7 +625,7 @@ Organisation identity is derived entirely from the API key — every request car
 ### Batch Request (`POST /v1/logs/batch`)
 
 ```json
-{ "events": [ ... ] }
+{ "logs": [ ... ] }
 ```
 
 ### Batch Response
@@ -644,7 +644,7 @@ Organisation identity is derived entirely from the API key — every request car
 }
 ```
 
-Partial batch failures: the SDK logs dropped events (event_name only, no payload content) and invokes the `on_error` callback if configured.
+Partial batch failures: the SDK logs dropped events (log_type only, no payload content) and invokes the `on_error` callback if configured.
 
 > **Note — patient graph update:** `PatientUser` records created via the Console API or SDK receive a `UserPatientState` at creation time (`create_default_patient_state()` is called as part of the `PatientUser` lifecycle). Events are saved to the `EventLog` collection and the graph pipeline runs normally.
 
@@ -763,7 +763,7 @@ This means a single `log()` call doesn't trigger an HTTP request on its own — 
 2. **Tests and CI** — call `flush()` after your test code to ensure all events have been sent before making assertions.
 
 ```python
-olira.log(event_type=OliraEventType.USER_LOGIN, patient_id="p_123")
+olira.log(log_type=OliraLogType.USER_LOGIN, patient_id="p_123")
 olira.flush()  # blocks until the event above has been delivered
 ```
 
@@ -781,11 +781,11 @@ client.log(...)  # blocks until delivered — no background thread
 `log_batch()` bypasses the background queue entirely and sends a single `POST /v1/logs/batch` request synchronously, returning a `BatchResult`.
 
 ```python
-from olira import LogSpec, BatchResult, OliraEventType
+from olira import LogSpec, BatchResult, OliraLogType
 
 result: BatchResult = client.log_batch([
-    LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id="p_1"),
-    LogSpec(event_type=OliraEventType.SYMPTOM_REPORT, patient_id="p_2",
+    LogSpec(log_type=OliraLogType.USER_LOGIN, patient_id="p_1"),
+    LogSpec(log_type=OliraLogType.SYMPTOM_REPORT, patient_id="p_2",
               payload={"instrument": "esas_r", "symptoms": [...]}),
 ])
 # result.accepted: number of events accepted server-side
@@ -846,7 +846,7 @@ OliraError (base)
 import olira
 
 try:
-    client.log(event_type=olira.OliraEventType.SYMPTOM_REPORT, patient_id="p_123",
+    client.log(log_type=olira.OliraLogType.SYMPTOM_REPORT, patient_id="p_123",
                payload={"instrument": "esas_r", "symptoms": [olira.EsasItem(name="pain", score=4).model_dump()]})
 except olira.RateLimitError as e:
     print(f"Rate limited, retry after {e.retry_after}s")
@@ -874,7 +874,7 @@ These controls govern what the SDK writes into the customer's own log pipeline (
 
 | Concern                | Behaviour                                                                                                                                                                                                                                                                                                                                |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Payload logging        | Event bodies are **never** written to logs. Only `event_name`, first 8 chars of `patient_id`, and batch metadata logged at `DEBUG` level via the standard Python `logging` module under the logger name `olira`. Silence or redirect with standard Python logging config.                                                                |
+| Payload logging        | Event bodies are **never** written to logs. Only `log_type`, first 8 chars of `patient_id`, and batch metadata logged at `DEBUG` level via the standard Python `logging` module under the logger name `olira`. Silence or redirect with standard Python logging config.                                                                |
 | API key redaction      | Keys always masked as `olira_***` in all output.                                                                                                                                                                                                                                                                                         |
 | `patient_id` PII guard | `ValidationError` raised if value matches email, 10-digit phone, or SSN pattern.                                                                                                                                                                                                                                                         |
 | Max payload size       | 512 KB per event hard limit — events exceeding this raise `ValidationError` before any network call. For `track_clinical_note` specifically, if the payload exceeds 512 KB the SDK raises `ValidationError` with a message indicating the note is too large; the caller is responsible for truncating or chunking. No silent truncation. |
@@ -905,11 +905,11 @@ This is separate from SDK-side logging. Every event that reaches Olira's ingesti
 ```
 packages/olira-sdk-python/
   src/olira/
-    __init__.py          # public API: init, flush, log, log_batch, OliraClient, OliraEventType, exceptions
+    __init__.py          # public API: init, flush, log, log_batch, OliraClient, OliraLogType, exceptions
     client.py            # OliraClient class (sync); AsyncOliraClient class
     queue.py             # BackgroundWorker, bounded queue
     http.py              # HTTP transport, retry logic, send_batch_direct()
-    models.py            # OliraEventType, OliraTrace, LogSpec, BatchResult, BatchError, Pydantic helpers
+    models.py            # OliraLogType, OliraTrace, LogSpec, BatchResult, BatchError, Pydantic helpers
     exceptions.py        # Typed exception hierarchy
     py.typed             # PEP 561 marker
   tests/
@@ -1214,7 +1214,7 @@ Request body: `{ "patient_id": "<your patient id>" }`
 
 ### OpenTelemetry Integration
 
-Each `log()` call could create a short-lived OTel span (`olira.log {event_type}`) as a child of whatever span is active in the caller's code. Outbound HTTP requests would carry W3C `traceparent` / `tracestate` headers, allowing Olira's API to appear in the customer's existing distributed trace (Datadog, Honeycomb, Jaeger, etc.).
+Each `log()` call could create a short-lived OTel span (`olira.log {log_type}`) as a child of whatever span is active in the caller's code. Outbound HTTP requests would carry W3C `traceparent` / `tracestate` headers, allowing Olira's API to appear in the customer's existing distributed trace (Datadog, Honeycomb, Jaeger, etc.).
 
 **Proposed design:**
 
@@ -1229,7 +1229,7 @@ This feature adds observability value for customers already running OTel infrast
 
 ## Appendix: Full Event Catalogue
 
-Complete list of all event types with their `event_name` strings, categories, payload shapes, and field-level notes.
+Complete list of all log types with their `log_type` strings, categories, payload shapes, and field-level notes.
 
 **Source of truth:** Event types are defined in the `EventLogTypeDefinition` catalog, seeded from:
 
@@ -1920,7 +1920,7 @@ Treatment phase transition. Triggers downstream alert threshold changes and care
 
 ### A.9 Event Category Summary
 
-| Category        | `event_name` strings                                                                                                                                                                                       | Count  |
+| Category        | `log_type` strings                                                                                                                                                                                       | Count  |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | Symptom Reports | `symptom_ctcae_grade`, `symptom_esas_report`, `symptom_custom_report`, `symptom_free_text`, `symptom_detail`, `functional_class_reported`, `health_metric_reported`, `moods_report`                        | 8      |
 | Lab & Clinical  | `lab_results_received`, `vitals_measurement`, `clinical_note_received`                                                                                                                                     | 3      |
@@ -1932,4 +1932,4 @@ Treatment phase transition. Triggers downstream alert threshold changes and care
 | Profile         | `demographics_updated`, `condition_updated`, `preferences_updated`, `emergency_contact_updated`, `care_team_updated`, `insurance_updated`, `social_updated`, `pharmacy_updated`, `treatment_phase_changed` | 9      |
 | **Total**       |                                                                                                                                                                                                            | **41** |
 
-The 41 event types map to the event recorders in Section 5. Several recorders (e.g. `track_dose_taken` / `track_dose_skipped`) compose into a single underlying event (`medication_dose_update`), and a handful produce compound events with multiple sub-payloads, bringing the total recorder count above the raw event count.
+The 41 log types map to the event recorders in Section 5. Several recorders (e.g. `track_dose_taken` / `track_dose_skipped`) compose into a single underlying event (`medication_dose_update`), and a handful produce compound events with multiple sub-payloads, bringing the total recorder count above the raw event count.

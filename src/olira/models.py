@@ -39,8 +39,8 @@ def _validate_patient_id(value: str) -> str:
     return value
 
 
-class OliraEventType(StrEnum):
-    """Customer-facing event types. Values match the platform event log catalog."""
+class OliraLogType(StrEnum):
+    """Customer-facing log types. Values match the platform log catalog."""
 
     # Symptom reports
     SYMPTOM_REPORT = "symptom_report"
@@ -114,7 +114,7 @@ class OliraEventType(StrEnum):
 
 
 class OliraTrace(BaseModel):
-    """Links an event to an object in your own system (e.g. a conversation or message).
+    """Links a log to an object in your own system (e.g. a conversation or message).
 
     ``object_id`` is your identifier for that object — the same string you would use
     to look it up in your own database.  It is stored and returned as-is and is never
@@ -197,7 +197,7 @@ class TimePeriod(BaseModel):
 class LogSpec:
     """Lightweight log specification for log_batch(). Not persisted internally."""
 
-    event_type: OliraEventType
+    log_type: OliraLogType
     patient_id: str
     payload: dict[str, Any] | None = None
     trace: OliraTrace | None = None
@@ -227,10 +227,10 @@ class BatchResult(BaseModel):
 class LogWire(BaseModel):
     """Wire-format log entry; built by the SDK, not by customers."""
 
-    event_name: str
+    log_type: str
     patient_id: str
     timestamp: str | None = None
-    event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    log_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     idempotency_key: str = Field(default_factory=lambda: str(uuid.uuid4()))
     payload: dict[str, Any] = Field(default_factory=dict)
     context: dict[str, str] = Field(default_factory=dict)
@@ -430,37 +430,37 @@ class EventStateModuleResult(BaseModel):
     updated_at: str | None = None
 
 
-class SummaryMeta(BaseModel):
-    """Metadata entry for a summary returned by list_summaries().
+class ViewMeta(BaseModel):
+    """Metadata entry for a view returned by list_views().
 
     ``has_blocks`` reflects the unified block list (current v2 model).
     ``has_temp`` reflects whether live append-only TEMP entries exist.
     """
 
-    summary_type: str
-    summary_id: str
+    view_type: str
+    view_id: str
     has_blocks: bool = False
     has_temp: bool = False
 
 
-class SummaryBlockMeta(BaseModel):
-    """Metadata for one block within a summary returned by list_summary_blocks()."""
+class ViewBlockMeta(BaseModel):
+    """Metadata for one block within a view returned by list_view_blocks()."""
 
     block_id: str | None = None
     block_name: str | None = None
     has_result: bool = False
 
 
-class SummaryBlocksListResult(BaseModel):
-    """Result of list_summary_blocks(). Blocks come from the unified block list."""
+class ViewBlocksListResult(BaseModel):
+    """Result of list_view_blocks(). Blocks come from the unified block list."""
 
     patient_id: str
-    summary_type: str
-    blocks: list[SummaryBlockMeta] = Field(default_factory=list)
+    view_type: str
+    blocks: list[ViewBlockMeta] = Field(default_factory=list)
 
 
-class SummaryResult(BaseModel):
-    """Result of get_summary().
+class ViewResult(BaseModel):
+    """Result of get_view().
 
     ``content`` holds the unified block list under the key ``blocks`` (current v2 model),
     plus ``temp`` entries when present. Legacy snapshots may also include ``week``,
@@ -468,36 +468,36 @@ class SummaryResult(BaseModel):
     """
 
     patient_id: str
-    summary_type: str
-    summary_id: str | None = None
+    view_type: str
+    view_id: str | None = None
     valid_from: str | None = None
     valid_to: str | None = None
     content: dict[str, Any] = Field(default_factory=dict)
 
 
-class SummaryBlockResult(BaseModel):
-    """Result of get_summary_block()."""
+class ViewBlockResult(BaseModel):
+    """Result of get_view_block()."""
 
     patient_id: str
-    summary_type: str
+    view_type: str
     block_id: str
     content: str | None = None
     confidences: dict[str, float] | None = None
     updated_at: str | None = None
 
 
-class SummaryRecentEventsResult(BaseModel):
-    """Result of get_summary_recent_events(). Entries are the TEMP segment string list."""
+class ViewRecentEventsResult(BaseModel):
+    """Result of get_view_recent_events(). Entries are the TEMP segment string list."""
 
     patient_id: str
-    summary_type: str
+    view_type: str
     entries: list[str] = Field(default_factory=list)
     count: int = 0
     total_count: int = 0
 
 
-class EventLogEntry(BaseModel):
-    """One event log entry returned by get_event_logs()."""
+class LogEntry(BaseModel):
+    """One event log entry returned by get_logs()."""
 
     id: str
     type: str | None = None
@@ -506,34 +506,34 @@ class EventLogEntry(BaseModel):
     trace: OliraTrace | None = None
 
 
-class EventLogsResult(BaseModel):
-    """Result of get_event_logs()."""
+class LogsResult(BaseModel):
+    """Result of get_logs()."""
 
     patient_id: str
     count: int
-    event_logs: list[EventLogEntry] = Field(default_factory=list)
+    logs: list[LogEntry] = Field(default_factory=list)
 
 
-class StateTransitionEntry(BaseModel):
-    """One state transition entry returned by get_state_transitions()."""
+class EventEntry(BaseModel):
+    """One event returned by get_events()."""
 
     id: str
     trigger: str | None = None
-    event_log_type: str | None = None
+    log_type: str | None = None
     status: str | None = None
     triggered_at: str | None = None
     completed_at: str | None = None
     source_event_log_id: str | None = None
-    event_log_payload: dict[str, Any] | None = None
+    log_payload: dict[str, Any] | None = None
     changes: dict[str, Any] | None = None
 
 
-class StateTransitionsResult(BaseModel):
-    """Result of get_state_transitions()."""
+class EventsResult(BaseModel):
+    """Result of get_events()."""
 
     patient_id: str
     count: int
-    state_transitions: list[StateTransitionEntry] = Field(default_factory=list)
+    events: list[EventEntry] = Field(default_factory=list)
 
 
 class MemoryEntry(BaseModel):

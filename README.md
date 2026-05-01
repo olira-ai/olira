@@ -73,12 +73,12 @@ Log a single event in the background (fire-and-forget):
 
 ```python
 import olira
-from olira import OliraEventType
+from olira import OliraLogType
 
 olira.init(api_key="olira_prod_...")
 
 olira.log(
-    event_type=OliraEventType.USER_LOGIN,
+    log_type=OliraLogType.USER_LOGIN,
     patient_id=patient_id,  # id from patient.id
 )
 olira.flush()  # block until delivery
@@ -87,13 +87,13 @@ olira.flush()  # block until delivery
 Send a batch directly and get back a result:
 
 ```python
-from olira import OliraClient, LogSpec, OliraEventType, EsasItem
+from olira import OliraClient, LogSpec, OliraLogType, EsasItem
 
 client = OliraClient(api_key="olira_prod_...")
 result = client.log_batch([
-    LogSpec(event_type=OliraEventType.USER_LOGIN, patient_id=patient_id),
+    LogSpec(log_type=OliraLogType.USER_LOGIN, patient_id=patient_id),
     LogSpec(
-        event_type=OliraEventType.SYMPTOM_REPORT,
+        log_type=OliraLogType.SYMPTOM_REPORT,
         patient_id=patient_id,
         payload={
             "instrument": "esas_r",
@@ -132,7 +132,7 @@ All methods are available on `AsyncOliraClient` as coroutines:
 
 ```python
 import asyncio
-from olira import AsyncOliraClient, OliraEventType
+from olira import AsyncOliraClient, OliraLogType
 
 async def main():
     async with AsyncOliraClient(api_key="olira_prod_...") as client:
@@ -141,7 +141,7 @@ async def main():
             last_name="Smith",
         )
         await client.log(
-            event_type=OliraEventType.USER_LOGIN,
+            log_type=OliraLogType.USER_LOGIN,
             patient_id=patient.id,
         )
 

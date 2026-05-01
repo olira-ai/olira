@@ -3,7 +3,7 @@
 import pytest
 
 import olira
-from olira import OliraClient, OliraEnv, OliraEventType, OliraTrace
+from olira import OliraClient, OliraEnv, OliraLogType, OliraTrace
 
 
 def test_init_requires_key():
@@ -35,9 +35,9 @@ def test_client_log_builds_event():
     client._transport = MockTransport()
     client._worker = None
 
-    client.log(event_type=OliraEventType.USER_LOGIN, patient_id="p_123")
+    client.log(log_type=OliraLogType.USER_LOGIN, patient_id="p_123")
     assert len(events_sent) == 1
-    assert events_sent[0]["event_name"] == "user_login"
+    assert events_sent[0]["log_type"] == "user_login"
     assert events_sent[0]["patient_id"] == "p_123"
     assert "context" in events_sent[0]
     assert events_sent[0]["context"]["environment"] == "development"
@@ -60,13 +60,13 @@ def test_client_log_with_trace():
 
     trace = OliraTrace(object_type="conversation", object_id="conv_789")
     client.log(
-        event_type=OliraEventType.CONVERSATION_COMPLETED,
+        log_type=OliraLogType.CONVERSATION_COMPLETED,
         patient_id="p_abc",
         payload={"duration_seconds": 142},
         trace=trace,
     )
     assert len(events_sent) == 1
-    assert events_sent[0]["event_name"] == "conversation_completed"
+    assert events_sent[0]["log_type"] == "conversation_completed"
     assert events_sent[0]["payload"]["duration_seconds"] == 142
     assert events_sent[0]["trace"]["object_type"] == "conversation"
     assert events_sent[0]["trace"]["object_id"] == "conv_789"
