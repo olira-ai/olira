@@ -71,10 +71,10 @@ init(api_key: str | None = None, *, environment: OliraEnv = OliraEnv.PRODUCTION,
 Initialize the SDK. API key can be passed or set via OLIRA_API_KEY env var.
 
 | Parameter        | Required | Type       | Default                       |
-| ---------------- | -------- | ---------- | ----------------------------- | ------ |
-| `api_key`        | No       | `str       | None`                         | `None` |
+| ---------------- | -------- | ---------- | ----------------------------- |
+| `api_key`        | No       | `Optional[str]`                         | `None` |
 | `environment`    | No       | `OliraEnv` | `OliraEnv.PRODUCTION`         |
-| `service_name`   | No       | `str       | None`                         | `None` |
+| `service_name`   | No       | `Optional[str]`                         | `None` |
 | `base_url`       | No       | `str`      | `'https://api.prod.olira.ai'` |
 | `batch_size`     | No       | `int`      | `50`                          |
 | `flush_interval` | No       | `float`    | `1.5`                         |
@@ -344,11 +344,11 @@ List patients in your organisation. Module-level proxy to the singleton client.
 Requires an API key with the api:manage-patients scope.
 
 | Parameter         | Required | Type  | Default |
-| ----------------- | -------- | ----- | ------- | ------ |
+| ----------------- | -------- | ----- | ------- |
 | `limit`           | No       | `int` | `100`   |
 | `offset`          | No       | `int` | `0`     |
-| `external_system` | No       | `str  | None`   | `None` |
-| `external_value`  | No       | `str  | None`   | `None` |
+| `external_system` | No       | `Optional[str]`   | `None` |
+| `external_value`  | No       | `Optional[str]`   | `None` |
 
 **Example:**
 
@@ -394,18 +394,18 @@ Requires an API key with the api:manage-patients scope.
 Only supplied fields are changed; omitted fields are left as-is.
 
 | Parameter              | Required | Type                      | Default |
-| ---------------------- | -------- | ------------------------- | ------- | ------ |
+| ---------------------- | -------- | ------------------------- | ------- |
 | `patient_id`           | Yes      | `str`                     | —       |
-| `first_name`           | No       | `str                      | None`   | `None` |
-| `last_name`            | No       | `str                      | None`   | `None` |
-| `email`                | No       | `str                      | None`   | `None` |
-| `phone_number`         | No       | `str                      | None`   | `None` |
-| `sex`                  | No       | `str                      | None`   | `None` |
-| `timezone`             | No       | `str                      | None`   | `None` |
-| `primary_disease_site` | No       | `str                      | None`   | `None` |
-| `disease_stage`        | No       | `str                      | None`   | `None` |
-| `external_identifiers` | No       | `list[ExternalIdentifier] | None`   | `None` |
-| `metadata`             | No       | `dict[str, Any]           | None`   | `None` |
+| `first_name`           | No       | `Optional[str]`   | `None` |
+| `last_name`            | No       | `Optional[str]`   | `None` |
+| `email`                | No       | `Optional[str]`   | `None` |
+| `phone_number`         | No       | `Optional[str]`   | `None` |
+| `sex`                  | No       | `Optional[str]`   | `None` |
+| `timezone`             | No       | `Optional[str]`   | `None` |
+| `primary_disease_site` | No       | `Optional[str]`   | `None` |
+| `disease_stage`        | No       | `Optional[str]`   | `None` |
+| `external_identifiers` | No       | `Optional[list[ExternalIdentifier]]`   | `None` |
+| `metadata`             | No       | `Optional[dict[str, Any]]`   | `None` |
 
 Only the fields you supply are changed; omitted fields are left as-is.
 
@@ -528,17 +528,17 @@ Request body for updating a patient (all fields optional).
 Only the fields you set are changed; omitted fields are left as-is.
 
 | Field                  | Required | Type                      | Description |
-| ---------------------- | -------- | ------------------------- | ----------- | ------------------- |
-| `first_name`           | No       | `str                      | None`       | — (default: `None`) |
-| `last_name`            | No       | `str                      | None`       | — (default: `None`) |
-| `email`                | No       | `str                      | None`       | — (default: `None`) |
-| `phone_number`         | No       | `str                      | None`       | — (default: `None`) |
-| `sex`                  | No       | `str                      | None`       | — (default: `None`) |
-| `timezone`             | No       | `str                      | None`       | — (default: `None`) |
-| `primary_disease_site` | No       | `str                      | None`       | — (default: `None`) |
-| `disease_stage`        | No       | `str                      | None`       | — (default: `None`) |
-| `external_identifiers` | No       | `list[ExternalIdentifier] | None`       | — (default: `None`) |
-| `metadata`             | No       | `dict[str, Any]           | None`       | — (default: `None`) |
+| ---------------------- | -------- | ------------------------- | ----------- |
+| `first_name`           | No       | `Optional[str]`       | — (default: `None`) |
+| `last_name`            | No       | `Optional[str]`       | — (default: `None`) |
+| `email`                | No       | `Optional[str]`       | — (default: `None`) |
+| `phone_number`         | No       | `Optional[str]`       | — (default: `None`) |
+| `sex`                  | No       | `Optional[str]`       | — (default: `None`) |
+| `timezone`             | No       | `Optional[str]`       | — (default: `None`) |
+| `primary_disease_site` | No       | `Optional[str]`       | — (default: `None`) |
+| `disease_stage`        | No       | `Optional[str]`       | — (default: `None`) |
+| `external_identifiers` | No       | `Optional[list[ExternalIdentifier]]`       | — (default: `None`) |
+| `metadata`             | No       | `Optional[dict[str, Any]]`       | — (default: `None`) |
 
 ### `Patient`
 
@@ -581,10 +581,10 @@ Result of a list_patients() call.
 One successfully created patient from a batch_create_patients() call.
 
 | Field    | Required | Type  | Description |
-| -------- | -------- | ----- | ----------- | ------------------- |
+| -------- | -------- | ----- | ----------- |
 | `index`  | Yes      | `int` | —           |
 | `id`     | Yes      | `str` | —           |
-| `source` | No       | `str  | None`       | — (default: `None`) |
+| `source` | No       | `Optional[str]`       | — (default: `None`) |
 
 ### `PatientBatchResult`
 
@@ -630,9 +630,9 @@ Enqueue an event for background delivery. Module-level proxy to the singleton cl
 | ------------ | -------- | ---------------- | ------- |
 | `log_type` | Yes      | `OliraLogType` | —       |
 | `patient_id` | Yes      | `str`            | —       |
-| `payload`    | No       | `dict[str, Any]  | None`   | `None` |
-| `trace`      | No       | `OliraTrace      | None`   | `None` |
-| `timestamp`  | No       | `str             | None`   | `None` |
+| `payload`    | No       | `Optional[dict[str, Any]]`   | `None` |
+| `trace`      | No       | `Optional[OliraTrace]`   | `None` |
+| `timestamp`  | No       | `Optional[str]`   | `None` |
 
 Events are enqueued and flushed in the background. Call `olira.flush()` before
 process exit to ensure delivery.
@@ -729,10 +729,10 @@ Lightweight event specification for log_batch(). Not persisted internally.
 | ----------------- | -------- | ---------------- | ----------- |
 | `log_type`      | Yes      | `OliraLogType` | —           |
 | `patient_id`      | Yes      | `str`            | —           |
-| `payload`         | No       | `dict[str, Any]  | None`       | — (default: `None`) |
-| `trace`           | No       | `OliraTrace      | None`       | — (default: `None`) |
-| `timestamp`       | No       | `str             | None`       | — (default: `None`) |
-| `idempotency_key` | No       | `str             | None`       | — (default: `None`) |
+| `payload`         | No       | `Optional[dict[str, Any]]`       | — (default: `None`) |
+| `trace`           | No       | `Optional[OliraTrace]`       | — (default: `None`) |
+| `timestamp`       | No       | `Optional[str]`       | — (default: `None`) |
+| `idempotency_key` | No       | `Optional[str]`       | — (default: `None`) |
 
 ### `BatchResult`
 
