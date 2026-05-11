@@ -8,17 +8,15 @@ The Olira Python SDK provides a typed client for logging health events,
 managing patients, and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `0.1.0a8`
-
+**Package:** `olira` — **Version:** `0.1.0a10`
 
 ## Related docs
 
-| Doc | What it covers | Why you need it |
-| --- | -------------- | --------------- |
-| **Authentication** (`olira.ai/api-docs` → Authentication tab) | API keys, patient tokens, **scopes**, auth errors | Choose scopes when creating keys; mint patient tokens for device-facing calls |
-| **MCP Patient State** (`olira.ai/api-docs` → MCP tab) | Tools for querying patient health state from AI agents | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
-| **CLI** (`olira.ai/api-docs` → CLI tab) | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server |
-
+| Doc                                                           | What it covers                                               | Why you need it                                                                                                                                                             |
+| ------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Authentication** (`olira.ai/api-docs` → Authentication tab) | API keys, patient tokens, **scopes**, auth errors            | Choose scopes when creating keys; mint patient tokens for device-facing calls                                                                                               |
+| **MCP Patient State** (`olira.ai/api-docs` → MCP tab)         | Tools for querying patient health state from AI agents       | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
+| **CLI** (`olira.ai/api-docs` → CLI tab)                       | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server                                                                             |
 
 ## Getting Started
 
@@ -70,20 +68,19 @@ init(api_key: str | None = None, *, environment: OliraEnv = OliraEnv.PRODUCTION,
 
 Initialize the SDK. API key can be passed or set via OLIRA_API_KEY env var.
 
-| Parameter        | Required | Type       | Default                       |
-| ---------------- | -------- | ---------- | ----------------------------- |
-| `api_key`        | No       | `Optional[str]`                         | `None` |
-| `environment`    | No       | `OliraEnv` | `OliraEnv.PRODUCTION`         |
-| `service_name`   | No       | `Optional[str]`                         | `None` |
-| `base_url`       | No       | `str`      | `'https://api.prod.olira.ai'` |
-| `batch_size`     | No       | `int`      | `50`                          |
-| `flush_interval` | No       | `float`    | `1.5`                         |
-| `max_queue_size` | No       | `int`      | `10000`                       |
-| `timeout`        | No       | `float`    | `5.0`                         |
-| `max_retries`    | No       | `int`      | `3`                           |
-| `on_error`       | No       | `str`      | `'drop'`                      |
-| `async_flush`    | No       | `bool`     | `True`                        |
-
+| Parameter        | Required | Type            | Default                       |
+| ---------------- | -------- | --------------- | ----------------------------- |
+| `api_key`        | No       | `Optional[str]` | `None`                        |
+| `environment`    | No       | `OliraEnv`      | `OliraEnv.PRODUCTION`         |
+| `service_name`   | No       | `Optional[str]` | `None`                        |
+| `base_url`       | No       | `str`           | `'https://api.prod.olira.ai'` |
+| `batch_size`     | No       | `int`           | `50`                          |
+| `flush_interval` | No       | `float`         | `1.5`                         |
+| `max_queue_size` | No       | `int`           | `10000`                       |
+| `timeout`        | No       | `float`         | `5.0`                         |
+| `max_retries`    | No       | `int`           | `3`                           |
+| `on_error`       | No       | `str`           | `'drop'`                      |
+| `async_flush`    | No       | `bool`          | `True`                        |
 
 ## Olira CLI
 
@@ -111,7 +108,6 @@ olira keys revoke my-key
 olira configure cursor  # Write MCP server config to .cursor/mcp.json
 ```
 
-
 ## Models
 
 ### Helper models
@@ -132,10 +128,10 @@ object without any extra lookups.
 to look it up in your own database. It is stored and returned as-is and is never
 interpreted or validated by Olira.
 
-| Field         | Required | Type  | Description                                                     |
-| ------------- | -------- | ----- | --------------------------------------------------------------- |
+| Field         | Required | Type  | Description                                                                          |
+| ------------- | -------- | ----- | ------------------------------------------------------------------------------------ |
 | `object_type` | Yes      | `str` | Category of the linked object, e.g. `'conversation'`, `'message'`, `'questionnaire'` |
-| `object_id`   | Yes      | `str` | Your identifier for the linked object                           |
+| `object_id`   | Yes      | `str` | Your identifier for the linked object                                                |
 
 **Example:**
 
@@ -253,7 +249,6 @@ in `log()` and `log_batch()`.
 - `OliraLogType.PHARMACY_UPDATED` → `"pharmacy_updated"`
 - `OliraLogType.TREATMENT_PHASE_CHANGED` → `"treatment_phase_changed"`
 
-
 ## Patients
 
 All patient functions require an API key with `api:manage-patients` scope.
@@ -286,19 +281,19 @@ with an Olira-assigned `id` — use it in all subsequent calls for this patient.
 
 **Anchor rule (validation):** You must provide **at least one** of: a non-empty `external_identifiers` list, `email`, non-empty `phone_number`, `first_name`, `last_name`, or `date_of_birth`. Omitting all of these raises a validation error. This allows **shell** patients (for example, an external EMR id only) until demographics are synced or entered later via `update_patient`.
 
-| Parameter              | Required | Type                             | Default     |
-| ---------------------- | -------- | -------------------------------- | ----------- |
-| `first_name`           | No       | `str \| None`                    | `None`      |
-| `last_name`            | No       | `str \| None`                    | `None`      |
-| `email`                | No       | `str \| None`                    | `None`      |
-| `phone_number`         | No       | `str \| None`                    | `None`      |
-| `date_of_birth`        | No       | `str \| None`                    | `None`      |
-| `sex`                  | No       | `str`                            | `'unknown'` |
-| `timezone`             | No       | `str`                            | `'UTC'`     |
-| `primary_disease_site` | No       | `str \| None`                    | `None`      |
-| `disease_stage`        | No       | `str \| None`                    | `None`      |
+| Parameter              | Required | Type                               | Default               |
+| ---------------------- | -------- | ---------------------------------- | --------------------- |
+| `first_name`           | No       | `str \| None`                      | `None`                |
+| `last_name`            | No       | `str \| None`                      | `None`                |
+| `email`                | No       | `str \| None`                      | `None`                |
+| `phone_number`         | No       | `str \| None`                      | `None`                |
+| `date_of_birth`        | No       | `str \| None`                      | `None`                |
+| `sex`                  | No       | `str`                              | `'unknown'`           |
+| `timezone`             | No       | `str`                              | `'UTC'`               |
+| `primary_disease_site` | No       | `str \| None`                      | `None`                |
+| `disease_stage`        | No       | `str \| None`                      | `None`                |
 | `external_identifiers` | No       | `list[ExternalIdentifier] \| None` | `None` (sent as `[]`) |
-| `metadata`             | No       | `dict[str, Any] \| None`         | `None`      |
+| `metadata`             | No       | `dict[str, Any] \| None`           | `None`                |
 
 `date_of_birth` must be ISO 8601 when provided (for example `1985-03-22T00:00:00Z`).
 
@@ -343,12 +338,12 @@ List patients in your organisation. Module-level proxy to the singleton client.
 
 Requires an API key with the api:manage-patients scope.
 
-| Parameter         | Required | Type  | Default |
-| ----------------- | -------- | ----- | ------- |
-| `limit`           | No       | `int` | `100`   |
-| `offset`          | No       | `int` | `0`     |
-| `external_system` | No       | `Optional[str]`   | `None` |
-| `external_value`  | No       | `Optional[str]`   | `None` |
+| Parameter         | Required | Type            | Default |
+| ----------------- | -------- | --------------- | ------- |
+| `limit`           | No       | `int`           | `100`   |
+| `offset`          | No       | `int`           | `0`     |
+| `external_system` | No       | `Optional[str]` | `None`  |
+| `external_value`  | No       | `Optional[str]` | `None`  |
 
 **Example:**
 
@@ -393,19 +388,19 @@ Update a patient. Module-level proxy to the singleton client.
 Requires an API key with the api:manage-patients scope.
 Only supplied fields are changed; omitted fields are left as-is.
 
-| Parameter              | Required | Type                      | Default |
-| ---------------------- | -------- | ------------------------- | ------- |
-| `patient_id`           | Yes      | `str`                     | —       |
-| `first_name`           | No       | `Optional[str]`   | `None` |
-| `last_name`            | No       | `Optional[str]`   | `None` |
-| `email`                | No       | `Optional[str]`   | `None` |
-| `phone_number`         | No       | `Optional[str]`   | `None` |
-| `sex`                  | No       | `Optional[str]`   | `None` |
-| `timezone`             | No       | `Optional[str]`   | `None` |
-| `primary_disease_site` | No       | `Optional[str]`   | `None` |
-| `disease_stage`        | No       | `Optional[str]`   | `None` |
-| `external_identifiers` | No       | `Optional[list[ExternalIdentifier]]`   | `None` |
-| `metadata`             | No       | `Optional[dict[str, Any]]`   | `None` |
+| Parameter              | Required | Type                                 | Default |
+| ---------------------- | -------- | ------------------------------------ | ------- |
+| `patient_id`           | Yes      | `str`                                | —       |
+| `first_name`           | No       | `Optional[str]`                      | `None`  |
+| `last_name`            | No       | `Optional[str]`                      | `None`  |
+| `email`                | No       | `Optional[str]`                      | `None`  |
+| `phone_number`         | No       | `Optional[str]`                      | `None`  |
+| `sex`                  | No       | `Optional[str]`                      | `None`  |
+| `timezone`             | No       | `Optional[str]`                      | `None`  |
+| `primary_disease_site` | No       | `Optional[str]`                      | `None`  |
+| `disease_stage`        | No       | `Optional[str]`                      | `None`  |
+| `external_identifiers` | No       | `Optional[list[ExternalIdentifier]]` | `None`  |
+| `metadata`             | No       | `Optional[dict[str, Any]]`           | `None`  |
 
 Only the fields you supply are changed; omitted fields are left as-is.
 
@@ -507,19 +502,19 @@ Request body for creating a patient (including batch create).
 
 Olira assigns a stable `id` at creation time — it is returned on the :class:`Patient` response. The same **anchor rule** as `create_patient` applies: at least one of `external_identifiers` (non-empty), `email`, `phone_number`, `first_name`, `last_name`, or `date_of_birth` must be set. Optional demographics support **shell** patients.
 
-| Field                  | Required | Type                             | Description |
-| ---------------------- | -------- | -------------------------------- | ----------- |
-| `first_name`           | No       | `str \| None`                    | Given name; omit for shell patients. |
-| `last_name`            | No       | `str \| None`                    | Family name; omit for shell patients. |
-| `email`                | No       | `str \| None`                    | —           |
-| `phone_number`         | No       | `str \| None`                    | —           |
-| `date_of_birth`        | No       | `str \| None`                    | ISO 8601 when set, e.g. `1985-03-22T00:00:00Z`. |
-| `sex`                  | No       | `str`                            | Default `'unknown'`. |
-| `timezone`             | No       | `str`                            | Default `'UTC'`. |
-| `primary_disease_site` | No       | `str \| None`                    | —           |
-| `disease_stage`        | No       | `str \| None`                    | —           |
-| `external_identifiers` | No       | `list[ExternalIdentifier]`       | Default `[]`. Non-empty list satisfies the anchor rule. |
-| `metadata`             | No       | `dict[str, Any] \| None`         | —           |
+| Field                  | Required | Type                       | Description                                             |
+| ---------------------- | -------- | -------------------------- | ------------------------------------------------------- |
+| `first_name`           | No       | `str \| None`              | Given name; omit for shell patients.                    |
+| `last_name`            | No       | `str \| None`              | Family name; omit for shell patients.                   |
+| `email`                | No       | `str \| None`              | —                                                       |
+| `phone_number`         | No       | `str \| None`              | —                                                       |
+| `date_of_birth`        | No       | `str \| None`              | ISO 8601 when set, e.g. `1985-03-22T00:00:00Z`.         |
+| `sex`                  | No       | `str`                      | Default `'unknown'`.                                    |
+| `timezone`             | No       | `str`                      | Default `'UTC'`.                                        |
+| `primary_disease_site` | No       | `str \| None`              | —                                                       |
+| `disease_stage`        | No       | `str \| None`              | —                                                       |
+| `external_identifiers` | No       | `list[ExternalIdentifier]` | Default `[]`. Non-empty list satisfies the anchor rule. |
+| `metadata`             | No       | `dict[str, Any] \| None`   | —                                                       |
 
 ### `UpdatePatientRequest`
 
@@ -527,18 +522,18 @@ Request body for updating a patient (all fields optional).
 
 Only the fields you set are changed; omitted fields are left as-is.
 
-| Field                  | Required | Type                      | Description |
-| ---------------------- | -------- | ------------------------- | ----------- |
-| `first_name`           | No       | `Optional[str]`       | — (default: `None`) |
-| `last_name`            | No       | `Optional[str]`       | — (default: `None`) |
-| `email`                | No       | `Optional[str]`       | — (default: `None`) |
-| `phone_number`         | No       | `Optional[str]`       | — (default: `None`) |
-| `sex`                  | No       | `Optional[str]`       | — (default: `None`) |
-| `timezone`             | No       | `Optional[str]`       | — (default: `None`) |
-| `primary_disease_site` | No       | `Optional[str]`       | — (default: `None`) |
-| `disease_stage`        | No       | `Optional[str]`       | — (default: `None`) |
-| `external_identifiers` | No       | `Optional[list[ExternalIdentifier]]`       | — (default: `None`) |
-| `metadata`             | No       | `Optional[dict[str, Any]]`       | — (default: `None`) |
+| Field                  | Required | Type                                 | Description         |
+| ---------------------- | -------- | ------------------------------------ | ------------------- |
+| `first_name`           | No       | `Optional[str]`                      | — (default: `None`) |
+| `last_name`            | No       | `Optional[str]`                      | — (default: `None`) |
+| `email`                | No       | `Optional[str]`                      | — (default: `None`) |
+| `phone_number`         | No       | `Optional[str]`                      | — (default: `None`) |
+| `sex`                  | No       | `Optional[str]`                      | — (default: `None`) |
+| `timezone`             | No       | `Optional[str]`                      | — (default: `None`) |
+| `primary_disease_site` | No       | `Optional[str]`                      | — (default: `None`) |
+| `disease_stage`        | No       | `Optional[str]`                      | — (default: `None`) |
+| `external_identifiers` | No       | `Optional[list[ExternalIdentifier]]` | — (default: `None`) |
+| `metadata`             | No       | `Optional[dict[str, Any]]`           | — (default: `None`) |
 
 ### `Patient`
 
@@ -549,22 +544,22 @@ time. Use it in all subsequent calls that reference this patient.
 
 Demographics may be absent for shell patients created with only an external id or partial data; `first_name`, `last_name`, and `sex` are then `None`.
 
-| Field                  | Required | Type                       | Description           |
-| ---------------------- | -------- | -------------------------- | --------------------- |
-| `id`                   | Yes      | `str`                      | Olira-assigned id.   |
-| `first_name`           | No       | `str \| None`              | `None` if unknown.   |
-| `last_name`            | No       | `str \| None`              | `None` if unknown.   |
-| `sex`                  | No       | `str \| None`              | `None` if unknown.   |
-| `timezone`             | Yes      | `str`                      | IANA timezone.       |
-| `status`               | Yes      | `str`                      | Account status.      |
-| `email`                | No       | `str \| None`              | —                     |
-| `phone_number`         | No       | `str \| None`              | —                     |
-| `date_of_birth`        | No       | `str \| None`              | ISO 8601 when set.   |
-| `primary_disease_site` | No       | `str \| None`              | —                     |
-| `disease_stage`        | No       | `str \| None`              | —                     |
-| `created_at`           | No       | `str \| None`              | —                     |
-| `external_identifiers` | No       | `list[ExternalIdentifier]` | May be empty.        |
-| `metadata`             | No       | `dict[str, Any] \| None`   | —                     |
+| Field                  | Required | Type                       | Description        |
+| ---------------------- | -------- | -------------------------- | ------------------ |
+| `id`                   | Yes      | `str`                      | Olira-assigned id. |
+| `first_name`           | No       | `str \| None`              | `None` if unknown. |
+| `last_name`            | No       | `str \| None`              | `None` if unknown. |
+| `sex`                  | No       | `str \| None`              | `None` if unknown. |
+| `timezone`             | Yes      | `str`                      | IANA timezone.     |
+| `status`               | Yes      | `str`                      | Account status.    |
+| `email`                | No       | `str \| None`              | —                  |
+| `phone_number`         | No       | `str \| None`              | —                  |
+| `date_of_birth`        | No       | `str \| None`              | ISO 8601 when set. |
+| `primary_disease_site` | No       | `str \| None`              | —                  |
+| `disease_stage`        | No       | `str \| None`              | —                  |
+| `created_at`           | No       | `str \| None`              | —                  |
+| `external_identifiers` | No       | `list[ExternalIdentifier]` | May be empty.      |
+| `metadata`             | No       | `dict[str, Any] \| None`   | —                  |
 
 ### `PatientListResult`
 
@@ -580,11 +575,11 @@ Result of a list_patients() call.
 
 One successfully created patient from a batch_create_patients() call.
 
-| Field    | Required | Type  | Description |
-| -------- | -------- | ----- | ----------- |
-| `index`  | Yes      | `int` | —           |
-| `id`     | Yes      | `str` | —           |
-| `source` | No       | `Optional[str]`       | — (default: `None`) |
+| Field    | Required | Type            | Description         |
+| -------- | -------- | --------------- | ------------------- |
+| `index`  | Yes      | `int`           | —                   |
+| `id`     | Yes      | `str`           | —                   |
+| `source` | No       | `Optional[str]` | — (default: `None`) |
 
 ### `PatientBatchResult`
 
@@ -611,10 +606,13 @@ and expires after `expires_in` seconds (default 15 minutes).
 | `expires_in`   | Yes      | `int`       | —                       |
 | `scopes`       | Yes      | `list[str]` | —                       |
 
-
 ## Logs
 
 All log functions require `sdk:event-log` scope.
+
+Use `log()` and `log_batch()` for **ongoing operational traffic**—applications, integrations, and moderate batch sizes where each submission should update patient state through Olira's immediate graph-update path.
+
+For **bulk historical data** (e.g. months or years at once, or onboarding backfills before go-live), use **[Historical Data Ingestion](#historical-data-ingestion)** with `create_ingestion_job()` and the **`sdk:historical-ingest`** scope. That pipeline stages rows, replays them in chronological order, and backfills summary views—not `log_batch` at volume
 
 ### Log a single event
 
@@ -626,13 +624,13 @@ log(*, log_type: OliraLogType, patient_id: str, payload: dict[str, Any] | None =
 
 Enqueue an event for background delivery. Module-level proxy to the singleton client.
 
-| Parameter    | Required | Type             | Default |
-| ------------ | -------- | ---------------- | ------- |
-| `log_type` | Yes      | `OliraLogType` | —       |
-| `patient_id` | Yes      | `str`            | —       |
-| `payload`    | No       | `Optional[dict[str, Any]]`   | `None` |
-| `trace`      | No       | `Optional[OliraTrace]`   | `None` |
-| `timestamp`  | No       | `Optional[str]`   | `None` |
+| Parameter    | Required | Type                       | Default |
+| ------------ | -------- | -------------------------- | ------- |
+| `log_type`   | Yes      | `OliraLogType`             | —       |
+| `patient_id` | Yes      | `str`                      | —       |
+| `payload`    | No       | `Optional[dict[str, Any]]` | `None`  |
+| `trace`      | No       | `Optional[OliraTrace]`     | `None`  |
+| `timestamp`  | No       | `Optional[str]`            | `None`  |
 
 Events are enqueued and flushed in the background. Call `olira.flush()` before
 process exit to ensure delivery.
@@ -685,8 +683,8 @@ log_batch(events: list[LogSpec]) -> BatchResult
 
 Send a batch of events directly. Module-level proxy to the singleton client.
 
-| Parameter | Required | Type              | Default |
-| --------- | -------- | ----------------- | ------- |
+| Parameter | Required | Type            | Default |
+| --------- | -------- | --------------- | ------- |
 | `events`  | Yes      | `list[LogSpec]` | —       |
 
 **Example:**
@@ -725,14 +723,14 @@ print(f"Accepted: {result.accepted}, Failed: {result.failed}")
 
 Lightweight event specification for log_batch(). Not persisted internally.
 
-| Field             | Required | Type             | Description |
-| ----------------- | -------- | ---------------- | ----------- |
-| `log_type`      | Yes      | `OliraLogType` | —           |
-| `patient_id`      | Yes      | `str`            | —           |
-| `payload`         | No       | `Optional[dict[str, Any]]`       | — (default: `None`) |
-| `trace`           | No       | `Optional[OliraTrace]`       | — (default: `None`) |
-| `timestamp`       | No       | `Optional[str]`       | — (default: `None`) |
-| `idempotency_key` | No       | `Optional[str]`       | — (default: `None`) |
+| Field             | Required | Type                       | Description         |
+| ----------------- | -------- | -------------------------- | ------------------- |
+| `log_type`        | Yes      | `OliraLogType`             | —                   |
+| `patient_id`      | Yes      | `str`                      | —                   |
+| `payload`         | No       | `Optional[dict[str, Any]]` | — (default: `None`) |
+| `trace`           | No       | `Optional[OliraTrace]`     | — (default: `None`) |
+| `timestamp`       | No       | `Optional[str]`            | — (default: `None`) |
+| `idempotency_key` | No       | `Optional[str]`            | — (default: `None`) |
 
 ### `BatchResult`
 
@@ -753,7 +751,6 @@ Per-event error from a batch response.
 | `index`   | Yes      | `int` | —           |
 | `code`    | Yes      | `str` | —           |
 | `message` | Yes      | `str` | —           |
-
 
 ## Patient Token
 
@@ -785,28 +782,28 @@ token = olira.get_patient_token(patient_id="patient-uuid")
 print(f"Token expires in {token.expires_in}s")
 ```
 
-
 ## Patient State — Read
 
 The state-read methods give Python backends direct access to the same compiled patient state that the [MCP Patient State server](https://olira.ai/api-docs) exposes to AI agents — without going through JSON-RPC. They are a REST-backed mirror of the MCP tools, returning raw structured data rather than agent-formatted text.
 
 All state-read functions require an API key with the `sdk:state-read` scope.
 
-| SDK method | MCP tool equivalent |
-| --- | --- |
-| `get_stable_data` | `get_stable_data` |
-| `list_event_state_modules` | `list_event_state_modules` |
-| `get_event_state_module` | `get_event_state_module` |
-| `list_views` | `list_views_and_blocks` (list mode) |
-| `list_view_blocks` | `list_views_and_blocks` (blocks mode) |
-| `get_view` | `get_view` |
-| `get_view_block` | `get_view_block` |
-| `get_view_recent_events` | `get_view_recent_events` |
-| `get_logs` | `get_logs` |
-| `get_events` | `get_events` |
-| `read_memories` | `read_memories` (list-all mode) |
+| SDK method                 | MCP tool equivalent                   |
+| -------------------------- | ------------------------------------- |
+| `get_stable_data`          | `get_stable_data`                     |
+| `list_event_state_modules` | `list_event_state_modules`            |
+| `get_event_state_module`   | `get_event_state_module`              |
+| `list_views`               | `list_views_and_blocks` (list mode)   |
+| `list_view_blocks`         | `list_views_and_blocks` (blocks mode) |
+| `get_view`                 | `get_view`                            |
+| `get_view_block`           | `get_view_block`                      |
+| `get_view_recent_events`   | `get_view_recent_events`              |
+| `get_logs`                 | `get_logs`                            |
+| `get_events`               | `get_events`                          |
+| `read_memories`            | `read_memories` (list-all mode)       |
 
 **Key differences from the MCP:**
+
 - Returns raw structured data — no pretty-printed markdown rendering
 - `read_memories(query=...)` uses MongoDB text search; the MCP uses Qdrant semantic search
 - The SDK does not expose memory writes; use ingestion APIs and platform workflows to persist new clinical facts
@@ -823,9 +820,9 @@ get_stable_data(*, patient_id: str, modules: list[str] | None = None) -> StableD
 
 Get stable patient data (demographics, condition/diagnosis, medications, preferences). Mirrors `get_stable_data` on the MCP.
 
-| Parameter    | Required | Type            | Default |
-| ------------ | -------- | --------------- | ------- |
-| `patient_id` | Yes      | `str`           | —       |
+| Parameter    | Required | Type                | Default      |
+| ------------ | -------- | ------------------- | ------------ |
+| `patient_id` | Yes      | `str`               | —            |
 | `modules`    | No       | `list[str] \| None` | `None` (all) |
 
 Valid module names (`StableModuleType`): `demographics`, `condition_diagnosis`, `medications`, `user_preferences`, `emergency_contact`, `care_team`, `insurance`, `social`, `pharmacy`, `procedures`, `allergies`, `immunizations`, `devices`, `family_history`. Which are populated depends on what data has been ingested for this patient. Omit `modules` to fetch all.
@@ -847,13 +844,26 @@ if demo:
   "modules": {
     "demographics": {
       "module_type": "demographics",
-      "payload": {"value": {"first_name": "Jane", "last_name": "Smith", "date_of_birth": "1975-06-15", "sex": "female", "timezone": "America/New_York"}},
+      "payload": {
+        "value": {
+          "first_name": "Jane",
+          "last_name": "Smith",
+          "date_of_birth": "1975-06-15",
+          "sex": "female",
+          "timezone": "America/New_York"
+        }
+      },
       "created_at": "2026-01-10T08:00:00+00:00",
       "updated_at": "2026-03-18T14:22:00+00:00"
     },
     "condition_diagnosis": {
       "module_type": "condition_diagnosis",
-      "payload": {"value": {"primary_disease_site": "breast", "disease_stage": "Stage II"}},
+      "payload": {
+        "value": {
+          "primary_disease_site": "breast",
+          "disease_stage": "Stage II"
+        }
+      },
       "created_at": "2026-01-10T08:00:00+00:00",
       "updated_at": "2026-01-10T08:00:00+00:00"
     }
@@ -885,9 +895,21 @@ for m in modules:
 
 ```json
 [
-  {"module_type": "symptoms", "updated_at": "2026-03-18T10:00:00+00:00", "created_at": "2026-01-10T08:00:00+00:00"},
-  {"module_type": "adherence", "updated_at": "2026-03-17T09:30:00+00:00", "created_at": "2026-01-10T08:00:00+00:00"},
-  {"module_type": "engagement", "updated_at": "2026-03-18T12:00:00+00:00", "created_at": "2026-01-10T08:00:00+00:00"}
+  {
+    "module_type": "symptoms",
+    "updated_at": "2026-03-18T10:00:00+00:00",
+    "created_at": "2026-01-10T08:00:00+00:00"
+  },
+  {
+    "module_type": "adherence",
+    "updated_at": "2026-03-17T09:30:00+00:00",
+    "created_at": "2026-01-10T08:00:00+00:00"
+  },
+  {
+    "module_type": "engagement",
+    "updated_at": "2026-03-18T12:00:00+00:00",
+    "created_at": "2026-01-10T08:00:00+00:00"
+  }
 ]
 ```
 
@@ -916,8 +938,18 @@ print(module.payload)
   "module_type": "symptoms",
   "payload": {
     "week_symptoms": [
-      {"name": "pain", "score": 4, "ctcae_grade": 1, "updated_at": "2026-03-18T10:00:00+00:00"},
-      {"name": "fatigue", "score": 6, "ctcae_grade": 2, "updated_at": "2026-03-18T10:00:00+00:00"}
+      {
+        "name": "pain",
+        "score": 4,
+        "ctcae_grade": 1,
+        "updated_at": "2026-03-18T10:00:00+00:00"
+      },
+      {
+        "name": "fatigue",
+        "score": 6,
+        "ctcae_grade": 2,
+        "updated_at": "2026-03-18T10:00:00+00:00"
+      }
     ],
     "functional_class_history": []
   },
@@ -952,8 +984,18 @@ for v in views:
 
 ```json
 [
-  {"view_type": "symptom_snapshot", "view_id": "66f1a2b3c4d5e6f7a8b9c0d1", "has_blocks": true, "has_temp": true},
-  {"view_type": "medication_snapshot", "view_id": "66f1a2b3c4d5e6f7a8b9c0d2", "has_blocks": true, "has_temp": true}
+  {
+    "view_type": "symptom_snapshot",
+    "view_id": "66f1a2b3c4d5e6f7a8b9c0d1",
+    "has_blocks": true,
+    "has_temp": true
+  },
+  {
+    "view_type": "medication_snapshot",
+    "view_id": "66f1a2b3c4d5e6f7a8b9c0d2",
+    "has_blocks": true,
+    "has_temp": true
+  }
 ]
 ```
 
@@ -1008,8 +1050,16 @@ print(view.content)
   "valid_to": "2026-03-18T00:00:00+00:00",
   "content": {
     "blocks": [
-      {"id": "symptom_overview", "name": "Symptom Overview", "text": "Patient reported moderate pain (4/10) and significant fatigue (6/10) over the past 7 days."},
-      {"id": "symptom_trends", "name": "Symptom Trends", "text": "Fatigue has been stable week-over-week. Pain has increased from 3/10 to 4/10."}
+      {
+        "id": "symptom_overview",
+        "name": "Symptom Overview",
+        "text": "Patient reported moderate pain (4/10) and significant fatigue (6/10) over the past 7 days."
+      },
+      {
+        "id": "symptom_trends",
+        "name": "Symptom Trends",
+        "text": "Fatigue has been stable week-over-week. Pain has increased from 3/10 to 4/10."
+      }
     ],
     "temp": [
       "2026-03-18 10:00 — symptom_report: pain 4/10, fatigue 6/10 (esas_r)"
@@ -1092,14 +1142,14 @@ get_logs(
 
 Get event logs with optional filters.
 
-| Parameter     | Required | Type              | Default |
-| ------------- | -------- | ----------------- | ------- |
-| `patient_id`  | Yes      | `str`             | —       |
-| `since`       | No       | `str \| None`     | `None`  |
-| `limit`       | No       | `int`             | `50`    |
-| `log_types` | No       | `list[str] \| None` | `None` |
-| `trace_type`  | No       | `str \| None`     | `None`  |
-| `trace_id`    | No       | `str \| None`     | `None`  |
+| Parameter    | Required | Type                | Default |
+| ------------ | -------- | ------------------- | ------- |
+| `patient_id` | Yes      | `str`               | —       |
+| `since`      | No       | `str \| None`       | `None`  |
+| `limit`      | No       | `int`               | `50`    |
+| `log_types`  | No       | `list[str] \| None` | `None`  |
+| `trace_type` | No       | `str \| None`       | `None`  |
+| `trace_id`   | No       | `str \| None`       | `None`  |
 
 **Examples:**
 
@@ -1132,15 +1182,21 @@ for entry in logs.logs:
       "id": "66f1a2b3c4d5e6f7a8b9c0d3",
       "type": "symptom_report",
       "timestamp": "2026-03-18T10:00:00+00:00",
-      "payload": {"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 4}, {"name": "fatigue", "score": 6}]},
-      "trace": {"object_type": "conversation", "object_id": "conv-abc-123"}
+      "payload": {
+        "instrument": "esas_r",
+        "symptoms": [
+          { "name": "pain", "score": 4 },
+          { "name": "fatigue", "score": 6 }
+        ]
+      },
+      "trace": { "object_type": "conversation", "object_id": "conv-abc-123" }
     },
     {
       "id": "66f1a2b3c4d5e6f7a8b9c0d4",
       "type": "moods_report",
       "timestamp": "2026-03-18T10:01:00+00:00",
-      "payload": {"moods": [{"mood": "anxious", "intensity": 3}]},
-      "trace": {"object_type": "conversation", "object_id": "conv-abc-123"}
+      "payload": { "moods": [{ "mood": "anxious", "intensity": 3 }] },
+      "trace": { "object_type": "conversation", "object_id": "conv-abc-123" }
     }
   ]
 }
@@ -1234,19 +1290,19 @@ for m in memories.results:
 
 ### `StableModule`
 
-| Field         | Type                    | Description                   |
-| ------------- | ----------------------- | ----------------------------- |
-| `module_type` | `str`                   | Module key                    |
-| `payload`     | `dict \| None`          | Raw module data               |
-| `created_at`  | `str \| None`           | ISO 8601 timestamp            |
-| `updated_at`  | `str \| None`           | ISO 8601 timestamp            |
+| Field         | Type           | Description        |
+| ------------- | -------------- | ------------------ |
+| `module_type` | `str`          | Module key         |
+| `payload`     | `dict \| None` | Raw module data    |
+| `created_at`  | `str \| None`  | ISO 8601 timestamp |
+| `updated_at`  | `str \| None`  | ISO 8601 timestamp |
 
 ### `StableDataResult`
 
-| Field       | Type                        | Description              |
-| ----------- | --------------------------- | ------------------------ |
-| `patient_id` | `str`                      | Patient ID               |
-| `modules`   | `dict[str, StableModule]`   | Modules keyed by type    |
+| Field        | Type                      | Description           |
+| ------------ | ------------------------- | --------------------- |
+| `patient_id` | `str`                     | Patient ID            |
+| `modules`    | `dict[str, StableModule]` | Modules keyed by type |
 
 ### `EventStateModuleSummary`
 
@@ -1258,13 +1314,13 @@ for m in memories.results:
 
 ### `EventStateModuleResult`
 
-| Field         | Type                        | Description        |
-| ------------- | --------------------------- | ------------------ |
-| `patient_id`  | `str`                       | Patient ID         |
-| `module_type` | `str`                       | Module type        |
-| `payload`     | `dict \| list \| None`      | Module data        |
-| `created_at`  | `str \| None`               | ISO 8601 timestamp |
-| `updated_at`  | `str \| None`               | ISO 8601 timestamp |
+| Field         | Type                   | Description        |
+| ------------- | ---------------------- | ------------------ |
+| `patient_id`  | `str`                  | Patient ID         |
+| `module_type` | `str`                  | Module type        |
+| `payload`     | `dict \| list \| None` | Module data        |
+| `created_at`  | `str \| None`          | ISO 8601 timestamp |
+| `updated_at`  | `str \| None`          | ISO 8601 timestamp |
 
 ### `ViewMeta`
 
@@ -1277,35 +1333,35 @@ for m in memories.results:
 
 ### `ViewResult`
 
-| Field        | Type              | Description                             |
-| ------------ | ----------------- | --------------------------------------- |
-| `patient_id` | `str`             | Patient ID                              |
-| `view_type`  | `str`             | View type                               |
-| `view_id`    | `str \| None`     | MongoDB document ID                     |
-| `valid_from` | `str \| None`     | View coverage start (ISO 8601)          |
-| `valid_to`   | `str \| None`     | View coverage end (ISO 8601)            |
-| `content`    | `dict[str, Any]`  | `"blocks"` → unified block list; `"temp"` → live TEMP entries |
+| Field        | Type             | Description                                                   |
+| ------------ | ---------------- | ------------------------------------------------------------- |
+| `patient_id` | `str`            | Patient ID                                                    |
+| `view_type`  | `str`            | View type                                                     |
+| `view_id`    | `str \| None`    | MongoDB document ID                                           |
+| `valid_from` | `str \| None`    | View coverage start (ISO 8601)                                |
+| `valid_to`   | `str \| None`    | View coverage end (ISO 8601)                                  |
+| `content`    | `dict[str, Any]` | `"blocks"` → unified block list; `"temp"` → live TEMP entries |
 
 ### `ViewBlockResult`
 
-| Field         | Type                       | Description             |
-| ------------- | -------------------------- | ----------------------- |
-| `patient_id`  | `str`                      | Patient ID              |
-| `view_type`   | `str`                      | View type               |
-| `block_id`    | `str`                      | Block identifier        |
+| Field         | Type                       | Description                                                   |
+| ------------- | -------------------------- | ------------------------------------------------------------- |
+| `patient_id`  | `str`                      | Patient ID                                                    |
+| `view_type`   | `str`                      | View type                                                     |
+| `block_id`    | `str`                      | Block identifier                                              |
 | `content`     | `str \| None`              | Generated block text (raw, without MCP's pretty-print header) |
-| `confidences` | `dict[str, float] \| None` | Confidence scores       |
-| `updated_at`  | `str \| None`              | ISO 8601 timestamp      |
+| `confidences` | `dict[str, float] \| None` | Confidence scores                                             |
+| `updated_at`  | `str \| None`              | ISO 8601 timestamp                                            |
 
 ### `ViewRecentEventsResult`
 
-| Field        | Type        | Description                        |
-| ------------ | ----------- | ---------------------------------- |
-| `patient_id` | `str`       | Patient ID                         |
-| `view_type`  | `str`       | View type                          |
-| `entries`    | `list[str]` | TEMP entries (most recent `limit`) |
-| `count`      | `int`       | Number of entries returned         |
-| `total_count`| `int`       | Total TEMP entries in store        |
+| Field         | Type        | Description                        |
+| ------------- | ----------- | ---------------------------------- |
+| `patient_id`  | `str`       | Patient ID                         |
+| `view_type`   | `str`       | View type                          |
+| `entries`     | `list[str]` | TEMP entries (most recent `limit`) |
+| `count`       | `int`       | Number of entries returned         |
+| `total_count` | `int`       | Total TEMP entries in store        |
 
 ### `LogEntry`
 
@@ -1319,52 +1375,51 @@ for m in memories.results:
 
 ### `LogsResult`
 
-| Field        | Type              | Description       |
-| ------------ | ----------------- | ----------------- |
-| `patient_id` | `str`             | Patient ID        |
-| `count`      | `int`             | Number of entries |
-| `logs`       | `list[LogEntry]`  | Event log entries |
+| Field        | Type             | Description       |
+| ------------ | ---------------- | ----------------- |
+| `patient_id` | `str`            | Patient ID        |
+| `count`      | `int`            | Number of entries |
+| `logs`       | `list[LogEntry]` | Event log entries |
 
 ### `EventEntry`
 
-| Field                 | Type           | Description                    |
-| --------------------- | -------------- | ------------------------------ |
-| `id`                  | `str`          | MongoDB document ID            |
-| `trigger`             | `str \| None`  | `event_log` or `summary_block` |
-| `log_type`            | `str \| None`  | Originating event type         |
-| `status`              | `str \| None`  | `complete`, `pending`, `failed`|
-| `triggered_at`        | `str \| None`  | ISO 8601 timestamp             |
-| `completed_at`        | `str \| None`  | ISO 8601 timestamp             |
-| `source_event_log_id` | `str \| None`  | Originating EventLog ID        |
-| `log_payload`         | `dict \| None` | Payload from the source event  |
-| `changes`             | `dict \| None` | State changes applied          |
+| Field                 | Type           | Description                     |
+| --------------------- | -------------- | ------------------------------- |
+| `id`                  | `str`          | MongoDB document ID             |
+| `trigger`             | `str \| None`  | `event_log` or `summary_block`  |
+| `log_type`            | `str \| None`  | Originating event type          |
+| `status`              | `str \| None`  | `complete`, `pending`, `failed` |
+| `triggered_at`        | `str \| None`  | ISO 8601 timestamp              |
+| `completed_at`        | `str \| None`  | ISO 8601 timestamp              |
+| `source_event_log_id` | `str \| None`  | Originating EventLog ID         |
+| `log_payload`         | `dict \| None` | Payload from the source event   |
+| `changes`             | `dict \| None` | State changes applied           |
 
 ### `EventsResult`
 
-| Field        | Type                  | Description       |
-| ------------ | --------------------- | ----------------- |
-| `patient_id` | `str`                 | Patient ID        |
-| `count`      | `int`                 | Number of entries |
-| `events`     | `list[EventEntry]`    | Events |
+| Field        | Type               | Description       |
+| ------------ | ------------------ | ----------------- |
+| `patient_id` | `str`              | Patient ID        |
+| `count`      | `int`              | Number of entries |
+| `events`     | `list[EventEntry]` | Events            |
 
 ### `MemoryEntry`
 
-| Field        | Type               | Description          |
-| ------------ | ------------------ | -------------------- |
-| `memory_id`  | `str`              | Memory identifier    |
-| `content`    | `str`              | Memory text          |
-| `metadata`   | `dict \| None`     | Optional metadata    |
-| `created_at` | `str \| None`      | ISO 8601 timestamp   |
-| `updated_at` | `str \| None`      | ISO 8601 timestamp   |
+| Field        | Type           | Description        |
+| ------------ | -------------- | ------------------ |
+| `memory_id`  | `str`          | Memory identifier  |
+| `content`    | `str`          | Memory text        |
+| `metadata`   | `dict \| None` | Optional metadata  |
+| `created_at` | `str \| None`  | ISO 8601 timestamp |
+| `updated_at` | `str \| None`  | ISO 8601 timestamp |
 
 ### `MemoriesResult`
 
-| Field        | Type                 | Description       |
-| ------------ | -------------------- | ----------------- |
-| `patient_id` | `str`                | Patient ID        |
-| `count`      | `int`                | Number of results |
-| `results`    | `list[MemoryEntry]`  | Memory records    |
-
+| Field        | Type                | Description       |
+| ------------ | ------------------- | ----------------- |
+| `patient_id` | `str`               | Patient ID        |
+| `count`      | `int`               | Number of results |
+| `results`    | `list[MemoryEntry]` | Memory records    |
 
 ## Error Handling
 
@@ -1396,7 +1451,6 @@ except RateLimitError as e:
 except ValidationError as e:
     print(f"Validation error: {e}")
 ```
-
 
 ## Common Log Payloads
 
@@ -1479,3 +1533,401 @@ olira.log(
     },
 )
 ```
+
+---
+
+## Historical Data Ingestion
+
+Bulk-load months or years of existing patient health data before going live.
+The ingestion pipeline validates records, creates patients, inserts logs as `STALE` rows,
+replays them through the graph in chronological order, and backfills summary views —
+making imported data fully queryable in the Olira Console.
+
+**Requires** an API key with the `sdk:historical-ingest` scope.
+
+### Overview
+
+```
+Phase 1 (automatic after job creation):
+  QUEUED → VALIDATING → INSERTING_PATIENTS → INSERTING_LOGS → AWAITING_CONFIRMATION
+
+Phase 2 (triggered by the customer):
+  CONFIRMED → REPLAYING → BACKFILLING → COMPLETED
+```
+
+By default the job pauses at `AWAITING_CONFIRMATION` so you can review patient and log
+counts before committing to the expensive graph replay. Pass `require_confirmation=False`
+to run straight through.
+
+### Quickstart — file upload (recommended for large datasets)
+
+```python
+import olira, time
+
+olira.init(api_key="YOUR_sdk:historical-ingest_KEY")
+
+# Create the job — SDK streams the file to S3 automatically
+job = olira.create_ingestion_job(
+    file="patients_and_logs.jsonl",
+    idempotency_key="initial-onboarding-2026",   # optional but recommended
+)
+
+# Phase 1 — poll every 10 s until paused for review (typically seconds to minutes)
+while job.status not in ("awaiting_confirmation", "completed", "failed"):
+    time.sleep(10)
+    job = olira.get_ingestion_job(job_id=job.job_id)
+    print(f"{job.stage}  {job.progress_pct:.0f}%")
+
+# Review what was created before committing to graph replay
+print(f"Patients: {job.patients_processed}")
+print(f"Logs:     {job.logs_processed} inserted, {job.logs_failed} failed")
+if job.error_summary:
+    print(f"First errors (up to 100 shown):")
+    for err in job.error_summary:
+        print(f"  Line {err.line}: {err.code} — {err.message}")
+    if job.logs_failed > len(job.error_summary):
+        print(f"  … and {job.logs_failed - len(job.error_summary)} more (re-run with a corrected file)")
+
+# Confirm to start Phase 2 (graph replay + view backfill)
+job = olira.confirm_ingestion_job(job_id=job.job_id)
+
+# Phase 2 — poll every 30 s; replay can take minutes to hours depending on volume
+while job.status not in ("completed", "completed_with_errors", "failed"):
+    time.sleep(30)
+    job = olira.get_ingestion_job(job_id=job.job_id)
+    eta = f"  ETA ~{job.estimated_seconds_remaining}s" if job.estimated_seconds_remaining else ""
+    print(f"{job.stage}  {job.progress_pct:.0f}%{eta}")
+```
+
+### Quickstart — inline records (for smaller datasets, ≤ 50,000 records)
+
+```python
+import olira
+from olira import IngestRecord, IngestLogSpec, CreatePatientRequest, ExternalIdentifier
+
+job = olira.create_ingestion_job(
+    records=[
+        IngestRecord.patient(CreatePatientRequest(
+            first_name="Jane",
+            last_name="Smith",
+            date_of_birth="1980-03-22T00:00:00Z",
+            external_identifiers=[ExternalIdentifier(system="epic", value="MRN-12345")],
+        )),
+        IngestRecord.log(IngestLogSpec(
+            event_type="symptom_report",
+            # patient_id can be an external_identifier value (any system) or an Olira patient UUID
+            patient_id="MRN-12345",
+            # timestamp backdates the event — this is how historical events are placed correctly
+            # in the patient timeline. Use ISO 8601 with timezone offset or trailing 'Z'.
+            timestamp="2025-01-15T09:00:00Z",
+            payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
+            idempotency_key="report-001",    # strongly recommended — prevents duplicates on retry
+        )),
+    ],
+    idempotency_key="lab-backfill-batch-1",
+    require_confirmation=False,              # run straight through without review pause
+)
+```
+
+### JSONL file format
+
+The JSONL file accepted by `file=` contains one JSON object per line. Two record types:
+
+```jsonl
+{"type": "patient", "data": {"first_name": "Jane", "last_name": "Smith", "date_of_birth": "1980-03-22T00:00:00Z", "timezone": "America/New_York", "external_identifiers": [{"system": "epic", "value": "MRN-12345"}]}}
+{"type": "log",     "data": {"event_type": "symptom_report", "patient_id": "MRN-12345", "timestamp": "2025-01-15T09:00:00Z", "payload": {"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]}, "idempotency_key": "report-001"}}
+```
+
+**Patient fields** match `CreatePatientRequest`. At least one of `external_identifiers`,
+`email`, `phone_number`, `first_name`, `last_name`, or `date_of_birth` is required.
+
+**Log fields:**
+
+- `event_type` (required) — must be a valid platform event type (e.g. `"symptom_report"`, `"lab_results_received"`).
+- `patient_id` (required) — resolved server-side in this order: (1) if it parses as an Olira patient UUID, it is resolved server-side against your org's patients — a UUID from a different org or a mistyped UUID is rejected; (2) otherwise, it is matched against every `external_identifier.value` in the file and in your org, across all systems. The first matching patient wins. If no patient is found via either path, the log is rejected with `code: "missing_patient"` in `error_summary`. This covers: a nonexistent UUID, a UUID belonging to a different org, or an external ID that doesn't match any patient in the file or your org. Note: local pre-flight validation (`validate_ingestion_file()`) can only check within-file references — UUID org membership is only verifiable server-side.
+- `timestamp` (required) — ISO 8601 datetime, e.g. `"2025-01-15T09:00:00Z"`. **This is how historical events are placed at their correct point in the patient timeline.** Logs are sorted by `timestamp` per patient before graph replay, so ordering in the file does not matter.
+- `payload` (optional) — event-specific data.
+- `idempotency_key` (optional but strongly recommended) — if this log is submitted again in a retry job, the duplicate is silently skipped. Without it, retrying a failed job will insert duplicate log rows.
+
+Patient and log records may appear in any order. The pipeline collects all patients first, then resolves all log `patient_id` references — so a log appearing before its patient in the file is fine.
+
+### File size and performance guidance
+
+- **File size limit: 100 MB.** `validate_ingestion_file()` and `create_ingestion_job()` both reject files larger than this before making any network call. The limit is configurable server-side; the SDK reads it from the upload URL response.
+- **For very large datasets (millions of rows), split into batches** of ~100k–500k records per job. This keeps the review window manageable and limits the blast radius if a job fails.
+- **Phase 1 (validate + insert)** typically takes seconds to a few minutes regardless of file size.
+- **Phase 2 (replay) runtime** scales with the number of patients and events: expect roughly 0.1–2 seconds per patient per log, depending on event complexity. A job with 10,000 patients and 50 logs each could take 1–3 hours. Use `estimated_seconds_remaining` in the poll loop to track progress.
+- **Webhooks are not currently supported.** Poll `get_ingestion_job()` every 10–30 seconds during Phase 1 and every 30–60 seconds during Phase 2.
+
+### Local pre-flight validation
+
+`create_ingestion_job()` automatically validates the file or records before making any network call. If validation fails it raises `ValidationError` immediately — no upload, no job created, no wasted request.
+
+You can also run validation explicitly to get the full error list before deciding whether to submit:
+
+```python
+errors = olira.validate_ingestion_file("patients_and_logs.jsonl")
+if errors:
+    for e in errors:
+        print(f"Line {e.line}: [{e.code}] {e.message}")
+else:
+    job = olira.create_ingestion_job(file="patients_and_logs.jsonl")
+```
+
+For inline records: `olira.validate_ingestion_records(records)` — same checks, operates on a `list[IngestRecord]`.
+
+**What is checked locally (no network required):**
+
+- Each line is valid JSON
+- `type` is `"patient"` or `"log"`
+- Patient anchor rule (at least one identifying field)
+- Log required fields: `event_type`, `patient_id`, `timestamp`
+- `event_type` is a known platform type — with typo suggestions (e.g. `"lab_result_receivd"` → did you mean `"lab_results_received"?`)
+- `timestamp` is parseable ISO 8601
+- `patient_id` resolves to a patient defined anywhere in the same file (order-agnostic)
+
+**What requires a server call (checked by Stage 1):**
+
+- Whether `patient_id` refers to an existing org patient not in this file
+- Whether the event payload matches the server-side JSON Schema for that event type
+
+### `create_ingestion_job`
+
+```python
+create_ingestion_job(
+    *,
+    file: str | None = None,
+    records: list[IngestRecord] | None = None,
+    idempotency_key: str | None = None,
+    require_confirmation: bool = True,
+    rollback_on_cancel: bool = False,
+    summary_types: list[str] | None = None,
+    max_event_logs: int | None = None,
+) -> IngestionJob
+```
+
+| Parameter              | Required                | Type                 | Default | Description                                                                                                                                                                                                                                                                                            |
+| ---------------------- | ----------------------- | -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `file`                 | One of `file`/`records` | `str`                | —       | Path to a JSONL file. SDK handles S3 upload. Max 100 MB — `ValidationError` raised before upload if exceeded. For larger datasets, split into multiple jobs.                                                                                                                                           |
+| `records`              | One of `file`/`records` | `list[IngestRecord]` | —       | Inline records (≤ 50,000). For larger datasets use `file=`.                                                                                                                                                                                                                                            |
+| `idempotency_key`      | No                      | `str`                | `None`  | Prevents duplicate jobs on retry. Returns 409 if an active or successfully completed job with this key exists. If the previous job failed, a new job is created instead.                                                                                                                               |
+| `require_confirmation` | No                      | `bool`               | `True`  | Pause at `AWAITING_CONFIRMATION` for review before Phase 2. Set `False` to run straight through.                                                                                                                                                                                                       |
+| `rollback_on_cancel`   | No                      | `bool`               | `False` | Controls what happens to **patients** when the job is cancelled. STALE logs are **always** deleted on cancel regardless of this setting (an unprocessed STALE log with no future replay job is meaningless). Set `True` to also delete created patients on cancel.                                     |
+| `summary_types`        | No                      | `list[str]`          | `None`  | Which view types to backfill in Phase 2. `None` = all view templates active for your org. Valid values are the `summary_type` identifiers on your org's active templates (e.g. `"emotional_state_snapshot"`, `"symptom_snapshot"`). You can update this via `patch_ingestion_job()` before confirming. |
+| `max_event_logs`       | No                      | `int`                | `None`  | **Per-patient** cap on the number of event logs considered during view backfill. Logs above the cap are skipped **for backfill only** — they are fully inserted and permanently stored. This is a cost-control knob for orgs with extremely log-dense patients. Omit for standard use.                 |
+
+### `get_ingestion_job`
+
+```python
+get_ingestion_job(*, job_id: str) -> IngestionJob
+```
+
+Poll the current status of a job.
+
+**Recommended polling cadence:**
+
+- Phase 1 (up to `AWAITING_CONFIRMATION`): every **10 seconds**
+- Phase 2 (`REPLAYING` / `BACKFILLING`): every **30–60 seconds** — replay is slow by design (sequential per patient to avoid state corruption). Use `estimated_seconds_remaining` to set user expectations.
+
+### `list_ingestion_jobs`
+
+```python
+list_ingestion_jobs(
+    *,
+    idempotency_key: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> IngestionJobListResult
+```
+
+List all ingestion jobs for your organisation, newest first.
+Filter by `idempotency_key` to retrieve a specific job by the key you supplied at creation.
+
+### `confirm_ingestion_job`
+
+```python
+confirm_ingestion_job(*, job_id: str) -> IngestionJob
+```
+
+Confirm a job in `AWAITING_CONFIRMATION` to trigger Phase 2 (graph replay + view backfill).
+Only available while the job is paused at `AWAITING_CONFIRMATION`.
+
+> **Note:** Jobs in `AWAITING_CONFIRMATION` that are not acted on within 7 days are automatically cancelled.
+
+### `cancel_ingestion_job`
+
+```python
+cancel_ingestion_job(*, job_id: str) -> IngestionJob
+```
+
+Cancel a job. Behaviour depends on the current status:
+
+- **`AWAITING_CONFIRMATION`** — immediate cleanup. STALE logs are always deleted. If `rollback_on_cancel=True` was set at job creation, created patients are also deleted; otherwise patients are retained.
+- **`REPLAYING` / `BACKFILLING`** — cooperative stop. The current patient finishes processing before the job stops. Already-replayed patients are **not** rolled back — their state and events persist permanently.
+
+> **STALE log cleanup:** Regardless of `rollback_on_cancel`, cancelling a job always deletes all STALE logs associated with it. An unprocessed STALE log has no replay job to process it and would occupy space indefinitely.
+
+### `delete_ingestion_job_patient`
+
+```python
+delete_ingestion_job_patient(*, job_id: str, patient_id: str) -> None
+```
+
+Remove a patient and their STALE logs while the job is `AWAITING_CONFIRMATION`.
+Useful when you spot a patient that was uploaded by mistake.
+Only allowed during the review window; once confirmed, patients are locked.
+
+### `patch_ingestion_job`
+
+```python
+patch_ingestion_job(*, job_id: str, summary_types: list[str] | None = None) -> IngestionJob
+```
+
+Update mutable fields while the job is `AWAITING_CONFIRMATION`.
+Use this to change which view types are backfilled before confirming.
+Valid values for `summary_types` are the `summary_type` identifiers on your org's active templates.
+
+### `retry_view_backfill`
+
+```python
+retry_view_backfill(*, job_id: str) -> IngestionJob
+```
+
+Retry a failed `ViewBackfillJob` on a `COMPLETED_WITH_ERRORS` job.
+Patient and log data are fully intact — only view materialisation failed.
+Transitions the job back to `BACKFILLING`.
+
+### Job failure and retry
+
+Two terminal error states exist with different recovery paths:
+
+#### `FAILED` — job did not complete
+
+Caused by validation failures (all rows invalid), a missing S3 file, or an unrecoverable system error during Stages 1–4.
+
+**Data state:** STALE logs inserted before the failure remain in the database. Patient documents created in Stage 2 are retained. (`rollback_on_cancel` has no effect on `FAILED` jobs — it only applies to explicit cancellation.)
+
+**Recovery:** Submit a new job. Per-log `idempotency_key` dedup in the retry job skips any logs whose `event_id` already exists from the previous attempt — preventing duplicates. Patients from the failed job are upserted rather than re-created.
+
+The original `idempotency_key` is **reusable** after a `FAILED` job — the server creates a new job rather than returning 409. Only `COMPLETED` and `COMPLETED_WITH_ERRORS` block reuse (data was imported successfully).
+
+```python
+# First job failed — safe to reuse the original idempotency_key
+job = olira.create_ingestion_job(
+    file="patients_and_logs.jsonl",
+    idempotency_key="onboarding-2026",  # reusable since the prior job FAILED
+)
+```
+
+#### `COMPLETED_WITH_ERRORS` — data imported, views not materialised
+
+The patient data and logs are **fully intact and queryable**. Phase 2 replay completed but the view backfill (`ViewBackfillJob`) failed — typically because the org has no active view templates, or a transient error in the view generation pipeline.
+
+**Recovery:** Use `retry_view_backfill()` to re-run the backfill without re-ingesting any data.
+
+```python
+if job.status == "completed_with_errors":
+    job = olira.retry_view_backfill(job_id=job.job_id)
+    # Poll again until completed
+    while job.status not in ("completed", "completed_with_errors", "failed"):
+        time.sleep(30)
+        job = olira.get_ingestion_job(job_id=job.job_id)
+```
+
+#### Per-patient replay failures
+
+During Phase 2, if a patient's log fails graph replay, that patient is marked `PatientReplayStatus.FAILED` in `patient_replay_statuses` and the job continues with other patients. The job may still reach `COMPLETED` even with per-patient failures.
+
+To remediate: submit a new job containing only the failed patients' records. Per-log dedup ensures logs for patients that succeeded are not re-inserted.
+
+### Working with `error_summary`
+
+`error_summary` is capped at 100 entries on the job document. If your file has more than 100 invalid rows, the remaining errors are not surfaced directly. **To handle large error volumes:**
+
+1. Check `logs_failed` for the total failure count. If `logs_failed > len(error_summary)`, there are more errors than shown.
+2. Fix the errors visible in `error_summary`, then cancel the job and resubmit with a corrected file (per-log `idempotency_key` dedup ensures already-valid rows are not re-inserted).
+3. Repeat until `logs_failed == 0` at `AWAITING_CONFIRMATION`.
+
+Most validation errors fall into a small number of categories (`missing_patient`, `invalid_log`, `unknown_record_type`). The first 100 are representative — fixing the root cause typically clears all instances of that error type.
+
+---
+
+### Response models
+
+#### `IngestionJob`
+
+| Field                         | Type                      | Description                                                                                         |
+| ----------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------- |
+| `job_id`                      | `str`                     | Olira-assigned job identifier                                                                       |
+| `status`                      | `IngestionJobStatus`      | Current lifecycle status                                                                            |
+| `stage`                       | `str`                     | Human-readable stage description (e.g. `"Replaying logs through graph: 3 of 10 patients complete"`) |
+| `progress_pct`                | `float`                   | 0–100 across all stages                                                                             |
+| `require_confirmation`        | `bool`                    | Whether the job pauses for review                                                                   |
+| `summary_types`               | `list[str]`               | View types to backfill                                                                              |
+| `patients_total`              | `int`                     | Patient rows in the file                                                                            |
+| `patients_processed`          | `int`                     | Patients successfully upserted                                                                      |
+| `logs_total`                  | `int`                     | Log rows in the file                                                                                |
+| `logs_processed`              | `int`                     | Logs successfully inserted                                                                          |
+| `logs_failed`                 | `int`                     | Logs that failed validation or insert                                                               |
+| `logs_by_event_type`          | `dict[str, int]`          | Inserted log count per event type                                                                   |
+| `patient_log_counts`          | `dict[str, int]`          | `patient_id → log count` for the review table                                                       |
+| `patient_replay_statuses`     | `dict[str, str]`          | `patient_id → "pending"\|"completed"\|"failed"\|"skipped"`                                          |
+| `error_summary`               | `list[IngestionRowError]` | Per-row errors (capped at 100)                                                                      |
+| `estimated_seconds_remaining` | `int \| None`             | Rough ETA during REPLAYING                                                                          |
+| `view_backfill_job_id`        | `str \| None`             | ID of the associated `ViewBackfillJob`                                                              |
+| `backfill_status`             | `str \| None`             | Current status of the nested backfill                                                               |
+| `backfill_progress_pct`       | `float \| None`           | Progress of the nested backfill                                                                     |
+| `created_at`                  | `str \| None`             | ISO 8601 creation time                                                                              |
+| `completed_at`                | `str \| None`             | ISO 8601 completion time                                                                            |
+
+#### `IngestionJobStatus`
+
+```python
+class IngestionJobStatus(StrEnum):
+    QUEUED = "queued"
+    VALIDATING = "validating"
+    INSERTING_PATIENTS = "inserting_patients"
+    INSERTING_LOGS = "inserting_logs"
+    AWAITING_CONFIRMATION = "awaiting_confirmation"
+    CONFIRMED = "confirmed"
+    REPLAYING = "replaying"
+    BACKFILLING = "backfilling"
+    COMPLETED = "completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+```
+
+#### `IngestionRowError`
+
+| Field     | Type  | Description                                                             |
+| --------- | ----- | ----------------------------------------------------------------------- |
+| `line`    | `int` | 1-indexed line number in the JSONL file (0 = non-row error)             |
+| `code`    | `str` | Machine-readable error code (e.g. `"missing_patient"`, `"invalid_log"`) |
+| `message` | `str` | Human-readable description                                              |
+
+#### `IngestRecord`
+
+Build via factory methods — do not construct directly:
+
+```python
+IngestRecord.patient(req: CreatePatientRequest) -> IngestRecord
+IngestRecord.log(spec: IngestLogSpec) -> IngestRecord
+```
+
+#### `IngestLogSpec`
+
+| Field             | Type   | Required | Description                                       |
+| ----------------- | ------ | -------- | ------------------------------------------------- |
+| `event_type`      | `str`  | Yes      | Platform event type (e.g. `"symptom_report"`)     |
+| `patient_id`      | `str`  | Yes      | Olira patient UUID or `external_identifier` value |
+| `timestamp`       | `str`  | Yes      | ISO 8601 datetime                                 |
+| `payload`         | `dict` | No       | Event-specific payload                            |
+| `idempotency_key` | `str`  | No       | Prevents duplicate insertion on retry             |
+
+#### `IngestionJobListResult`
+
+| Field   | Type                 | Description              |
+| ------- | -------------------- | ------------------------ |
+| `total` | `int`                | Total jobs for the org   |
+| `jobs`  | `list[IngestionJob]` | Jobs in the current page |

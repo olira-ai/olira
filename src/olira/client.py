@@ -3,7 +3,10 @@
 import asyncio
 from collections.abc import Callable
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
+
+import httpx
 
 from .exceptions import ValidationError
 from .http import AsyncHttpTransport, HttpTransport
@@ -14,6 +17,9 @@ from .models import (
     EventStateModuleResult,
     EventStateModuleSummary,
     ExternalIdentifier,
+    IngestionJob,
+    IngestionJobListResult,
+    IngestRecord,
     LogSpec,
     LogsResult,
     LogWire,
@@ -33,6 +39,7 @@ from .models import (
     ViewResult,
 )
 from .queue import BackgroundWorker
+from .validation import validate_ingestion_file, validate_ingestion_records
 from .version import __version__ as _sdk_version
 
 
@@ -409,6 +416,139 @@ class OliraClient:
         if query:
             params["query"] = query
         return self._transport.read_memories(patient_id, params)
+
+    # --- Historical ingestion (sdk:historical-ingest scope) ---
+
+    def create_ingestion_job(
+        self,
+        *,
+        file: str | Path | None = None,
+        records: list[IngestRecord] | None = None,
+        idempotency_key: str | None = None,
+        require_confirmation: bool = True,
+        rollback_on_cancel: bool = False,
+        summary_types: list[str] | None = None,
+        max_event_logs: int | None = None,
+    ) -> IngestionJob:
+        """Create a historical data ingestion job. Requires sdk:historical-ingest scope.
+
+        Provide either ``file`` (path to a JSONL file — SDK handles S3 upload) or
+        ``records`` (inline list of :class:`IngestRecord` objects, ≤ 50,000).
+
+        The job starts automatically. Poll with :meth:`get_ingestion_job` until
+        ``status`` reaches ``awaiting_confirmation`` (default) or ``completed``.
+        Pass ``require_confirmation=False`` to skip the review pause.
+        """
+        if file is None and records is None:
+            raise ValidationError("Provide either 'file' or 'records'")
+        if file is not None and records is not None:
+            raise ValidationError("Provide either 'file' or 'records', not both")
+
+        body: dict[str, Any] = {
+            "require_confirmation": require_confirmation,
+            "rollback_on_cancel": rollback_on_cancel,
+        }
+        if idempotency_key:
+            body["idempotency_key"] = idempotency_key
+        if summary_types is not None:
+            body["summary_types"] = summary_types
+        if max_event_logs is not None:
+            body["max_event_logs"] = max_event_logs
+
+        if file is not None:
+            # Fetch the org's SDK config first so we get the server-controlled max_bytes.
+            # Raising the file size limit server-side takes effect immediately with no SDK update.
+            # Falls back to 100 MB if the server is unreachable.
+            try:
+                sdk_cfg = self._transport.get_sdk_config()
+                max_bytes: int = sdk_cfg.get("ingestion_max_file_bytes", 100 * 1024 * 1024)
+            except Exception:
+                max_bytes = 100 * 1024 * 1024
+            url_data = self._transport.get_upload_url()
+            all_issues = validate_ingestion_file(file, max_file_bytes=max_bytes)
+            blocking = [e for e in all_issues if e.code != "patient_id_not_in_file"]
+            if blocking:
+                summary = "; ".join(f"line {e.line} [{e.code}] {e.message}" for e in blocking[:5])
+                suffix = f" … and {len(blocking) - 5} more" if len(blocking) > 5 else ""
+                raise ValidationError(f"JSONL validation failed ({len(blocking)} error(s)): {summary}{suffix}")
+            with open(file, "rb") as fh:
+                content = fh.read()
+            httpx.put(url_data["upload_url"], content=content, timeout=120)
+            body["s3_key"] = url_data["s3_key"]
+        else:
+            inline = records or []
+            all_issues = validate_ingestion_records(inline)
+            blocking = [e for e in all_issues if e.code != "patient_id_not_in_file"]
+            if blocking:
+                summary = "; ".join(f"record {e.line} [{e.code}] {e.message}" for e in blocking[:5])
+                suffix = f" … and {len(blocking) - 5} more" if len(blocking) > 5 else ""
+                raise ValidationError(f"Records validation failed ({len(blocking)} error(s)): {summary}{suffix}")
+            body["records"] = [r.model_dump() for r in inline]
+
+        return self._transport.create_ingestion_job(body)
+
+    def get_ingestion_job(self, *, job_id: str) -> IngestionJob:
+        """Poll the status of an ingestion job. Requires sdk:historical-ingest scope."""
+        return self._transport.get_ingestion_job(job_id)
+
+    def list_ingestion_jobs(
+        self,
+        *,
+        idempotency_key: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> IngestionJobListResult:
+        """List ingestion jobs for the org. Requires sdk:historical-ingest scope."""
+        params: dict[str, Any] = {"page": page, "pageSize": page_size}
+        if idempotency_key:
+            params["idempotency_key"] = idempotency_key
+        return self._transport.list_ingestion_jobs(params)
+
+    def confirm_ingestion_job(self, *, job_id: str) -> IngestionJob:
+        """Confirm a job in AWAITING_CONFIRMATION to start Phase 2 (replay + backfill).
+
+        Requires sdk:historical-ingest scope.
+        """
+        return self._transport.confirm_ingestion_job(job_id)
+
+    def cancel_ingestion_job(self, *, job_id: str) -> IngestionJob:
+        """Cancel an ingestion job. Requires sdk:historical-ingest scope.
+
+        Allowed in AWAITING_CONFIRMATION (immediate cleanup) and REPLAYING / BACKFILLING
+        (cooperative stop — already-replayed patients are not rolled back).
+        """
+        return self._transport.cancel_ingestion_job(job_id)
+
+    def delete_ingestion_job_patient(self, *, job_id: str, patient_id: str) -> None:
+        """Remove a patient and their STALE logs while the job is AWAITING_CONFIRMATION.
+
+        Requires sdk:historical-ingest scope.
+        """
+        self._transport.delete_ingestion_job_patient(job_id, patient_id)
+
+    def patch_ingestion_job(
+        self,
+        *,
+        job_id: str,
+        summary_types: list[str] | None = None,
+    ) -> IngestionJob:
+        """Update mutable fields while the job is AWAITING_CONFIRMATION.
+
+        Requires sdk:historical-ingest scope. Currently supports updating ``summary_types``
+        to control which views are backfilled in Phase 2.
+        """
+        body: dict[str, Any] = {}
+        if summary_types is not None:
+            body["summary_types"] = summary_types
+        return self._transport.patch_ingestion_job(job_id, body)
+
+    def retry_view_backfill(self, *, job_id: str) -> IngestionJob:
+        """Retry a failed view backfill on a COMPLETED_WITH_ERRORS job.
+
+        Requires sdk:historical-ingest scope. Patient and log data are intact —
+        only view materialisation failed. Transitions the job back to BACKFILLING.
+        """
+        return self._transport.retry_view_backfill(job_id)
 
     def flush(self) -> None:
         """Block until all queued events are sent (or failed)."""
@@ -841,6 +981,120 @@ class AsyncOliraClient:
         if query:
             params["query"] = query
         return await transport.read_memories(patient_id, params)
+
+    # --- Historical ingestion (sdk:historical-ingest scope) ---
+
+    async def create_ingestion_job(
+        self,
+        *,
+        file: str | Path | None = None,
+        records: list[IngestRecord] | None = None,
+        idempotency_key: str | None = None,
+        require_confirmation: bool = True,
+        rollback_on_cancel: bool = False,
+        summary_types: list[str] | None = None,
+        max_event_logs: int | None = None,
+    ) -> IngestionJob:
+        """Async version of create_ingestion_job. Requires sdk:historical-ingest scope."""
+        if file is None and records is None:
+            raise ValidationError("Provide either 'file' or 'records'")
+        if file is not None and records is not None:
+            raise ValidationError("Provide either 'file' or 'records', not both")
+
+        transport = self._require_transport("create_ingestion_job")
+
+        body: dict[str, Any] = {
+            "require_confirmation": require_confirmation,
+            "rollback_on_cancel": rollback_on_cancel,
+        }
+        if idempotency_key:
+            body["idempotency_key"] = idempotency_key
+        if summary_types is not None:
+            body["summary_types"] = summary_types
+        if max_event_logs is not None:
+            body["max_event_logs"] = max_event_logs
+
+        if file is not None:
+            try:
+                sdk_cfg = await transport.get_sdk_config()
+                max_bytes: int = sdk_cfg.get("ingestion_max_file_bytes", 100 * 1024 * 1024)
+            except Exception:
+                max_bytes = 100 * 1024 * 1024
+            url_data = await transport.get_upload_url()
+            all_issues = validate_ingestion_file(file, max_file_bytes=max_bytes)
+            blocking = [e for e in all_issues if e.code != "patient_id_not_in_file"]
+            if blocking:
+                summary = "; ".join(f"line {e.line} [{e.code}] {e.message}" for e in blocking[:5])
+                suffix = f" … and {len(blocking) - 5} more" if len(blocking) > 5 else ""
+                raise ValidationError(f"JSONL validation failed ({len(blocking)} error(s)): {summary}{suffix}")
+            with open(file, "rb") as fh:
+                content = fh.read()
+            async with httpx.AsyncClient() as client:
+                await client.put(url_data["upload_url"], content=content, timeout=120)
+            body["s3_key"] = url_data["s3_key"]
+        else:
+            inline = records or []
+            all_issues = validate_ingestion_records(inline)
+            blocking = [e for e in all_issues if e.code != "patient_id_not_in_file"]
+            if blocking:
+                summary = "; ".join(f"record {e.line} [{e.code}] {e.message}" for e in blocking[:5])
+                suffix = f" … and {len(blocking) - 5} more" if len(blocking) > 5 else ""
+                raise ValidationError(f"Records validation failed ({len(blocking)} error(s)): {summary}{suffix}")
+            body["records"] = [r.model_dump() for r in inline]
+
+        return await transport.create_ingestion_job(body)
+
+    async def get_ingestion_job(self, *, job_id: str) -> IngestionJob:
+        """Async version of get_ingestion_job. Requires sdk:historical-ingest scope."""
+        transport = self._require_transport("get_ingestion_job")
+        return await transport.get_ingestion_job(job_id)
+
+    async def list_ingestion_jobs(
+        self,
+        *,
+        idempotency_key: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> IngestionJobListResult:
+        """Async version of list_ingestion_jobs. Requires sdk:historical-ingest scope."""
+        transport = self._require_transport("list_ingestion_jobs")
+        params: dict[str, Any] = {"page": page, "pageSize": page_size}
+        if idempotency_key:
+            params["idempotency_key"] = idempotency_key
+        return await transport.list_ingestion_jobs(params)
+
+    async def confirm_ingestion_job(self, *, job_id: str) -> IngestionJob:
+        """Async version of confirm_ingestion_job. Requires sdk:historical-ingest scope."""
+        transport = self._require_transport("confirm_ingestion_job")
+        return await transport.confirm_ingestion_job(job_id)
+
+    async def cancel_ingestion_job(self, *, job_id: str) -> IngestionJob:
+        """Async version of cancel_ingestion_job. Requires sdk:historical-ingest scope."""
+        transport = self._require_transport("cancel_ingestion_job")
+        return await transport.cancel_ingestion_job(job_id)
+
+    async def delete_ingestion_job_patient(self, *, job_id: str, patient_id: str) -> None:
+        """Async version of delete_ingestion_job_patient. Requires sdk:historical-ingest scope."""
+        transport = self._require_transport("delete_ingestion_job_patient")
+        await transport.delete_ingestion_job_patient(job_id, patient_id)
+
+    async def patch_ingestion_job(
+        self,
+        *,
+        job_id: str,
+        summary_types: list[str] | None = None,
+    ) -> IngestionJob:
+        """Async version of patch_ingestion_job. Requires sdk:historical-ingest scope."""
+        transport = self._require_transport("patch_ingestion_job")
+        body: dict[str, Any] = {}
+        if summary_types is not None:
+            body["summary_types"] = summary_types
+        return await transport.patch_ingestion_job(job_id, body)
+
+    async def retry_view_backfill(self, *, job_id: str) -> IngestionJob:
+        """Async version of retry_view_backfill. Requires sdk:historical-ingest scope."""
+        transport = self._require_transport("retry_view_backfill")
+        return await transport.retry_view_backfill(job_id)
 
     async def flush(self) -> None:
         drained: list[LogWire] = []

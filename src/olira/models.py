@@ -552,3 +552,119 @@ class MemoriesResult(BaseModel):
     patient_id: str
     count: int
     results: list[MemoryEntry] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Historical data ingestion
+# ---------------------------------------------------------------------------
+
+
+class IngestionJobStatus(StrEnum):
+    """Lifecycle status of a HistoricalIngestionJob."""
+
+    QUEUED = "queued"
+    VALIDATING = "validating"
+    INSERTING_PATIENTS = "inserting_patients"
+    INSERTING_LOGS = "inserting_logs"
+    AWAITING_CONFIRMATION = "awaiting_confirmation"
+    CONFIRMED = "confirmed"
+    REPLAYING = "replaying"
+    BACKFILLING = "backfilling"
+    COMPLETED = "completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class IngestionRowError(BaseModel):
+    """A single per-row error from an ingestion job (validation or insert failure)."""
+
+    line: int = Field(..., description="1-indexed line number in the JSONL file (0 = non-row error)")
+    code: str = Field(..., description="Machine-readable error code, e.g. 'missing_patient'")
+    message: str = Field(..., description="Human-readable description")
+
+
+class IngestionJob(BaseModel):
+    """A historical data ingestion job returned by the API."""
+
+    job_id: str
+    status: IngestionJobStatus
+    stage: str
+    progress_pct: float = 0.0
+    require_confirmation: bool = True
+    summary_types: list[str] = Field(default_factory=list)
+    patients_total: int = 0
+    patients_processed: int = 0
+    logs_total: int = 0
+    logs_processed: int = 0
+    logs_failed: int = 0
+    logs_by_event_type: dict[str, int] = Field(default_factory=dict)
+    patient_log_counts: dict[str, int] = Field(default_factory=dict)
+    patient_event_type_counts: dict[str, dict[str, int]] = Field(default_factory=dict)
+    patient_replay_statuses: dict[str, str] = Field(default_factory=dict)
+    error_summary: list[IngestionRowError] = Field(default_factory=list)
+    estimated_seconds_remaining: int | None = None
+    view_backfill_job_id: str | None = None
+    backfill_status: str | None = None
+    backfill_progress_pct: float | None = None
+    tokens_used: int = 0
+    cost_usd: float = 0.0
+    created_at: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+class IngestionJobListResult(BaseModel):
+    """Result of list_ingestion_jobs()."""
+
+    total: int
+    jobs: list[IngestionJob] = Field(default_factory=list)
+
+
+@dataclass
+class IngestLogSpec:
+    """Specification for a single log record in a historical ingestion job.
+
+    ``event_type`` must be a valid platform event type string (e.g. ``"symptom_report"``).
+    ``patient_id`` may be an Olira patient UUID or an ``external_identifier`` value present
+    in the same file or already in the org.
+    ``idempotency_key`` prevents duplicate insertion if the same file is re-submitted.
+    """
+
+    event_type: str
+    patient_id: str
+    timestamp: str
+    payload: dict[str, Any] | None = None
+    idempotency_key: str | None = None
+
+
+class IngestRecord(BaseModel):
+    """A single record in a historical ingestion payload (patient or log).
+
+    Build via the factory methods rather than constructing directly::
+
+        IngestRecord.patient(CreatePatientRequest(...))
+        IngestRecord.log(IngestLogSpec(...))
+    """
+
+    type: str  # "patient" | "log"
+    data: dict[str, Any]
+
+    @classmethod
+    def patient(cls, req: "CreatePatientRequest") -> "IngestRecord":
+        """Create a patient record from a :class:`CreatePatientRequest`."""
+        return cls(type="patient", data=req.model_dump(exclude_none=True))
+
+    @classmethod
+    def log(cls, spec: IngestLogSpec) -> "IngestRecord":
+        """Create a log record from an :class:`IngestLogSpec`."""
+        data: dict[str, Any] = {
+            "event_type": spec.event_type,
+            "patient_id": spec.patient_id,
+            "timestamp": spec.timestamp,
+        }
+        if spec.payload:
+            data["payload"] = spec.payload
+        if spec.idempotency_key:
+            data["idempotency_key"] = spec.idempotency_key
+        return cls(type="log", data=data)

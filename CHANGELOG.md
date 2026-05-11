@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0a10] - 2026-05-08
+
+### Added
+
+- **Historical data ingestion** (`sdk:historical-ingest` scope):
+  - `IngestionJobStatus` StrEnum, `IngestionRowError`, `IngestionJob`, `IngestionJobListResult` response models.
+  - `IngestLogSpec` dataclass and `IngestRecord` model with `.patient()` / `.log()` factory methods for building inline payloads.
+  - `create_ingestion_job(file=...|records=..., ...)` — file path (SDK handles S3 upload) or inline records; returns `IngestionJob`.
+  - `get_ingestion_job(job_id=...)` — poll job status including `patient_replay_statuses`, `estimated_seconds_remaining`, nested backfill progress.
+  - `list_ingestion_jobs(idempotency_key=None, page=1, page_size=20)` — list all jobs for the org.
+  - `confirm_ingestion_job(job_id=...)` — trigger Phase 2 from `AWAITING_CONFIRMATION`.
+  - `cancel_ingestion_job(job_id=...)` — cancel at review or cooperatively mid-replay.
+  - `delete_ingestion_job_patient(job_id=..., patient_id=...)` — remove a patient during review.
+  - `patch_ingestion_job(job_id=..., summary_types=...)` — update `summary_types` before confirming.
+  - `retry_view_backfill(job_id=...)` — retry a failed `ViewBackfillJob` on a `COMPLETED_WITH_ERRORS` job.
+  - All methods available on `OliraClient`, `AsyncOliraClient`, and as module-level proxies.
+- **Local pre-flight validation** (`src/olira/validation.py`):
+  - `validate_ingestion_file(path, max_file_bytes=100MB)` — validates a JSONL file locally before upload: JSON structure, record types, patient anchor rule, log required fields, `event_type` against `OliraLogType` (with typo suggestions via Levenshtein), ISO 8601 timestamps, within-file patient resolution. Two-pass so record order doesn't matter.
+  - `validate_ingestion_records(records)` — same checks on a `list[IngestRecord]`.
+  - Both called automatically by `create_ingestion_job()` before any network call; raise `ValidationError` on blocking issues.
+- **`API_DOCUMENTATION.md`**: Full historical ingestion section — quickstart (file + inline), JSONL format, all nine methods with parameter tables, failure/retry guide, `error_summary` workflow, and all response models.
+- **Example scripts** (`examples/`) — notebook removed; replaced with seven standalone Python scripts customers can run directly:
+  - `00_quickstart.py` — 30-line hello world: create patient, log event, flush.
+  - `01_patient_management.py` — full patient CRUD, shell patients, batch create, external ID lookup.
+  - `02_event_logging.py` — `log()` + `log_batch()`, representative payloads, traces, idempotency keys.
+  - `03_historical_ingestion.py` — file upload path and inline records path side-by-side; review → confirm flow.
+  - `04_logs_only_workflow.py` — `create_patients_batch()` first, then logs-only ingestion job resolved against existing org patients.
+  - `05_agent_review.py` — SDK-driven programmatic review: error rate gate, zero-log patient removal, conditional confirm/cancel.
+  - `06_read_patient_state.py` — stable data, event modules, views, logs, events, memories after ingestion.
+- **`.gitignore`**: Added `!**/.env.example` exception so example config files are tracked while `.env` stays ignored.
+
 ## [0.1.0a9] - 2026-05-01
 
 ### Changed

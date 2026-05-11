@@ -12,6 +12,8 @@ from .models import (
     BatchResult,
     EventsResult,
     EventStateModuleResult,
+    IngestionJob,
+    IngestionJobListResult,
     LogsResult,
     MemoriesResult,
     Patient,
@@ -286,6 +288,55 @@ class HttpTransport:
         raw = self._request("GET", f"/v1/state/{patient_id}/memories", params=params)
         return MemoriesResult.model_validate(raw)
 
+    # --- Historical ingestion (sdk:historical-ingest scope) ---
+
+    def get_sdk_config(self) -> dict[str, Any]:
+        """Fetch the org's SDK configuration (GET /v1/sdk/config)."""
+        return cast(dict[str, Any], self._request("GET", "/v1/sdk/config"))
+
+    def get_upload_url(self) -> dict[str, Any]:
+        """Get a presigned S3 PUT URL for file-based ingestion (POST /v1/ingestion/upload-url)."""
+        return cast(dict[str, Any], self._request("POST", "/v1/ingestion/upload-url"))
+
+    def create_ingestion_job(self, body: dict[str, Any]) -> IngestionJob:
+        """Create a historical ingestion job (POST /v1/ingestion/jobs)."""
+        raw = self._request("POST", "/v1/ingestion/jobs", json=body)
+        return IngestionJob.model_validate(raw)
+
+    def get_ingestion_job(self, job_id: str) -> IngestionJob:
+        """Poll job status (GET /v1/ingestion/jobs/{job_id})."""
+        raw = self._request("GET", f"/v1/ingestion/jobs/{job_id}")
+        return IngestionJob.model_validate(raw)
+
+    def list_ingestion_jobs(self, params: dict[str, Any]) -> IngestionJobListResult:
+        """List ingestion jobs for the org (GET /v1/ingestion/jobs)."""
+        raw = self._request("GET", "/v1/ingestion/jobs", params=params)
+        return IngestionJobListResult.model_validate(raw)
+
+    def confirm_ingestion_job(self, job_id: str) -> IngestionJob:
+        """Confirm a job in AWAITING_CONFIRMATION to trigger Phase 2 (POST /v1/ingestion/jobs/{job_id}/confirm)."""
+        raw = self._request("POST", f"/v1/ingestion/jobs/{job_id}/confirm")
+        return IngestionJob.model_validate(raw)
+
+    def cancel_ingestion_job(self, job_id: str) -> IngestionJob:
+        """Cancel a job (POST /v1/ingestion/jobs/{job_id}/cancel)."""
+        raw = self._request("POST", f"/v1/ingestion/jobs/{job_id}/cancel")
+        return IngestionJob.model_validate(raw)
+
+    def delete_ingestion_job_patient(self, job_id: str, patient_id: str) -> None:
+        """Remove a patient during AWAITING_CONFIRMATION (DELETE /v1/ingestion/jobs/{job_id}/patients/{patient_id})."""
+        self._request("DELETE", f"/v1/ingestion/jobs/{job_id}/patients/{patient_id}")
+
+    def patch_ingestion_job(self, job_id: str, body: dict[str, Any]) -> IngestionJob:
+        """Update mutable fields while AWAITING_CONFIRMATION (PATCH /v1/ingestion/jobs/{job_id})."""
+        raw = self._request("PATCH", f"/v1/ingestion/jobs/{job_id}", json=body)
+        return IngestionJob.model_validate(raw)
+
+    def retry_view_backfill(self, job_id: str) -> IngestionJob:
+        """Retry a failed ViewBackfillJob on a COMPLETED_WITH_ERRORS job (POST /v1/ingestion/jobs/{job_id}/retry-backfill)."""
+        raw = self._request("POST", f"/v1/ingestion/jobs/{job_id}/retry-backfill")
+        return IngestionJob.model_validate(raw)
+
 
 class AsyncHttpTransport:
     """Async HTTP transport: POST /v1/logs/batch with retry."""
@@ -401,6 +452,45 @@ class AsyncHttpTransport:
     async def read_memories(self, patient_id: str, params: dict[str, Any]) -> MemoriesResult:
         raw = await self._request("GET", f"/v1/state/{patient_id}/memories", params=params)
         return MemoriesResult.model_validate(raw)
+
+    # --- Historical ingestion (sdk:historical-ingest scope) ---
+
+    async def get_sdk_config(self) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._request("GET", "/v1/sdk/config"))
+
+    async def get_upload_url(self) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._request("POST", "/v1/ingestion/upload-url"))
+
+    async def create_ingestion_job(self, body: dict[str, Any]) -> IngestionJob:
+        raw = await self._request("POST", "/v1/ingestion/jobs", json=body)
+        return IngestionJob.model_validate(raw)
+
+    async def get_ingestion_job(self, job_id: str) -> IngestionJob:
+        raw = await self._request("GET", f"/v1/ingestion/jobs/{job_id}")
+        return IngestionJob.model_validate(raw)
+
+    async def list_ingestion_jobs(self, params: dict[str, Any]) -> IngestionJobListResult:
+        raw = await self._request("GET", "/v1/ingestion/jobs", params=params)
+        return IngestionJobListResult.model_validate(raw)
+
+    async def confirm_ingestion_job(self, job_id: str) -> IngestionJob:
+        raw = await self._request("POST", f"/v1/ingestion/jobs/{job_id}/confirm")
+        return IngestionJob.model_validate(raw)
+
+    async def cancel_ingestion_job(self, job_id: str) -> IngestionJob:
+        raw = await self._request("POST", f"/v1/ingestion/jobs/{job_id}/cancel")
+        return IngestionJob.model_validate(raw)
+
+    async def delete_ingestion_job_patient(self, job_id: str, patient_id: str) -> None:
+        await self._request("DELETE", f"/v1/ingestion/jobs/{job_id}/patients/{patient_id}")
+
+    async def patch_ingestion_job(self, job_id: str, body: dict[str, Any]) -> IngestionJob:
+        raw = await self._request("PATCH", f"/v1/ingestion/jobs/{job_id}", json=body)
+        return IngestionJob.model_validate(raw)
+
+    async def retry_view_backfill(self, job_id: str) -> IngestionJob:
+        raw = await self._request("POST", f"/v1/ingestion/jobs/{job_id}/retry-backfill")
+        return IngestionJob.model_validate(raw)
 
     async def _request(
         self,

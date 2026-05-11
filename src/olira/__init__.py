@@ -21,6 +21,12 @@ from .models import (
     EventStateModuleResult,
     EventStateModuleSummary,
     ExternalIdentifier,
+    IngestionJob,
+    IngestionJobListResult,
+    IngestionJobStatus,
+    IngestionRowError,
+    IngestLogSpec,
+    IngestRecord,
     LabResultItem,
     LogEntry,
     LogSpec,
@@ -46,6 +52,7 @@ from .models import (
     ViewRecentEventsResult,
     ViewResult,
 )
+from .validation import validate_ingestion_file, validate_ingestion_records
 from .version import __version__
 
 __all__ = [
@@ -441,3 +448,104 @@ def read_memories(*, patient_id: str, query: str | None = None, limit: int = 100
     Requires sdk:state-read scope. Pass ``query`` for text search; omit to list all.
     """
     return _get_client().read_memories(patient_id=patient_id, query=query, limit=limit)
+
+
+# ---------------------------------------------------------------------------
+# Historical ingestion proxies (sdk:historical-ingest scope)
+# ---------------------------------------------------------------------------
+
+
+def create_ingestion_job(
+    *,
+    file: "str | None" = None,
+    records: "list[IngestRecord] | None" = None,
+    idempotency_key: str | None = None,
+    require_confirmation: bool = True,
+    rollback_on_cancel: bool = False,
+    summary_types: "list[str] | None" = None,
+    max_event_logs: int | None = None,
+) -> IngestionJob:
+    """Create a historical data ingestion job. Module-level proxy to the singleton client.
+
+    Requires sdk:historical-ingest scope.
+    Provide ``file`` (path to a JSONL file — SDK handles S3 upload) or ``records``
+    (inline list of :class:`IngestRecord`, ≤ 50,000).
+    """
+    return _get_client().create_ingestion_job(
+        file=file,
+        records=records,
+        idempotency_key=idempotency_key,
+        require_confirmation=require_confirmation,
+        rollback_on_cancel=rollback_on_cancel,
+        summary_types=summary_types,
+        max_event_logs=max_event_logs,
+    )
+
+
+def get_ingestion_job(*, job_id: str) -> IngestionJob:
+    """Poll the status of a historical ingestion job. Module-level proxy.
+
+    Requires sdk:historical-ingest scope.
+    """
+    return _get_client().get_ingestion_job(job_id=job_id)
+
+
+def list_ingestion_jobs(
+    *,
+    idempotency_key: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> IngestionJobListResult:
+    """List ingestion jobs for the org. Module-level proxy.
+
+    Requires sdk:historical-ingest scope.
+    """
+    return _get_client().list_ingestion_jobs(
+        idempotency_key=idempotency_key,
+        page=page,
+        page_size=page_size,
+    )
+
+
+def confirm_ingestion_job(*, job_id: str) -> IngestionJob:
+    """Confirm a job in AWAITING_CONFIRMATION to start Phase 2. Module-level proxy.
+
+    Requires sdk:historical-ingest scope.
+    """
+    return _get_client().confirm_ingestion_job(job_id=job_id)
+
+
+def cancel_ingestion_job(*, job_id: str) -> IngestionJob:
+    """Cancel an ingestion job. Module-level proxy.
+
+    Requires sdk:historical-ingest scope.
+    """
+    return _get_client().cancel_ingestion_job(job_id=job_id)
+
+
+def delete_ingestion_job_patient(*, job_id: str, patient_id: str) -> None:
+    """Remove a patient during AWAITING_CONFIRMATION. Module-level proxy.
+
+    Requires sdk:historical-ingest scope.
+    """
+    _get_client().delete_ingestion_job_patient(job_id=job_id, patient_id=patient_id)
+
+
+def patch_ingestion_job(
+    *,
+    job_id: str,
+    summary_types: "list[str] | None" = None,
+) -> IngestionJob:
+    """Update mutable fields while AWAITING_CONFIRMATION. Module-level proxy.
+
+    Requires sdk:historical-ingest scope.
+    """
+    return _get_client().patch_ingestion_job(job_id=job_id, summary_types=summary_types)
+
+
+def retry_view_backfill(*, job_id: str) -> IngestionJob:
+    """Retry a failed view backfill on a COMPLETED_WITH_ERRORS job. Module-level proxy.
+
+    Requires sdk:historical-ingest scope.
+    """
+    return _get_client().retry_view_backfill(job_id=job_id)
