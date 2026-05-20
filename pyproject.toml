@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "olira"
-version = "0.1.0a10"
-description = "Olira Python SDK — event ingestion client for the Olira Health platform"
+version = "1.0.0"
+description = "Olira Python SDK — event ingestion client for the Olira platform"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["olira", "health", "sdk", "ingestion", "events"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
@@ -26,6 +26,14 @@ dependencies = [
     "httpx>=0.27",
     "pydantic>=2.0",
 ]
+
+[project.urls]
+Documentation = "https://olira.ai/api-docs"
+
+[tool.uv]
+# Public deps only: pin default index so `uv run` works when the shell inherits
+# UV_INDEX_URL from CodeArtifact (401 without AWS auth breaks resolution).
+index-url = "https://pypi.org/simple"
 
 [project.optional-dependencies]
 dev = [

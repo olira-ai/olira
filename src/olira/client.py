@@ -22,7 +22,6 @@ from .models import (
     IngestRecord,
     LogSpec,
     LogsResult,
-    LogWire,
     MemoriesResult,
     OliraLogType,
     OliraTrace,
@@ -37,6 +36,7 @@ from .models import (
     ViewMeta,
     ViewRecentEventsResult,
     ViewResult,
+    _LogWire,
 )
 from .queue import BackgroundWorker
 from .validation import validate_ingestion_file, validate_ingestion_records
@@ -114,10 +114,9 @@ class OliraClient:
     def _send_batch(self, events: list[dict[str, Any]]) -> None:
         self._transport.send_batch(events)
 
-    def _enqueue(self, event: LogWire) -> bool:
+    def _enqueue(self, event: _LogWire) -> bool:
         if self._worker is not None:
             return self._worker.enqueue(event)
-        # Sync mode: send immediately via batch endpoint
         self._transport.send_batch([event.model_dump(mode="json")])
         return True
 
@@ -129,7 +128,7 @@ class OliraClient:
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
     ) -> None:
-        event = LogWire(
+        event = _LogWire(
             log_type=log_type.value,
             patient_id=patient_id,
             payload=payload,
@@ -161,7 +160,7 @@ class OliraClient:
 
         wire_events: list[dict[str, Any]] = []
         for spec in events:
-            event = LogWire(
+            event = _LogWire(
                 log_type=spec.log_type.value,
                 patient_id=spec.patient_id,
                 payload=spec.payload or {},
@@ -287,8 +286,6 @@ class OliraClient:
         Bearer token.  It locks access to the specified patient for 15 minutes.
         """
         return self._transport.get_patient_token({"patient_id": patient_id})
-
-    # --- State-read methods (sdk:state-read scope) ---
 
     def get_stable_data(
         self,
@@ -417,8 +414,6 @@ class OliraClient:
             params["query"] = query
         return self._transport.read_memories(patient_id, params)
 
-    # --- Historical ingestion (sdk:historical-ingest scope) ---
-
     def create_ingestion_job(
         self,
         *,
@@ -434,6 +429,9 @@ class OliraClient:
 
         Provide either ``file`` (path to a JSONL file — SDK handles S3 upload) or
         ``records`` (inline list of :class:`IngestRecord` objects, ≤ 50,000).
+
+        For ``file``, the SDK fetches your org SDK config for the server-controlled
+        ``ingestion_max_file_bytes`` limit (falls back to 100 MB if the config request fails).
 
         The job starts automatically. Poll with :meth:`get_ingestion_job` until
         ``status`` reaches ``awaiting_confirmation`` (default) or ``completed``.
@@ -456,9 +454,6 @@ class OliraClient:
             body["max_event_logs"] = max_event_logs
 
         if file is not None:
-            # Fetch the org's SDK config first so we get the server-controlled max_bytes.
-            # Raising the file size limit server-side takes effect immediately with no SDK update.
-            # Falls back to 100 MB if the server is unreachable.
             try:
                 sdk_cfg = self._transport.get_sdk_config()
                 max_bytes: int = sdk_cfg.get("ingestion_max_file_bytes", 100 * 1024 * 1024)
@@ -593,8 +588,8 @@ class AsyncOliraClient:
         self._max_retries = max_retries
         self._context = _build_context(environment, service_name)
         self._transport: AsyncHttpTransport | None = None
-        self._queue: asyncio.Queue[LogWire | None] = asyncio.Queue(maxsize=max_queue_size)
-        self._pending: list[LogWire] = []
+        self._queue: asyncio.Queue[_LogWire | None] = asyncio.Queue(maxsize=max_queue_size)
+        self._pending: list[_LogWire] = []
         self._lock = asyncio.Lock()
         self._worker_task: asyncio.Task[None] | None = None
         self._closed = False
@@ -651,7 +646,7 @@ class AsyncOliraClient:
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
     ) -> None:
-        event = LogWire(
+        event = _LogWire(
             log_type=log_type.value,
             patient_id=patient_id,
             payload=payload,
@@ -690,7 +685,7 @@ class AsyncOliraClient:
 
         wire_events: list[dict[str, Any]] = []
         for spec in events:
-            event = LogWire(
+            event = _LogWire(
                 log_type=spec.log_type.value,
                 patient_id=spec.patient_id,
                 payload=spec.payload or {},
@@ -841,8 +836,6 @@ class AsyncOliraClient:
             )
         return await self._transport.get_patient_token({"patient_id": patient_id})
 
-    # --- State-read methods (sdk:state-read scope) ---
-
     def _require_transport(self, method: str) -> AsyncHttpTransport:
         if self._transport is None:
             raise ValidationError(
@@ -982,8 +975,6 @@ class AsyncOliraClient:
             params["query"] = query
         return await transport.read_memories(patient_id, params)
 
-    # --- Historical ingestion (sdk:historical-ingest scope) ---
-
     async def create_ingestion_job(
         self,
         *,
@@ -1097,7 +1088,7 @@ class AsyncOliraClient:
         return await transport.retry_view_backfill(job_id)
 
     async def flush(self) -> None:
-        drained: list[LogWire] = []
+        drained: list[_LogWire] = []
         while True:
             try:
                 item = self._queue.get_nowait()

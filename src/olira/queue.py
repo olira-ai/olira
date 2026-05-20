@@ -8,11 +8,10 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from .models import LogWire
+from .models import _LogWire
 
 logger = logging.getLogger("olira")
 
-# Key redaction for logs
 REDACTED = "olira_***"
 
 
@@ -36,9 +35,9 @@ class BackgroundWorker:
         self._flush_interval = flush_interval
         self._max_queue_size = max_queue_size
         self._on_error = on_error
-        self._q: queue.Queue[LogWire | None] = queue.Queue(maxsize=max_queue_size)
+        self._q: queue.Queue[_LogWire | None] = queue.Queue(maxsize=max_queue_size)
         self._lock = threading.Lock()
-        self._pending: list[LogWire] = []
+        self._pending: list[_LogWire] = []
         self._shutdown = threading.Event()
         self._thread: threading.Thread | None = None
         self._closed = False
@@ -54,7 +53,7 @@ class BackgroundWorker:
         if not self._closed:
             self.flush()
 
-    def enqueue(self, event: LogWire) -> bool:
+    def enqueue(self, event: _LogWire) -> bool:
         """Enqueue one log entry. Returns False if queue full (entry dropped)."""
         try:
             self._q.put(event, block=False)
@@ -87,7 +86,6 @@ class BackgroundWorker:
             except queue.Empty:
                 item = None
             if item is None:
-                # Flush interval elapsed or shutdown
                 pass
             else:
                 with self._lock:
@@ -119,7 +117,6 @@ class BackgroundWorker:
         """Block until queue is empty and current batch is sent."""
         if self._thread is None:
             return
-        # Drain queue into pending
         while True:
             try:
                 item = self._q.get_nowait()

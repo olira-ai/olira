@@ -1,4 +1,4 @@
-"""HTTP transport for the ingestion API with retry policy and key redaction."""
+"""HTTP transport for the ingestion API with retry policy. API keys are never logged."""
 
 import asyncio
 import logging
@@ -29,7 +29,6 @@ from .models import (
 
 logger = logging.getLogger("olira")
 
-# Redact API key in all log output (SPEC: key never logged)
 REDACTED_KEY = "olira_***"
 
 
@@ -149,11 +148,9 @@ class HttpTransport:
 
             status = response.status_code
 
-            # Auth: never retry
             if status in (401, 403):
                 raise AuthError(f"API key rejected (HTTP {status}). Check key validity and scope.")
 
-            # Conflict: server-side constraint violation (e.g. duplicate external identifier)
             if status == 409:
                 response.read()
                 raise ServerError(
@@ -161,12 +158,10 @@ class HttpTransport:
                     status_code=status,
                 )
 
-            # Permanent client errors: don't retry
             if status in (400, 404, 422):
                 response.read()
                 raise ValidationError(f"Request rejected (HTTP {status}): {response.text[:500]}")
 
-            # Rate limit: retry after Retry-After
             if status == 429:
                 retry_after_seconds = _parse_retry_after(response)
                 if attempt == self._max_retries:
@@ -181,7 +176,6 @@ class HttpTransport:
                 )
                 continue
 
-            # Transient: retry with backoff
             if _should_retry(status):
                 if attempt == self._max_retries:
                     raise ServerError(f"Server error (HTTP {status}) after retries")
@@ -196,7 +190,6 @@ class HttpTransport:
                 time.sleep(delay)
                 continue
 
-            # Success
             if 200 <= status < 300:
                 return response.json() if response.content else {}
 
@@ -242,8 +235,6 @@ class HttpTransport:
         raw = self._request("POST", "/v1/auth/token", json=body)
         return _parse_patient_token(raw)
 
-    # --- State-read methods (sdk:state-read scope) ---
-
     def get_stable_data(self, patient_id: str, params: dict[str, Any]) -> StableDataResult:
         raw = self._request("GET", f"/v1/state/{patient_id}/stable", params=params)
         return StableDataResult.model_validate(raw)
@@ -287,8 +278,6 @@ class HttpTransport:
     def read_memories(self, patient_id: str, params: dict[str, Any]) -> MemoriesResult:
         raw = self._request("GET", f"/v1/state/{patient_id}/memories", params=params)
         return MemoriesResult.model_validate(raw)
-
-    # --- Historical ingestion (sdk:historical-ingest scope) ---
 
     def get_sdk_config(self) -> dict[str, Any]:
         """Fetch the org's SDK configuration (GET /v1/sdk/config)."""
@@ -405,8 +394,6 @@ class AsyncHttpTransport:
         raw = await self._request("POST", "/v1/auth/token", json=body)
         return _parse_patient_token(raw)
 
-    # --- State-read methods (sdk:state-read scope) ---
-
     async def get_stable_data(self, patient_id: str, params: dict[str, Any]) -> StableDataResult:
         raw = await self._request("GET", f"/v1/state/{patient_id}/stable", params=params)
         return StableDataResult.model_validate(raw)
@@ -452,8 +439,6 @@ class AsyncHttpTransport:
     async def read_memories(self, patient_id: str, params: dict[str, Any]) -> MemoriesResult:
         raw = await self._request("GET", f"/v1/state/{patient_id}/memories", params=params)
         return MemoriesResult.model_validate(raw)
-
-    # --- Historical ingestion (sdk:historical-ingest scope) ---
 
     async def get_sdk_config(self) -> dict[str, Any]:
         return cast(dict[str, Any], await self._request("GET", "/v1/sdk/config"))

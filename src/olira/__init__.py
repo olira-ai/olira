@@ -1,4 +1,4 @@
-"""Olira Python SDK — event ingestion client for the Olira Health platform."""
+"""Olira Python SDK — event ingestion client for the Olira platform."""
 
 from typing import Any
 
@@ -66,18 +66,15 @@ __all__ = [
     "ValidationError",
     "ServerError",
     "NetworkError",
-    # Log types and helpers
     "OliraLogType",
     "OliraTrace",
     "EsasItem",
     "LabResultItem",
     "PerformingLab",
     "TimePeriod",
-    # Log types
     "LogSpec",
     "BatchResult",
     "BatchError",
-    # Patient management types
     "ExternalIdentifier",
     "CreatePatientRequest",
     "UpdatePatientRequest",
@@ -86,7 +83,6 @@ __all__ = [
     "PatientBatchResult",
     "PatientListResult",
     "PatientToken",
-    # State-read response types
     "StableModule",
     "StableDataResult",
     "EventStateModuleSummary",
@@ -103,12 +99,10 @@ __all__ = [
     "EventsResult",
     "MemoryEntry",
     "MemoriesResult",
-    # Module-level log functions
     "init",
     "flush",
     "log",
     "log_batch",
-    # Module-level patient functions
     "create_patient",
     "create_patients_batch",
     "get_patient",
@@ -116,7 +110,6 @@ __all__ = [
     "update_patient",
     "delete_patient",
     "get_patient_token",
-    # Module-level state-read functions
     "get_stable_data",
     "list_event_state_modules",
     "get_event_state_module",
@@ -130,7 +123,6 @@ __all__ = [
     "read_memories",
 ]
 
-# Module-level singleton
 _client: OliraClient | None = None
 
 
@@ -325,9 +317,6 @@ def get_patient_token(*, patient_id: str) -> PatientToken:
     return _get_client().get_patient_token(patient_id=patient_id)
 
 
-# --- State-read module-level proxies (sdk:state-read scope) ---
-
-
 def get_stable_data(*, patient_id: str, modules: list[str] | None = None) -> StableDataResult:
     """Get stable patient data. Module-level proxy to the singleton client.
 
@@ -448,11 +437,6 @@ def read_memories(*, patient_id: str, query: str | None = None, limit: int = 100
     Requires sdk:state-read scope. Pass ``query`` for text search; omit to list all.
     """
     return _get_client().read_memories(patient_id=patient_id, query=query, limit=limit)
-
-
-# ---------------------------------------------------------------------------
-# Historical ingestion proxies (sdk:historical-ingest scope)
-# ---------------------------------------------------------------------------
 
 
 def create_ingestion_job(

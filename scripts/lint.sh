@@ -2,13 +2,15 @@
 
 set -e
 
+bash scripts/install-dev.sh
+
 echo "Checking code formatting..."
-uv run ruff format . --check
+bash scripts/uv.sh run ruff format . --check
 
 echo "Running Ruff linting..."
-uv run ruff check .
+bash scripts/uv.sh run ruff check .
 
 echo "Running type checking..."
-uv run mypy src/
+bash scripts/uv.sh run mypy src/
 
 echo "All linting checks passed"

@@ -1,9 +1,4 @@
-"""Event schemas, types, and internal Event wire format.
-
-Field shapes align with packages/common-models/.../schemas/personalization/util.py
-(source of truth). The SDK does not depend on common-models so it remains
-public and PyPI-installable.
-"""
+"""Pydantic models and wire types for Olira event ingestion and patient APIs."""
 
 import re
 import uuid
@@ -15,10 +10,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .exceptions import ValidationError
 
-# Max payload size per event (512 KB) — SPEC Section 9.1
 MAX_EVENT_PAYLOAD_BYTES = 512 * 1024
-
-# PII patterns: empty/whitespace, email (@), US phone (10 digits), SSN (xxx-xx-xxxx)
 _SUBJECT_ID_EMPTY = re.compile(r"^\s*$")
 _SUBJECT_ID_EMAIL = re.compile(r"@")
 _SUBJECT_ID_US_PHONE = re.compile(r"^\d{10}$")
@@ -42,7 +34,6 @@ def _validate_patient_id(value: str) -> str:
 class OliraLogType(StrEnum):
     """Customer-facing log types. Values match the platform log catalog."""
 
-    # Symptom reports
     SYMPTOM_REPORT = "symptom_report"
     SYMPTOM_FREE_TEXT = "symptom_free_text"
     SYMPTOM_DETAIL = "symptom_detail"
@@ -50,7 +41,6 @@ class OliraLogType(StrEnum):
     FUNCTIONAL_CLASS_REPORTED = "functional_class_reported"
     HEALTH_METRIC_REPORTED = "health_metric_reported"
 
-    # Lab & clinical
     LAB_RESULTS_RECEIVED = "lab_results_received"
     VITALS_MEASUREMENT = "vitals_measurement"
     CLINICAL_NOTE_RECEIVED = "clinical_note_received"
@@ -71,15 +61,12 @@ class OliraLogType(StrEnum):
     MEMORY_REPORT = "memory_report"
     UNSTRUCTURED_REPORT_RECEIVED = "unstructured_report_received"
 
-    # Questionnaires
     QUESTIONNAIRE_RESPONSE = "questionnaire_response"
     QUESTIONNAIRE_ITEM_RESPONSE = "questionnaire_item_response"
 
-    # Conversations
     CONVERSATION_COMPLETED = "conversation_completed"
     CONVERSATION_TURN_LOGGED = "conversation_turn_logged"
 
-    # Passive data
     HEART_RATE_DATA_RECEIVED = "heart_rate_data_received"
     SLEEP_DATA_RECEIVED = "sleep_data_received"
     ACTIVITY_DATA_RECEIVED = "activity_data_received"
@@ -87,12 +74,10 @@ class OliraLogType(StrEnum):
     SPO2_READING_RECEIVED = "spo2_reading_received"
     WEIGHT_MEASUREMENT_RECEIVED = "weight_measurement_received"
 
-    # Medications
     MEDICATION_ACTION = "medication_action"
     MEDICATION_DOSE_UPDATE = "medication_dose_update"
     MEDICATION_ADVERSE_EVENT_REPORTED = "medication_adverse_event_reported"
 
-    # Engagement
     USER_LOGIN = "user_login"
     USER_LOGOUT = "user_logout"
     CONTENT_INTERACTED = "content_interacted"
@@ -101,7 +86,6 @@ class OliraLogType(StrEnum):
     INTERACTION_FEEDBACK = "interaction_feedback"
     FEATURE_USED = "feature_used"
 
-    # Profile
     DEMOGRAPHICS_UPDATED = "demographics_updated"
     CONDITION_RECORDED = "condition_recorded"
     PREFERENCES_UPDATED = "preferences_updated"
@@ -125,14 +109,10 @@ class OliraTrace(BaseModel):
     object_id: str = Field(..., description="Your identifier for the linked object")
 
 
-# --- Public API schemas (exported from olira); shapes match common-models util.py ---
-
-
 class EsasItem(BaseModel):
-    """
-    Single ESAS-r symptom item (name + score 0–10).
-    Shape matches EsasSymptomItem in common-models util.py.
-    Optional type/snomed_code/meddra_code used for matching server-side.
+    """Single ESAS-r symptom item (name + score 0–10).
+
+    Optional type, snomed_code, and meddra_code are used for server-side symptom matching.
     """
 
     name: str = Field(..., description="ESAS item name (display); not used for matching")
@@ -146,9 +126,8 @@ class EsasItem(BaseModel):
 
 
 class LabResultItem(BaseModel):
-    """
-    One result item from lab_results_received.results[] (with or without LOINC).
-    Shape matches LabResultItem in common-models util.py.
+    """One result item from lab_results_received.results[] (with or without LOINC).
+
     At least one of loinc_code or test_name; at least one of value_numeric or value_string.
     """
 
@@ -177,25 +156,22 @@ class LabResultItem(BaseModel):
 
 
 class PerformingLab(BaseModel):
-    """Performing lab from lab_results_received envelope. Shape matches common-models util.py."""
+    """Performing lab from a lab_results_received envelope."""
 
     name: str | None = Field(default=None)
     clia_number: str | None = Field(default=None)
 
 
 class TimePeriod(BaseModel):
-    """Time range in ISO 8601 datetimes. Wire-compatible with PeriodRange in common-models util.py."""
+    """Time range in ISO 8601 datetimes (start_datetime, end_datetime)."""
 
     start_datetime: str
     end_datetime: str
 
 
-# --- Batch API types ---
-
-
 @dataclass
 class LogSpec:
-    """Lightweight log specification for log_batch(). Not persisted internally."""
+    """Lightweight log specification for log_batch()."""
 
     log_type: OliraLogType
     patient_id: str
@@ -221,11 +197,8 @@ class BatchResult(BaseModel):
     errors: list[BatchError] = Field(default_factory=list)
 
 
-# --- Internal wire format (not exported) ---
-
-
-class LogWire(BaseModel):
-    """Wire-format log entry; built by the SDK, not by customers."""
+class _LogWire(BaseModel):
+    """Wire-format log entry built by the SDK for batch transport (512 KB max per event)."""
 
     log_type: str
     patient_id: str
@@ -250,9 +223,6 @@ class LogWire(BaseModel):
                 "truncate or chunk the payload before sending"
             )
         return self
-
-
-# --- Patient management request types (exported) ---
 
 
 class ExternalIdentifier(BaseModel):
@@ -329,9 +299,6 @@ class UpdatePatientRequest(BaseModel):
     metadata: dict[str, Any] | None = None
 
 
-# --- Patient management response types (exported) ---
-
-
 class Patient(BaseModel):
     """A patient in your organisation.
 
@@ -391,9 +358,6 @@ class PatientToken(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     scopes: list[str]
-
-
-# --- State-read response types (exported) ---
 
 
 class StableModule(BaseModel):
@@ -554,11 +518,6 @@ class MemoriesResult(BaseModel):
     results: list[MemoryEntry] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Historical data ingestion
-# ---------------------------------------------------------------------------
-
-
 class IngestionJobStatus(StrEnum):
     """Lifecycle status of a HistoricalIngestionJob."""
 
@@ -647,7 +606,7 @@ class IngestRecord(BaseModel):
         IngestRecord.log(IngestLogSpec(...))
     """
 
-    type: str  # "patient" | "log"
+    type: str
     data: dict[str, Any]
 
     @classmethod

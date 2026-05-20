@@ -1,5 +1,5 @@
 > **Maintained by:** Olira Engineering  
-> **Published at:** `olira.ai/api-docs` → Python SDK tab  
+> **Published at:** [https://olira.ai/api-docs](https://olira.ai/api-docs) → Python SDK tab  
 > **Status:** **BETA** — SDK APIs and this reference may change between releases.
 
 # Olira Python SDK — API Reference
@@ -8,15 +8,15 @@ The Olira Python SDK provides a typed client for logging health events,
 managing patients, and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `0.1.0a10`
+**Package:** `olira` — **Version:** `1.0.0`
 
 ## Related docs
 
 | Doc                                                           | What it covers                                               | Why you need it                                                                                                                                                             |
 | ------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Authentication** (`olira.ai/api-docs` → Authentication tab) | API keys, patient tokens, **scopes**, auth errors            | Choose scopes when creating keys; mint patient tokens for device-facing calls                                                                                               |
-| **MCP Patient State** (`olira.ai/api-docs` → MCP tab)         | Tools for querying patient health state from AI agents       | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
-| **CLI** (`olira.ai/api-docs` → CLI tab)                       | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server                                                                             |
+| **Authentication** ([api-docs](https://olira.ai/api-docs) → Authentication tab) | API keys, patient tokens, **scopes**, auth errors            | Choose scopes when creating keys; mint patient tokens for device-facing calls                                                                                               |
+| **MCP Patient State** ([api-docs](https://olira.ai/api-docs) → MCP tab)         | Tools for querying patient health state from AI agents       | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
+| **CLI** ([api-docs](https://olira.ai/api-docs) → CLI tab)                       | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server                                                                             |
 
 ## Getting Started
 
@@ -159,7 +159,7 @@ produced a given data point.
 
 ### `TimePeriod`
 
-Time range in ISO 8601 datetimes. Wire-compatible with PeriodRange in common-models util.py.
+Time range in ISO 8601 datetimes (`start_datetime`, `end_datetime`).
 
 | Field            | Required | Type  | Description |
 | ---------------- | -------- | ----- | ----------- |

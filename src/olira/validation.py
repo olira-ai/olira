@@ -72,6 +72,9 @@ def validate_ingestion_file(
     Does **not** make any network calls. Patient resolution against existing org
     patients requires a server call and is not checked here.
 
+    Patient and log records may appear in any order in the file; validation collects
+    all patient identifiers before checking log ``patient_id`` references.
+
     Raises ``FileNotFoundError`` if the path does not exist.
     Raises ``OSError`` if the file cannot be read.
 
@@ -86,7 +89,6 @@ def validate_ingestion_file(
     """
     errors: list[IngestionRowError] = []
 
-    # File size check — fail fast before reading any content
     file_size = Path(path).stat().st_size
     if file_size > max_file_bytes:
         return [
@@ -101,12 +103,8 @@ def validate_ingestion_file(
             )
         ]
 
-    # Two-pass approach mirrors the server pipeline (all patients processed before
-    # any logs) so patient and log records may appear in any order in the file.
-
-    # Pass 1 — parse every line; validate patient structure; collect known patient ids
     known_patient_ids: set[str] = set()
-    parsed: list[tuple[int, str, dict[str, Any]]] = []  # (line_num, record_type, data)
+    parsed: list[tuple[int, str, dict[str, Any]]] = []
 
     with open(path, encoding="utf-8") as fh:
         for line_num, raw in enumerate(fh, start=1):
@@ -162,7 +160,6 @@ def validate_ingestion_file(
 
             parsed.append((line_num, record_type, data))
 
-    # Pass 2 — validate log records now that all patient ids are known
     for line_num, record_type, data in parsed:
         if record_type != "log":
             continue
@@ -228,13 +225,13 @@ def validate_ingestion_records(records: list[IngestRecord]) -> list[IngestionRow
     """Validate a list of :class:`IngestRecord` objects locally before submitting inline.
 
     Same checks as :func:`validate_ingestion_file` but operates on already-parsed records.
-    Line numbers are 1-indexed positions in the ``records`` list.
+    Patient and log records may appear in any order. Line numbers are 1-indexed positions
+    in the ``records`` list.
 
     Returns an empty list if all records pass.
     """
     errors: list[IngestionRowError] = []
 
-    # Pass 1 — collect all patient ids and validate patient structure
     known_patient_ids: set[str] = set()
     for i, record in enumerate(records, start=1):
         if record.type == "patient":
@@ -262,18 +259,17 @@ def validate_ingestion_records(records: list[IngestRecord]) -> list[IngestionRow
                 )
             )
 
-    # Pass 2 — validate log records with complete patient id set
     for i, record in enumerate(records, start=1):
         data = record.data
         record_type = record.type
 
         if record_type not in ("patient", "log"):
-            continue  # already reported above
+            continue
 
         if record_type == "patient":
-            pass  # already validated in pass 1
+            continue
 
-        else:
+        if record_type == "log":
             et = data.get("event_type", "")
             if not et:
                 errors.append(
@@ -327,10 +323,6 @@ def validate_ingestion_records(records: list[IngestRecord]) -> list[IngestionRow
     return errors
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 import re as _re  # noqa: E402
 
 _UUID_RE = _re.compile(
@@ -341,10 +333,8 @@ _UUID_RE = _re.compile(
 
 def _looks_like_uuid(value: str) -> bool:
     """Return True if value looks like an Olira ObjectId or UUID (24-char hex or UUID4)."""
-    # MongoDB ObjectId: 24 hex chars
     if _re.match(r"^[0-9a-f]{24}$", value, _re.IGNORECASE):
         return True
-    # UUID4: 32 hex with optional hyphens
     return bool(_UUID_RE.match(value))
 
 

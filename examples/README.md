@@ -25,4 +25,4 @@ python 00_quickstart.py
 
 - Examples `03` and `04` both demonstrate historical ingestion; `04` covers the specific case where patients already exist in your org.
 - Cleanup blocks at the end of each script delete demo patients. These are not part of a real integration — remove them when adapting the code.
-- For the full API reference, see [`API_DOCUMENTATION.md`](../API_DOCUMENTATION.md).
+- Full API reference: [https://olira.ai/api-docs](https://olira.ai/api-docs) (Python SDK tab). Local copy: [`SDK_DOCUMENTATION.md`](../SDK_DOCUMENTATION.md).

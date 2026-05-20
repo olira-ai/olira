@@ -1,6 +1,6 @@
 # Olira Python SDK
 
-Log ingestion, patient management, and patient token client for the Olira Health platform.
+Log ingestion, patient management, and patient token client for the Olira platform.
 
 ## Install
 
@@ -8,17 +8,25 @@ Log ingestion, patient management, and patient token client for the Olira Health
 pip install olira
 ```
 
+## Documentation
+
+Full API reference: [https://olira.ai/api-docs](https://olira.ai/api-docs) (Python SDK tab).
+
+Local copy: [SDK_DOCUMENTATION.md](SDK_DOCUMENTATION.md).
+
 ---
 
 ## Authentication
 
 All SDK methods authenticate with an **Olira API key** (`olira_prod_...`). Create keys from the Olira Console under **Settings → API Keys**, selecting the scopes you need:
 
-| Scope | What it unlocks |
-|---|---|
-| `sdk:event-log` | Log events |
+| Scope                 | What it unlocks                       |
+| --------------------- | ------------------------------------- |
+| `sdk:event-log`       | Log events                            |
 | `api:manage-patients` | Create, read, update, delete patients |
-| `sdk:patient-token` | Mint short-lived patient-scoped JWTs |
+| `sdk:patient-token`   | Mint short-lived patient-scoped JWTs  |
+
+See [API key scopes](https://olira.ai/api-docs) for the full list.
 
 Pass the key to `OliraClient` or to `olira.init()`:
 
@@ -111,7 +119,7 @@ client.close()
 
 Mint a short-lived JWT scoped to a single patient. Requires the `sdk:patient-token` scope.
 
-Use this when a patient device needs to communicate with the Olira MCP Patient State server — pass the token as a Bearer header. The token expires after 15 minutes and is locked to the specified patient.
+Use this when a patient device needs to communicate with the [Olira MCP Patient State server](https://olira.ai/api-docs) — pass the token as a Bearer header. The token expires after 15 minutes and is locked to the specified patient.
 
 ```python
 from olira import OliraClient
@@ -169,4 +177,15 @@ except RateLimitError as e:
 except ServerError:
     # Transient server error after all retries exhausted
     ...
+```
+
+---
+
+## Contributing
+
+Dependencies are public PyPI packages only:
+
+```bash
+bash scripts/install-dev.sh
+./scripts/pre-pr.sh
 ```

@@ -15,7 +15,7 @@ get_pyproject_version() {
     grep -E '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/' || echo ""
 }
 
-get_init_version() {
+get_version_py_version() {
     grep -E '^__version__ = ' src/olira/version.py | sed 's/__version__ = "\(.*\)"/\1/' || echo ""
 }
 
@@ -28,13 +28,13 @@ get_changelog_version() {
 }
 
 PYPROJECT_VERSION=$(get_pyproject_version)
-INIT_VERSION=$(get_init_version)
+VERSION_PY_VERSION=$(get_version_py_version)
 CHANGELOG_VERSION=$(get_changelog_version)
 
 echo ""
 echo -e "${BLUE}Found versions:${NC}"
 echo "  - pyproject.toml: ${PYPROJECT_VERSION:-<not found>}"
-echo "  - __init__.py: ${INIT_VERSION:-<not found>}"
+echo "  - src/olira/version.py: ${VERSION_PY_VERSION:-<not found>}"
 echo "  - CHANGELOG.md: ${CHANGELOG_VERSION:-<not found>}"
 
 if [ -z "$PYPROJECT_VERSION" ]; then
@@ -42,8 +42,8 @@ if [ -z "$PYPROJECT_VERSION" ]; then
     exit 1
 fi
 
-if [ -z "$INIT_VERSION" ]; then
-    echo -e "${RED}ERROR: Could not find version in src/olira/__init__.py${NC}"
+if [ -z "$VERSION_PY_VERSION" ]; then
+    echo -e "${RED}ERROR: Could not find version in src/olira/version.py${NC}"
     exit 1
 fi
 
@@ -53,10 +53,10 @@ if [ -z "$CHANGELOG_VERSION" ]; then
     exit 1
 fi
 
-if [ "$PYPROJECT_VERSION" != "$INIT_VERSION" ]; then
+if [ "$PYPROJECT_VERSION" != "$VERSION_PY_VERSION" ]; then
     echo -e "${RED}ERROR: Version mismatch!${NC}"
     echo -e "${RED}   pyproject.toml: $PYPROJECT_VERSION${NC}"
-    echo -e "${RED}   __init__.py: $INIT_VERSION${NC}"
+    echo -e "${RED}   src/olira/version.py: $VERSION_PY_VERSION${NC}"
     exit 1
 fi
 
@@ -78,6 +78,18 @@ if [ "${CI:-false}" = "true" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
         echo -e "${RED}   Current: $PYPROJECT_VERSION, Base: $BASE_VERSION${NC}"
         exit 1
     else
+        echo -e "${GREEN}Version changed from $BASE_VERSION to $PYPROJECT_VERSION${NC}"
+    fi
+elif command -v git &> /dev/null && git rev-parse --git-dir &> /dev/null; then
+    BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")
+    BASE_VERSION=$(git show "origin/${BASE_BRANCH}:packages/olira-sdk-python/pyproject.toml" 2>/dev/null | grep -E '^version = ' | sed 's/version = "\(.*\)"/\1/' || echo "")
+
+    if [ -n "$BASE_VERSION" ] && [ "$PYPROJECT_VERSION" = "$BASE_VERSION" ]; then
+        echo ""
+        echo -e "${YELLOW}WARNING: Version matches base branch ($BASE_BRANCH) version: $BASE_VERSION${NC}"
+        echo -e "${YELLOW}   Consider updating the version if this is a new release${NC}"
+    elif [ -n "$BASE_VERSION" ]; then
+        echo ""
         echo -e "${GREEN}Version changed from $BASE_VERSION to $PYPROJECT_VERSION${NC}"
     fi
 fi

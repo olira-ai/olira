@@ -3,7 +3,7 @@
 import pytest
 
 from olira import ValidationError
-from olira.models import LogWire, _validate_patient_id
+from olira.models import _LogWire, _validate_patient_id
 
 
 def test_patient_id_empty_raises():
@@ -35,7 +35,7 @@ def test_patient_id_pseudo_ok():
 
 def test_log_wire_validates_patient_id():
     with pytest.raises(ValidationError):
-        LogWire(
+        _LogWire(
             log_type="user_login",
             patient_id="user@example.com",
             context={"environment": "production", "service": "", "sdk_version": "0.1.0", "sdk_language": "python"},
