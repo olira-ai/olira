@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-05-21
+
+### Changed
+
+- README: add `sdk:historical-ingest`, `sdk:state-read`, `mcp:patient-state` scopes; add Historical Ingestion and Patient State sections; rename "Event Logging" → "Logging".
+- SDK_DOCUMENTATION.md: update intro description; fix CLI install instructions to Homebrew.
+- Bump GitHub Actions to Node.js 24-compatible versions (`actions/checkout@v6`, `actions/setup-python@v6`, `astral-sh/setup-uv@v8.1.0`).
+- `check-version.sh`: fix stale monorepo path; add `SDK_DOCUMENTATION.md` version consistency check.
+
 ## [1.0.0] - 2026-05-20
 
 First public release of the Olira Python SDK (`pip install olira`).
