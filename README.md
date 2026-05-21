@@ -1,6 +1,6 @@
 # Olira Python SDK
 
-Log ingestion, patient management, and patient token client for the Olira platform.
+Log ingestion, patient management, historical backfill, and patient state client for the Olira platform.
 
 ## Install
 
@@ -20,11 +20,14 @@ Local copy: [SDK_DOCUMENTATION.md](SDK_DOCUMENTATION.md).
 
 All SDK methods authenticate with an **Olira API key** (`olira_prod_...`). Create keys from the Olira Console under **Settings → API Keys**, selecting the scopes you need:
 
-| Scope                 | What it unlocks                       |
-| --------------------- | ------------------------------------- |
-| `sdk:event-log`       | Log events                            |
-| `api:manage-patients` | Create, read, update, delete patients |
-| `sdk:patient-token`   | Mint short-lived patient-scoped JWTs  |
+| Scope                     | What it unlocks                                        |
+| ------------------------- | ------------------------------------------------------ |
+| `sdk:event-log`           | Log events                                             |
+| `api:manage-patients`     | Create, read, update, delete patients                  |
+| `sdk:patient-token`       | Mint short-lived patient-scoped JWTs                   |
+| `sdk:historical-ingest`   | Create and manage historical data ingestion jobs       |
+| `sdk:state-read`          | Read Patient State (modules, views, logs, memories)    |
+| `mcp:patient-state`       | Query Patient State via the MCP Patient State server   |
 
 See [API key scopes](https://olira.ai/api-docs) for the full list.
 
@@ -75,7 +78,7 @@ client.delete_patient(patient_id=patient_id)
 
 ---
 
-## Event Logging
+## Logging
 
 Log a single event in the background (fire-and-forget):
 
@@ -115,6 +118,35 @@ client.close()
 
 ---
 
+## Historical Ingestion
+
+Backfill months or years of existing patient data. Requires the `sdk:historical-ingest` scope.
+
+```python
+import olira, time
+
+# Submit a JSONL file — the SDK uploads it to S3 and creates the job
+job = olira.create_ingestion_job(
+    file="patients_and_logs.jsonl",
+    idempotency_key="initial-onboarding-2026",
+    require_confirmation=True,  # pause to review before replay
+)
+
+# Poll until awaiting confirmation (or complete)
+while job.status not in ("completed", "failed", "awaiting_confirmation"):
+    time.sleep(5)
+    job = olira.get_ingestion_job(job_id=job.job_id)
+    print(f"{job.stage}  {job.progress_pct:.1f}%")
+
+# Review, then confirm to trigger graph replay and view backfill
+print(f"Patients: {job.patients_processed}  Logs: {job.logs_processed}")
+olira.confirm_ingestion_job(job_id=job.job_id)
+```
+
+See the [Backfilling historical data](https://olira.ai/api-docs) guide for the full walkthrough including inline payloads, validation, cancellation, and error recovery.
+
+---
+
 ## Patient Token
 
 Mint a short-lived JWT scoped to a single patient. Requires the `sdk:patient-token` scope.
@@ -130,6 +162,30 @@ token = client.get_patient_token(patient_id=patient_id)
 print(token.access_token)  # forward this to the patient device
 print(token.expires_in)    # 900 (seconds)
 client.close()
+```
+
+---
+
+## Patient State
+
+Read structured Patient State (modules, views, logs, and memories). Requires the `sdk:state-read` scope.
+
+```python
+from olira import OliraClient
+
+client = OliraClient(api_key="olira_prod_...")
+
+# Stable profile data (demographics, medications, care team, etc.)
+stable = client.get_stable_data(patient_id=patient_id)
+
+# Event-driven module (symptoms, labs, vitals, etc.)
+module = client.get_event_state_module(patient_id=patient_id, module_type="symptoms")
+
+# Generated view (template-driven summary your agents consume)
+view = client.get_view(patient_id=patient_id, view_type="weekly_health_summary")
+
+# Memories
+memories = client.read_memories(patient_id=patient_id)
 ```
 
 ---

@@ -5,10 +5,11 @@
 # Olira Python SDK — API Reference
 
 The Olira Python SDK provides a typed client for logging health events,
-managing patients, and minting patient-scoped tokens for use with the
+managing patients, backfilling historical data, reading Patient State,
+and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.0.0`
+**Package:** `olira` — **Version:** `1.0.1`
 
 ## Related docs
 
@@ -85,11 +86,13 @@ Initialize the SDK. API key can be passed or set via OLIRA_API_KEY env var.
 ## Olira CLI
 
 The CLI ships separately and provides local tooling for API key management
-and Cursor configuration. Install it with:
+and Cursor configuration. Install it with Homebrew:
 
 ```bash
-pip install olira-cli
+brew install olira-ai/tap/olira
 ```
+
+Or download a binary directly from [GitHub Releases](https://github.com/olira-ai/olira-cli/releases).
 
 ### Creating an API key with the CLI
 
