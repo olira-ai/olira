@@ -116,6 +116,29 @@ print(f"accepted={result.accepted}, failed={result.failed}")
 client.close()
 ```
 
+If your source data is already in **FHIR R4 format**, use `log_fhir()` — Olira maps the resource to the right log type automatically using the same absorber as Epic/Cerner integrations:
+
+```python
+from olira import OliraClient, ValidationError
+
+client = OliraClient(api_key="olira_prod_...")
+try:
+    result = client.log_fhir(
+        patient_id=patient_id,
+        resource={
+            "resourceType": "Condition",
+            "clinicalStatus": {"coding": [{"code": "active"}]},
+            "code": {"text": "Breast cancer"},
+            "subject": {"reference": f"Patient/{patient_id}"},
+            "onsetDateTime": "2025-01-10T00:00:00Z",
+        },
+    )
+    print(f"accepted={result.accepted}")
+except ValidationError as e:
+    print(f"Resource not mappable: {e}")
+client.close()
+```
+
 ---
 
 ## Historical Ingestion
@@ -234,6 +257,25 @@ except ServerError:
     # Transient server error after all retries exhausted
     ...
 ```
+
+---
+
+## Examples
+
+Runnable scripts under `examples/`:
+
+| File | What it covers |
+| ---- | -------------- |
+| `00_quickstart.py` | `olira.init()`, create a patient, log an event |
+| `01_patient_management.py` | Create, get, list, update, delete patients |
+| `02_event_logging.py` | `log()`, `log_batch()`, traces, flush |
+| `03_historical_ingestion.py` | File upload, polling, confirm/cancel flow |
+| `04_logs_only_workflow.py` | Historical ingestion with log-only records when patients already exist in the org |
+| `05_read_patient_state.py` | Stable data, event modules, views, logs, memories |
+| `06_fhir_ingestion.py` | `log_fhir()` with Condition, MedicationRequest, Appointment; error handling |
+| `07_patient_token.py` | Mint token, MCP Bearer forwarding, `PatientSession` refresh helper |
+
+`05_read_patient_state.py` and `07_patient_token.py` require a patient with existing data — run `00_quickstart.py` or `02_event_logging.py` first and use the printed patient id. See [`examples/README.md`](examples/README.md) for setup instructions (`cp .env.example .env`, `uv sync`).
 
 ---
 

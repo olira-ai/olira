@@ -103,6 +103,7 @@ __all__ = [
     "flush",
     "log",
     "log_batch",
+    "log_fhir",
     "create_patient",
     "create_patients_batch",
     "get_patient",
@@ -192,6 +193,19 @@ def log(
 def log_batch(events: list[LogSpec]) -> BatchResult:
     """Send a batch of logs directly. Module-level proxy to the singleton client."""
     return _get_client().log_batch(events)
+
+
+def log_fhir(*, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+    """Submit a single FHIR R4 resource for immediate ingestion. Module-level proxy to the singleton client.
+
+    Requires an API key with the sdk:event-log scope. Olira maps the resource to one or
+    more platform log types via the FHIR absorber (same schema mapper used by Epic/Cerner
+    integrations) and processes each event immediately. You do not choose log_type or
+    build Olira-shaped payloads — the absorber handles the mapping.
+
+    Raises ValidationError if the resource could not be mapped to any Olira events.
+    """
+    return _get_client().log_fhir(patient_id=patient_id, resource=resource)
 
 
 def create_patient(

@@ -20,9 +20,12 @@ python 00_quickstart.py
 | `03_historical_ingestion.py` | Bulk historical load: file upload (Path A) and inline records (Path B), two-phase confirm flow | `sdk:historical-ingest` |
 | `04_logs_only_workflow.py` | Historical ingestion when patients already exist — logs-only job, no patient records in file | `sdk:historical-ingest`, `api:manage-patients` |
 | `05_read_patient_state.py` | Read compiled patient state: stable data, event modules, views, logs, events, memories | `sdk:state-read` |
+| `06_fhir_ingestion.py` | `log_fhir()` with Condition, MedicationRequest, Appointment; error handling for unsupported types | `sdk:event-log`, `api:manage-patients` |
+| `07_patient_token.py` | Mint a patient-scoped JWT, forward to MCP as Bearer, `PatientSession` refresh helper | `sdk:patient-token` |
 
 ## Notes
 
 - Examples `03` and `04` both demonstrate historical ingestion; `04` covers the specific case where patients already exist in your org.
+- `05_read_patient_state.py` and `07_patient_token.py` require an existing patient id — run `00_quickstart.py` or `02_event_logging.py` first, then pass the printed id or set `PATIENT_ID` in `.env`.
 - Cleanup blocks at the end of each script delete demo patients. These are not part of a real integration — remove them when adapting the code.
 - Full API reference: [https://olira.ai/api-docs](https://olira.ai/api-docs) (Python SDK tab). Local copy: [`SDK_DOCUMENTATION.md`](../SDK_DOCUMENTATION.md).

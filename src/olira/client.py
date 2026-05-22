@@ -150,6 +150,23 @@ class OliraClient:
         """Enqueue a log for background delivery. Returns immediately."""
         self._emit(log_type, patient_id, payload or {}, trace=trace, timestamp=timestamp)
 
+    def log_fhir(self, *, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+        """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
+
+        Olira maps the resource to one or more platform log types via the FHIR absorber
+        (same schema mapper used by Epic/Cerner integrations) and processes each event
+        immediately for the patient. You do not choose log_type or build Olira-shaped
+        payloads — the absorber handles the mapping.
+
+        Raises ValidationError if the resource could not be mapped to any Olira events
+        (unsupported type, unrecognized fields, or missing resourceType).
+        """
+        result = self._transport.log_fhir(patient_id, resource)
+        if result.accepted == 0:
+            msg = result.errors[0].message if result.errors else "FHIR resource produced no accepted events"
+            raise ValidationError(msg)
+        return result
+
     def log_batch(self, events: list[LogSpec]) -> BatchResult:
         """Send a batch of logs directly, bypassing the background queue.
 
@@ -670,6 +687,24 @@ class AsyncOliraClient:
     ) -> None:
         """Enqueue a log for background delivery."""
         self._emit(log_type, patient_id, payload or {}, trace=trace, timestamp=timestamp)
+
+    async def log_fhir(self, *, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+        """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
+
+        Olira maps the resource to one or more platform log types via the FHIR absorber
+        (same schema mapper used by Epic/Cerner integrations) and processes each event
+        immediately for the patient. You do not choose log_type or build Olira-shaped
+        payloads — the absorber handles the mapping.
+
+        Raises ValidationError if the resource could not be mapped to any Olira events
+        (unsupported type, unrecognized fields, or missing resourceType).
+        """
+        transport = self._require_transport("log_fhir")
+        result = await transport.log_fhir(patient_id, resource)
+        if result.accepted == 0:
+            msg = result.errors[0].message if result.errors else "FHIR resource produced no accepted events"
+            raise ValidationError(msg)
+        return result
 
     async def log_batch(self, events: list[LogSpec]) -> BatchResult:
         """Send a batch of logs directly, bypassing the background queue.

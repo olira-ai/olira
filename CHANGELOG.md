@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-05-22
+
+### Added
+
+- `log_fhir(*, patient_id, resource)` on `OliraClient`, `AsyncOliraClient`, and module-level — submits a single FHIR R4 resource for immediate ingestion via `POST /v1/fhir/resource` (`sdk:event-log` scope). Olira maps the resource to one or more platform log types using the same absorber as Epic/Cerner integrations; callers do not choose a `log_type` or build Olira-shaped payloads.
+- `ValidationError` is raised when the server returns `accepted=0` (unsupported resource type, unrecognized fields, or missing `resourceType`) — the exception message explains why.
+- `examples/06_fhir_ingestion.py`: runnable example covering Condition, MedicationRequest, Appointment, and both error paths.
+- `examples/07_patient_token.py`: runnable example covering mint, MCP Bearer forwarding pattern, and a `PatientSession` helper with automatic token refresh.
+
+### Changed
+
+- `SDK_DOCUMENTATION.md`: added `log_fhir` method reference under Logs; expanded Patient Token section with when-to-use guidance, token lifetime/refresh notes, and MCP forwarding example.
+- `README.md`: added `log_fhir` to the Logging section.
+
 ## [1.0.1] - 2026-05-21
 
 ### Changed
