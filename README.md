@@ -269,13 +269,13 @@ Runnable scripts under `examples/`:
 | `00_quickstart.py` | `olira.init()`, create a patient, log an event |
 | `01_patient_management.py` | Create, get, list, update, delete patients |
 | `02_event_logging.py` | `log()`, `log_batch()`, traces, flush |
-| `03_historical_ingestion.py` | File upload, polling, confirm/cancel flow |
-| `04_logs_only_workflow.py` | Historical ingestion with log-only records when patients already exist in the org |
-| `05_read_patient_state.py` | Stable data, event modules, views, logs, memories |
-| `06_fhir_ingestion.py` | `log_fhir()` with Condition, MedicationRequest, Appointment; error handling |
+| `03_fhir_ingestion.py` | `log_fhir()` with Condition, MedicationRequest, Appointment; error handling |
+| `04_historical_ingestion.py` | File upload, polling, confirm/cancel flow |
+| `05_logs_only_workflow.py` | Historical ingestion with log-only records when patients already exist in the org |
+| `06_read_patient_state.py` | Stable data, event modules, views, logs, memories |
 | `07_patient_token.py` | Mint token, MCP Bearer forwarding, `PatientSession` refresh helper |
 
-`05_read_patient_state.py` and `07_patient_token.py` require a patient with existing data — run `00_quickstart.py` or `02_event_logging.py` first and use the printed patient id. See [`examples/README.md`](examples/README.md) for setup instructions (`cp .env.example .env`, `uv sync`).
+`06_read_patient_state.py` and `07_patient_token.py` require a patient with existing data — run `00_quickstart.py` or `02_event_logging.py` first and use the printed patient id. See [`examples/README.md`](examples/README.md) for setup instructions (`cp .env.example .env`, `uv sync`).
 
 ---
 

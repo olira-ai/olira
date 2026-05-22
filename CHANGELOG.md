@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `log_fhir(*, patient_id, resource)` on `OliraClient`, `AsyncOliraClient`, and module-level — submits a single FHIR R4 resource for immediate ingestion via `POST /v1/fhir/resource` (`sdk:event-log` scope). Olira maps the resource to one or more platform log types using the same absorber as Epic/Cerner integrations; callers do not choose a `log_type` or build Olira-shaped payloads.
 - `ValidationError` is raised when the server returns `accepted=0` (unsupported resource type, unrecognized fields, or missing `resourceType`) — the exception message explains why.
-- `examples/06_fhir_ingestion.py`: runnable example covering Condition, MedicationRequest, Appointment, and both error paths.
+- `examples/03_fhir_ingestion.py`: runnable example covering Condition, MedicationRequest, Appointment, and both error paths.
 - `examples/07_patient_token.py`: runnable example covering mint, MCP Bearer forwarding pattern, and a `PatientSession` helper with automatic token refresh.
+- Reordered examples: FHIR ingestion moved to `03` (alongside other write paths); historical ingestion `04`–`05`; state read `06`; patient token `07`.
 
 ### Changed
 
