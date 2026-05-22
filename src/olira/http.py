@@ -326,6 +326,11 @@ class HttpTransport:
         raw = self._request("POST", f"/v1/ingestion/jobs/{job_id}/retry-backfill")
         return IngestionJob.model_validate(raw)
 
+    def log_fhir(self, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+        """Submit a single FHIR R4 resource (POST /v1/fhir/resource). Requires sdk:event-log scope."""
+        raw = self._request("POST", "/v1/fhir/resource", json={"patient_id": patient_id, "resource": resource})
+        return BatchResult.model_validate(raw)
+
 
 class AsyncHttpTransport:
     """Async HTTP transport: POST /v1/logs/batch with retry."""
@@ -476,6 +481,11 @@ class AsyncHttpTransport:
     async def retry_view_backfill(self, job_id: str) -> IngestionJob:
         raw = await self._request("POST", f"/v1/ingestion/jobs/{job_id}/retry-backfill")
         return IngestionJob.model_validate(raw)
+
+    async def log_fhir(self, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+        """Submit a single FHIR R4 resource (POST /v1/fhir/resource). Requires sdk:event-log scope."""
+        raw = await self._request("POST", "/v1/fhir/resource", json={"patient_id": patient_id, "resource": resource})
+        return BatchResult.model_validate(raw)
 
     async def _request(
         self,

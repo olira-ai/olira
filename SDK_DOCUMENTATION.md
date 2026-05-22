@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.0.1`
+**Package:** `olira` — **Version:** `1.0.2`
 
 ## Related docs
 
@@ -18,6 +18,19 @@ and minting patient-scoped tokens for use with the
 | **Authentication** ([api-docs](https://olira.ai/api-docs) → Authentication tab) | API keys, patient tokens, **scopes**, auth errors            | Choose scopes when creating keys; mint patient tokens for device-facing calls                                                                                               |
 | **MCP Patient State** ([api-docs](https://olira.ai/api-docs) → MCP tab)         | Tools for querying patient health state from AI agents       | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
 | **CLI** ([api-docs](https://olira.ai/api-docs) → CLI tab)                       | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server                                                                             |
+
+## Scopes
+
+Each API key carries one or more scopes. Assign only what your integration needs.
+
+| Scope                   | What it unlocks                                                    |
+| ----------------------- | ------------------------------------------------------------------ |
+| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                               |
+| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, etc.   |
+| `sdk:patient-token`     | `get_patient_token()`                                              |
+| `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods            |
+| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, etc. methods  |
+| `mcp:patient-state`     | Query patient state via the MCP Patient State server               |
 
 ## Getting Started
 
@@ -32,6 +45,32 @@ Or with `uv`:
 ```bash
 uv add olira
 ```
+
+### Quickstart
+
+The shortest path to a working integration — initialise, create a patient, log an event, flush:
+
+```python
+import olira
+from olira import OliraLogType
+
+olira.init(api_key="YOUR_OLIRA_API_KEY")
+
+# 1. Create a patient — store the returned id in your database
+patient = olira.create_patient(first_name="Ada", last_name="Lovelace", timezone="UTC")
+
+# 2. Log a health event — enqueued for background delivery
+olira.log(
+    log_type=OliraLogType.SYMPTOM_REPORT,
+    patient_id=patient.id,
+    payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
+)
+
+# 3. Flush before process exit to drain the background queue
+olira.flush()
+```
+
+See [`examples/`](examples/) for runnable scripts covering patients, logging, FHIR ingestion, historical backfill, state read, and patient tokens.
 
 ### Initialise the client
 
@@ -50,8 +89,7 @@ os.environ["OLIRA_API_KEY"] = "YOUR_OLIRA_API_KEY"
 olira.init()
 ```
 
-Use `OliraClient` directly when you need multiple keys or prefer
-dependency injection:
+Use `OliraClient` directly when you need multiple keys or prefer dependency injection:
 
 ```python
 from olira import OliraClient
@@ -67,21 +105,34 @@ client = OliraClient(api_key="YOUR_OLIRA_API_KEY")
 init(api_key: str | None = None, *, environment: OliraEnv = OliraEnv.PRODUCTION, service_name: str | None = None, base_url: str = 'https://api.prod.olira.ai', batch_size: int = 50, flush_interval: float = 1.5, max_queue_size: int = 10000, timeout: float = 5.0, max_retries: int = 3, on_error: str = 'drop', async_flush: bool = True) -> None
 ```
 
-Initialize the SDK. API key can be passed or set via OLIRA_API_KEY env var.
+Initialize the SDK. API key can be passed or set via `OLIRA_API_KEY` env var.
 
-| Parameter        | Required | Type            | Default                       |
-| ---------------- | -------- | --------------- | ----------------------------- |
-| `api_key`        | No       | `Optional[str]` | `None`                        |
-| `environment`    | No       | `OliraEnv`      | `OliraEnv.PRODUCTION`         |
-| `service_name`   | No       | `Optional[str]` | `None`                        |
-| `base_url`       | No       | `str`           | `'https://api.prod.olira.ai'` |
-| `batch_size`     | No       | `int`           | `50`                          |
-| `flush_interval` | No       | `float`         | `1.5`                         |
-| `max_queue_size` | No       | `int`           | `10000`                       |
-| `timeout`        | No       | `float`         | `5.0`                         |
-| `max_retries`    | No       | `int`           | `3`                           |
-| `on_error`       | No       | `str`           | `'drop'`                      |
-| `async_flush`    | No       | `bool`          | `True`                        |
+| Parameter        | Required | Type            | Default                       | Description |
+| ---------------- | -------- | --------------- | ----------------------------- | ----------- |
+| `api_key`        | No       | `Optional[str]` | `None`                        | API key; falls back to `OLIRA_API_KEY` env var. |
+| `environment`    | No       | `OliraEnv`      | `OliraEnv.PRODUCTION`         | `DEVELOPMENT` tags events for non-production systems; use `PRODUCTION` for live data. |
+| `service_name`   | No       | `Optional[str]` | `None`                        | Optional label attached to every event's `context` for observability (e.g. `"my-service"`). |
+| `base_url`       | No       | `str`           | `'https://api.prod.olira.ai'` | Override for local dev or staging. |
+| `batch_size`     | No       | `int`           | `50`                          | Max events per `/v1/logs/batch` request sent by the background worker. |
+| `flush_interval` | No       | `float`         | `1.5`                         | Seconds between automatic background flushes. |
+| `max_queue_size` | No       | `int`           | `10000`                       | Max events held in the in-process queue; `on_error` applies when full. |
+| `timeout`        | No       | `float`         | `5.0`                         | Per-request HTTP timeout in seconds. |
+| `max_retries`    | No       | `int`           | `3`                           | Retry attempts for 429 / 5xx responses before raising. |
+| `on_error`       | No       | `str`           | `'drop'`                      | What to do when the queue is full or a batch fails after retries: `'drop'` silently discards, `'raise'` raises an exception, or pass a `Callable[[Exception, list[str]], None]` for custom handling. |
+| `async_flush`    | No       | `bool`          | `True`                        | `True` starts a background worker thread that batches and sends events automatically. Set `False` for scripts or tests where you want synchronous delivery via `log_batch()`. |
+
+#### `flush`
+
+```python
+flush() -> None
+```
+
+Block until all queued events have been delivered (or failed). Call this before process exit in long-running services, or at the end of scripts.
+
+```python
+olira.log(log_type=OliraLogType.USER_LOGIN, patient_id="patient-uuid")
+olira.flush()  # wait for delivery before the process exits
+```
 
 ## Olira CLI
 
@@ -112,8 +163,6 @@ olira configure cursor  # Write MCP server config to .cursor/mcp.json
 ```
 
 ## Models
-
-### Helper models
 
 ### `OliraTrace`
 
@@ -279,7 +328,7 @@ create_patient(
 
 Create a patient. Module-level proxy to the singleton client.
 
-Requires an API key with the api:manage-patients scope. Returns a :class:`Patient`
+Requires an API key with the api:manage-patients scope. Returns a `Patient`
 with an Olira-assigned `id` — use it in all subsequent calls for this patient.
 
 **Anchor rule (validation):** You must provide **at least one** of: a non-empty `external_identifiers` list, `email`, non-empty `phone_number`, `first_name`, `last_name`, or `date_of_birth`. Omitting all of these raises a validation error. This allows **shell** patients (for example, an external EMR id only) until demographics are synced or entered later via `update_patient`.
@@ -462,7 +511,7 @@ create_patients_batch(patients: list[CreatePatientRequest]) -> PatientBatchResul
 Batch-create up to 500 patients. Module-level proxy to the singleton client.
 
 Requires an API key with the api:manage-patients scope. Partial success is supported.
-Returns a :class:`PatientBatchResult` with items (successes) and errors (failures).
+Returns a `PatientBatchResult` with items (successes) and errors (failures).
 
 | Parameter  | Required | Type                         | Default |
 | ---------- | -------- | ---------------------------- | ------- |
@@ -503,7 +552,7 @@ Links a patient to their ID in an external system (e.g. Epic MRN, Flatiron ID, F
 
 Request body for creating a patient (including batch create).
 
-Olira assigns a stable `id` at creation time — it is returned on the :class:`Patient` response. The same **anchor rule** as `create_patient` applies: at least one of `external_identifiers` (non-empty), `email`, `phone_number`, `first_name`, `last_name`, or `date_of_birth` must be set. Optional demographics support **shell** patients.
+Olira assigns a stable `id` at creation time — it is returned on the `Patient` response. The same **anchor rule** as `create_patient` applies: at least one of `external_identifiers` (non-empty), `email`, `phone_number`, `first_name`, `last_name`, or `date_of_birth` must be set. Optional demographics support **shell** patients.
 
 | Field                  | Required | Type                       | Description                                             |
 | ---------------------- | -------- | -------------------------- | ------------------------------------------------------- |
@@ -615,7 +664,9 @@ All log functions require `sdk:event-log` scope.
 
 Use `log()` and `log_batch()` for **ongoing operational traffic**—applications, integrations, and moderate batch sizes where each submission should update patient state through Olira's immediate graph-update path.
 
-For **bulk historical data** (e.g. months or years at once, or onboarding backfills before go-live), use **[Historical Data Ingestion](#historical-data-ingestion)** with `create_ingestion_job()` and the **`sdk:historical-ingest`** scope. That pipeline stages rows, replays them in chronological order, and backfills summary views—not `log_batch` at volume
+Use `log_fhir()` when your source data is already in **FHIR R4 format**. Olira maps the resource to one or more platform log types via the same absorber used by Epic/Cerner integrations, so you don't need to choose a `log_type` or build Olira-shaped payloads yourself.
+
+For **bulk historical data** (e.g. months or years at once, or onboarding backfills before go-live), use **[Historical Data Ingestion](#historical-data-ingestion)** with `create_ingestion_job()` and the **`sdk:historical-ingest`** scope. That pipeline stages rows, replays them in chronological order, and backfills summary views — not `log_batch` at volume.
 
 ### Log a single event
 
@@ -720,6 +771,71 @@ result = olira.log_batch([
 print(f"Accepted: {result.accepted}, Failed: {result.failed}")
 ```
 
+### Log a FHIR resource
+
+#### `log_fhir`
+
+```python
+log_fhir(*, patient_id: str, resource: dict[str, Any]) -> BatchResult
+```
+
+Submit a single FHIR R4 resource for immediate ingestion. Module-level proxy to the singleton client.
+
+Olira maps the resource to one or more platform log types via the FHIR absorber (the same schema mapper used by Epic/Cerner integrations) and processes each resulting event immediately for the patient. You do not choose `log_type` or build Olira-shaped payloads — the absorber handles the mapping.
+
+Requires `sdk:event-log` scope.
+
+| Parameter    | Required | Type              | Default |
+| ------------ | -------- | ----------------- | ------- |
+| `patient_id` | Yes      | `str`             | —       |
+| `resource`   | Yes      | `dict[str, Any]`  | —       |
+
+`resource` must be a valid FHIR R4 JSON object with a `resourceType` field. Supported types include `Condition`, `MedicationRequest`, `MedicationStatement`, `MedicationAdministration`, `AllergyIntolerance`, `Appointment`, `Encounter`, `Procedure`, `Immunization`, `DiagnosticReport`, `DocumentReference`, `CarePlan`, `CareTeam`, `FamilyMemberHistory`, `Goal`, `Observation` (vital-signs), and `Patient`.
+
+**Raises `ValidationError`** if:
+- `resourceType` is missing (HTTP 422 from the API)
+- The resource maps to zero Olira events — unsupported type, unrecognized fields, or (for `Observation`) unrecognized category/LOINC code. The exception message explains why.
+
+**Example — ingest a Condition:**
+
+```python
+import olira
+
+olira.init(api_key="YOUR_API_KEY")
+
+result = olira.log_fhir(
+    patient_id="patient-uuid",
+    resource={
+        "resourceType": "Condition",
+        "id": "condition-1",
+        "clinicalStatus": {
+            "coding": [{"system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active"}],
+        },
+        "code": {
+            "coding": [{"system": "http://snomed.info/sct", "code": "254837009", "display": "Breast cancer"}],
+            "text": "Breast cancer",
+        },
+        "subject": {"reference": "Patient/example"},
+        "onsetDateTime": "2025-01-10T00:00:00Z",
+    },
+)
+print(f"Accepted: {result.accepted}")
+```
+
+**Example — error handling:**
+
+```python
+from olira import ValidationError
+
+try:
+    result = olira.log_fhir(
+        patient_id="patient-uuid",
+        resource={"resourceType": "SupplyDelivery", "status": "completed"},
+    )
+except ValidationError as e:
+    print(f"Resource not supported: {e}")
+```
+
 ### Log response models
 
 ### `LogSpec`
@@ -757,6 +873,19 @@ Per-event error from a batch response.
 
 ## Patient Token
 
+Patient tokens are short-lived JWTs scoped to a single patient. They are the bridge between your server-side API key and patient-facing or agent-facing calls to the [Olira MCP Patient State server](https://olira.ai/api-docs).
+
+**When to use:**
+- An AI agent needs to query a specific patient's state via the MCP server — mint a token and pass it as the Bearer header for that session
+- A patient-facing device or frontend needs to read its own state — your backend mints the token on demand and forwards it; the client never sees your API key
+
+**When not to use:**
+- Server-to-server calls from your own backend — use your API key directly with `sdk:state-read` scope instead
+
+Tokens expire after **15 minutes** (`expires_in: 900`). They are locked to the patient supplied at mint time — a token for patient A cannot query patient B. Mint a fresh token for each MCP session or device request; there is no refresh mechanism.
+
+Requires `sdk:patient-token` scope.
+
 ### Mint a patient-scoped JWT
 
 #### `get_patient_token`
@@ -765,24 +894,64 @@ Per-event error from a batch response.
 get_patient_token(*, patient_id: str) -> PatientToken
 ```
 
-Mint a short-lived patient-scoped JWT. Module-level proxy to the singleton client.
-
-Requires an API key with the sdk:patient-token scope.
-The returned JWT can be used as a Bearer token with the Olira MCP Patient State server.
-
 | Parameter    | Required | Type  | Default |
 | ------------ | -------- | ----- | ------- |
 | `patient_id` | Yes      | `str` | —       |
 
-Requires `sdk:patient-token` scope. The token is locked to the patient
-and can be used as a Bearer token with the Olira MCP Patient State server.
-
-**Example:**
+**Basic example:**
 
 ```python
+import olira
+
+olira.init(api_key="YOUR_API_KEY")
 token = olira.get_patient_token(patient_id="patient-uuid")
-# Pass token.access_token to your frontend / AI agent
-print(f"Token expires in {token.expires_in}s")
+
+print(token.access_token)  # forward to the agent or device
+print(f"Expires in {token.expires_in}s")  # 900
+print(token.scopes)        # e.g. ["sdk:state-read", "sdk:event-log"]
+```
+
+**Forwarding to an MCP client (httpx example):**
+
+```python
+import httpx, olira
+
+olira.init(api_key="YOUR_API_KEY")
+
+def get_fresh_token(patient_id: str) -> str:
+    tok = olira.get_patient_token(patient_id=patient_id)
+    return tok.access_token
+
+# Mint per session — tokens expire in 15 minutes
+bearer = get_fresh_token("patient-uuid")
+
+resp = httpx.post(
+    "https://mcp.prod.olira.ai/mcp",
+    headers={"Authorization": f"Bearer {bearer}"},
+    json={"method": "get_view", "params": {"view_type": "weekly_health_summary"}},
+)
+```
+
+**Handling expiry:**
+
+```python
+import time, olira
+from olira import AuthError
+
+olira.init(api_key="YOUR_API_KEY")
+
+class PatientSession:
+    def __init__(self, patient_id: str) -> None:
+        self.patient_id = patient_id
+        self._token = None
+        self._expires_at = 0.0
+
+    def bearer(self) -> str:
+        if time.time() >= self._expires_at - 30:  # 30s buffer
+            tok = olira.get_patient_token(patient_id=self.patient_id)
+            self._token = tok.access_token
+            self._expires_at = time.time() + tok.expires_in
+        return self._token
 ```
 
 ## Patient State — Read
@@ -1424,6 +1593,32 @@ for m in memories.results:
 | `count`      | `int`               | Number of results |
 | `results`    | `list[MemoryEntry]` | Memory records    |
 
+## Async Client
+
+All methods are available on `AsyncOliraClient` as coroutines. Use it as an async context manager:
+
+```python
+import asyncio
+from olira import AsyncOliraClient, OliraLogType
+
+async def main():
+    async with AsyncOliraClient(api_key="YOUR_API_KEY") as client:
+        patient = await client.create_patient(first_name="Ada", last_name="Lovelace")
+
+        await client.log(
+            log_type=OliraLogType.SYMPTOM_REPORT,
+            patient_id=patient.id,
+            payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
+        )
+        await client.flush()
+
+asyncio.run(main())
+```
+
+`AsyncOliraClient` accepts the same constructor parameters as `OliraClient`. The context manager (`async with`) handles transport lifecycle — call `await client.aclose()` explicitly if you manage the client outside a `with` block.
+
+Every method on `OliraClient` has a direct async equivalent: `await client.create_patient(...)`, `await client.log_fhir(...)`, `await client.get_view(...)`, and so on.
+
 ## Error Handling
 
 All SDK errors inherit from `OliraError`.
@@ -1473,6 +1668,22 @@ olira.log(
     },
 )
 ```
+
+The `EsasItem` model is a typed helper for individual symptom entries — use it instead of plain dicts when you want validation:
+
+```python
+from olira import EsasItem
+
+payload = {
+    "instrument": "esas_r",
+    "symptoms": [
+        EsasItem(name="pain", score=4).model_dump(),
+        EsasItem(name="tiredness", score=6).model_dump(),
+    ],
+}
+```
+
+`EsasItem` validates that `score` is in range and `name` matches the catalog. Both forms produce identical wire JSON.
 
 ### `lab_results_received`
 
