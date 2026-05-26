@@ -104,9 +104,6 @@ class OliraTrace(BaseModel):
     to look it up in your own database.  It is stored and returned as-is and is never
     interpreted or validated by Olira.
 
-    Both fields are required when sending a trace via ``log()`` or ``log_batch()``.
-    Historical logs (e.g. from ingestion) may return ``null`` for either field; the SDK
-    preserves those values so ``get_logs()`` does not fail validation.
     """
 
     object_type: str | None = Field(
