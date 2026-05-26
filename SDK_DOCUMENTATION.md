@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.0.3`
+**Package:** `olira` — **Version:** `1.0.4`
 
 ## Related docs
 
@@ -844,14 +844,14 @@ except ValidationError as e:
 
 Lightweight event specification for log_batch(). Not persisted internally.
 
-| Field             | Required | Type                       | Description         |
-| ----------------- | -------- | -------------------------- | ------------------- |
-| `log_type`        | Yes      | `OliraLogType`             | —                   |
-| `patient_id`      | Yes      | `str`                      | —                   |
-| `payload`         | No       | `Optional[dict[str, Any]]` | — (default: `None`) |
-| `trace`           | No       | `Optional[OliraTrace]`     | — (default: `None`) |
-| `timestamp`       | No       | `Optional[str]`            | — (default: `None`) |
-| `idempotency_key` | No       | `Optional[str]`            | — (default: `None`) |
+| Field             | Required | Type                       | Description                                                                                                                               |
+| ----------------- | -------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `log_type`        | Yes      | `OliraLogType`             | —                                                                                                                                         |
+| `patient_id`      | Yes      | `str`                      | —                                                                                                                                         |
+| `payload`         | No       | `Optional[dict[str, Any]]` | — (default: `None`)                                                                                                                       |
+| `trace`           | No       | `Optional[OliraTrace]`     | — (default: `None`)                                                                                                                       |
+| `timestamp`       | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
+| `idempotency_key` | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
 | `metadata`        | No       | `Optional[dict[str, Any]]` | Arbitrary key/value context stored separately from the typed payload. Surfaced in the Olira Console event detail panel. (default: `None`) |
 
 ### `BatchResult`
