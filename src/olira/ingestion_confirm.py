@@ -7,14 +7,13 @@ from collections.abc import Awaitable, Callable
 from .exceptions import ServerError
 from .models import IngestionJob, IngestionJobStatus
 
-# Job has left AWAITING_CONFIRMATION after a successful confirm (or is finishing).
-_POST_CONFIRM_STATUSES = frozenset(
+# Phase 1 only
+_PHASE1_BEFORE_REVIEW_STATUSES = frozenset(
     {
-        IngestionJobStatus.CONFIRMED.value,
-        IngestionJobStatus.REPLAYING.value,
-        IngestionJobStatus.BACKFILLING.value,
-        IngestionJobStatus.COMPLETED.value,
-        IngestionJobStatus.COMPLETED_WITH_ERRORS.value,
+        IngestionJobStatus.QUEUED.value,
+        IngestionJobStatus.VALIDATING.value,
+        IngestionJobStatus.INSERTING_PATIENTS.value,
+        IngestionJobStatus.INSERTING_LOGS.value,
     }
 )
 
@@ -23,9 +22,25 @@ def _status_value(status: IngestionJobStatus | str) -> str:
     return status.value if isinstance(status, IngestionJobStatus) else status
 
 
+def is_409_past_review_gate(status: IngestionJobStatus | str) -> bool:
+    """True when a PATCH/confirm HTTP 409 means the job already left the review gate.
+
+    The API returns 409 whenever status is not ``AWAITING_CONFIRMATION``. That includes
+    successful confirm retries (``replaying``, ``completed``, …) and terminal outcomes
+    after review (``cancelled``, ``failed``). Phase-1 statuses mean the call was too early,
+    not a retried confirm — those 409s should be re-raised.
+    """
+    s = _status_value(status)
+    if s in _PHASE1_BEFORE_REVIEW_STATUSES:
+        return False
+    if s == IngestionJobStatus.AWAITING_CONFIRMATION.value:
+        return False
+    return True
+
+
 def is_post_confirmation_status(status: IngestionJobStatus | str) -> bool:
-    """True when the job has already been confirmed and Phase 2 has started or finished."""
-    return _status_value(status) in _POST_CONFIRM_STATUSES
+    """Backward-compatible alias; prefer :func:`is_409_past_review_gate`."""
+    return is_409_past_review_gate(status)
 
 
 def ensure_skip_backfill_before_confirm(
@@ -40,7 +55,7 @@ def ensure_skip_backfill_before_confirm(
         if exc.status_code != 409:
             raise
         job = get_job()
-        if not is_post_confirmation_status(job.status):
+        if not is_409_past_review_gate(job.status):
             raise
 
 
@@ -55,7 +70,7 @@ async def ensure_skip_backfill_before_confirm_async(
         if exc.status_code != 409:
             raise
         job = await get_job()
-        if not is_post_confirmation_status(job.status):
+        if not is_409_past_review_gate(job.status):
             raise
 
 
@@ -78,7 +93,7 @@ def confirm_ingestion_job_resilient(
         if exc.status_code != 409:
             raise
         job = get_job()
-        if is_post_confirmation_status(job.status):
+        if is_409_past_review_gate(job.status):
             return job
         raise
 
@@ -101,6 +116,6 @@ async def confirm_ingestion_job_resilient_async(
         if exc.status_code != 409:
             raise
         job = await get_job()
-        if is_post_confirmation_status(job.status):
+        if is_409_past_review_gate(job.status):
             return job
         raise

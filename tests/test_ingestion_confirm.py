@@ -7,7 +7,7 @@ from olira.exceptions import ServerError
 from olira.ingestion_confirm import (
     confirm_ingestion_job_resilient,
     ensure_skip_backfill_before_confirm,
-    is_post_confirmation_status,
+    is_409_past_review_gate,
 )
 from olira.models import IngestionJob, IngestionJobStatus
 
@@ -21,10 +21,14 @@ def _job(status: str, *, skip_backfill: bool = False) -> IngestionJob:
     )
 
 
-def test_is_post_confirmation_status():
-    assert is_post_confirmation_status("replaying")
-    assert not is_post_confirmation_status("awaiting_confirmation")
-    assert not is_post_confirmation_status("failed")
+def test_is_409_past_review_gate():
+    assert is_409_past_review_gate("replaying")
+    assert is_409_past_review_gate("cancelled")
+    assert is_409_past_review_gate("failed")
+    assert is_409_past_review_gate("completed_with_errors")
+    assert not is_409_past_review_gate("awaiting_confirmation")
+    assert not is_409_past_review_gate("validating")
+    assert not is_409_past_review_gate("inserting_logs")
 
 
 def test_ensure_skip_backfill_tolerates_patch_409_when_already_replaying():
@@ -42,12 +46,23 @@ def test_ensure_skip_backfill_tolerates_patch_409_when_already_replaying():
     assert calls == {"patch": 1, "get": 1}
 
 
-def test_ensure_skip_backfill_reraises_patch_409_when_not_advanced():
+@pytest.mark.parametrize("status", ["cancelled", "failed", "completed"])
+def test_ensure_skip_backfill_tolerates_patch_409_for_terminal_after_review(status: str):
     def patch() -> IngestionJob:
         raise ServerError("conflict", status_code=409)
 
     def get_job() -> IngestionJob:
-        return _job("failed")
+        return _job(status)
+
+    ensure_skip_backfill_before_confirm(patch_skip_backfill=patch, get_job=get_job)
+
+
+def test_ensure_skip_backfill_reraises_patch_409_when_still_in_phase1():
+    def patch() -> IngestionJob:
+        raise ServerError("conflict", status_code=409)
+
+    def get_job() -> IngestionJob:
+        return _job("validating")
 
     with pytest.raises(ServerError):
         ensure_skip_backfill_before_confirm(patch_skip_backfill=patch, get_job=get_job)
@@ -79,6 +94,22 @@ def test_confirm_resilient_retry_after_confirm_succeeded():
     assert calls["patch"] == 1
     assert calls["confirm"] == 1
     assert calls["get"] == 2
+
+
+def test_confirm_resilient_returns_job_when_confirm_409_and_cancelled():
+    def confirm() -> IngestionJob:
+        raise ServerError("confirm conflict", status_code=409)
+
+    def get_job() -> IngestionJob:
+        return _job("cancelled")
+
+    result = confirm_ingestion_job_resilient(
+        skip_backfill=False,
+        patch_skip_backfill=lambda: _job("cancelled"),
+        get_job=get_job,
+        confirm=confirm,
+    )
+    assert result.status == IngestionJobStatus.CANCELLED
 
 
 def test_confirm_ingestion_job_client_integration():
