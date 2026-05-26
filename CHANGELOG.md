@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `tests/test_models.py`: regression tests for `OliraTrace` / `LogsResult` deserialization with null trace fields and outbound `_LogWire` trace validation.
+- `tests/test_validation.py`: ingestion trace wiring and local validation for JSONL / inline records.
 - `DEFAULT_BASE_URL` exported from the package — single source of truth for the production API base URL.
+- Optional `trace: OliraTrace | None` on `IngestLogSpec` for historical ingestion — same provenance shape as live `log()`; enables `get_logs(trace_type=...)` filtering on backfilled events when both fields are set.
 
 ### Fixed
 

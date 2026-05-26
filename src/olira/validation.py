@@ -13,6 +13,7 @@ What is checked locally:
   - ``timestamp`` is parseable ISO 8601
   - ``patient_id`` in each log resolves to a patient defined anywhere in the file (order-agnostic)
     (within-file check only; existing org patients are not checked)
+  - Optional ``trace``: when present, ``object_type`` and ``object_id`` must be non-empty strings
 
 What requires a network call and is NOT checked locally:
   - Whether ``patient_id`` refers to an existing org patient not in this file
@@ -55,6 +56,40 @@ def _parse_iso(value: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _validate_log_trace(data: dict[str, Any], line: int) -> list[IngestionRowError]:
+    """Validate optional trace on a log record's data dict."""
+    if "trace" not in data or data["trace"] is None:
+        return []
+    trace = data["trace"]
+    if not isinstance(trace, dict):
+        return [
+            IngestionRowError(
+                line=line,
+                code="invalid_trace",
+                message="trace must be an object with object_type and object_id",
+            )
+        ]
+    object_type = trace.get("object_type")
+    object_id = trace.get("object_id")
+    if not object_type or not isinstance(object_type, str) or not object_type.strip():
+        return [
+            IngestionRowError(
+                line=line,
+                code="invalid_trace",
+                message="trace requires both object_type and object_id as non-empty strings",
+            )
+        ]
+    if not object_id or not isinstance(object_id, str) or not object_id.strip():
+        return [
+            IngestionRowError(
+                line=line,
+                code="invalid_trace",
+                message="trace requires both object_type and object_id as non-empty strings",
+            )
+        ]
+    return []
 
 
 _DEFAULT_MAX_FILE_BYTES = 100 * 1024 * 1024  # 100 MB
@@ -218,6 +253,8 @@ def validate_ingestion_file(
                 )
             )
 
+        errors.extend(_validate_log_trace(data, line_num))
+
     return errors
 
 
@@ -319,6 +356,8 @@ def validate_ingestion_records(records: list[IngestRecord]) -> list[IngestionRow
                         message=f"timestamp {data['timestamp']!r} is not a valid ISO 8601 datetime",
                     )
                 )
+
+            errors.extend(_validate_log_trace(data, i))
 
     return errors
 

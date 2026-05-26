@@ -9,7 +9,7 @@ Two paths to bulk-load existing patient data before going live:
 
   Path B — Inline records (for smaller datasets built programmatically)
     Pass a list of IngestRecord objects directly — no file on disk needed.
-    Capped at 50,000 records per job.
+    Capped at 50,000 records per job. Optional OliraTrace on individual logs.
 
 Both paths go through the same five-stage pipeline:
   QUEUED → VALIDATING → INSERTING_PATIENTS → INSERTING_LOGS → AWAITING_CONFIRMATION
@@ -36,6 +36,7 @@ from olira import (  # noqa: E402
     IngestRecord,
     OliraClient,
     OliraEnv,
+    OliraTrace,
 )
 
 API_KEY = os.environ["OLIRA_API_KEY"]
@@ -88,6 +89,7 @@ if not JSONL_FILE.exists():
                 "timestamp": "2025-06-01T09:00:00Z",
                 "payload": {"moods": [{"mood": "hopeful", "intensity": 6}], "source": "checkin"},
                 "idempotency_key": "file-001-mood-01",
+                "trace": {"object_type": "emr_record", "object_id": "epic-encounter-98765"},
             },
         },
     ]
@@ -146,6 +148,7 @@ records = [
                 "symptoms": [{"name": "fatigue", "score": 5}, {"name": "pain", "score": 3}],
             },
             idempotency_key="inline-002-symptom-01",
+            trace=OliraTrace(object_type="emr_record", object_id="epic-encounter-98765"),
         )
     ),
     IngestRecord.log(

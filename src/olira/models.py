@@ -604,6 +604,8 @@ class IngestLogSpec:
     ``patient_id`` may be an Olira patient UUID or an ``external_identifier`` value present
     in the same file or already in the org.
     ``idempotency_key`` prevents duplicate insertion if the same file is re-submitted.
+    ``trace`` is optional provenance (same shape as live ``log()``); when set, both
+    ``object_type`` and ``object_id`` must be non-empty strings.
     """
 
     event_type: str
@@ -611,6 +613,7 @@ class IngestLogSpec:
     timestamp: str
     payload: dict[str, Any] | None = None
     idempotency_key: str | None = None
+    trace: OliraTrace | None = None
 
 
 class IngestRecord(BaseModel):
@@ -642,4 +645,11 @@ class IngestRecord(BaseModel):
             data["payload"] = spec.payload
         if spec.idempotency_key:
             data["idempotency_key"] = spec.idempotency_key
+        if spec.trace is not None:
+            if not spec.trace.object_type or not spec.trace.object_id:
+                raise ValidationError("trace requires both object_type and object_id")
+            data["trace"] = {
+                "object_type": spec.trace.object_type,
+                "object_id": spec.trace.object_id,
+            }
         return cls(type="log", data=data)
