@@ -60,14 +60,24 @@ try:
 
     # ── Forwarding to an MCP client ───────────────────────────────────────────────
     #
-    # Pass token.access_token as a Bearer header to the MCP Patient State server:
+    # Pass token.access_token as a Bearer header to the MCP Patient State server.
+    # Use standard JSON-RPC 2.0 — tools are called via method="tools/call":
     #
     #   import httpx
     #   resp = httpx.post(
     #       "https://mcp.prod.olira.ai/mcp",
     #       headers={"Authorization": f"Bearer {token.access_token}"},
-    #       json={"method": "get_view", "params": {"view_type": "weekly_health_summary"}},
+    #       json={
+    #           "jsonrpc": "2.0",
+    #           "id": 1,
+    #           "method": "tools/call",
+    #           "params": {
+    #               "name": "get_view_block",
+    #               "arguments": {"view_type": "weekly_health_summary", "block_id": "symptoms_overview"},
+    #           },
+    #       },
     #   )
+    #   # patient_id is not required in arguments — it is locked to the token's patient.
 
     # ── Session helper with automatic refresh ────────────────────────────────────
     #
