@@ -76,7 +76,7 @@ print(f"  Available: {[(v.view_type, 'has_blocks=' + str(v.has_blocks)) for v in
 
 # Fetch the first view that has content
 for view_meta in views:
-    if view_meta.has_blocks or view_meta.has_temp:
+    if view_meta.has_blocks or getattr(view_meta, "has_temp", False):
         view = client.get_view(patient_id=PATIENT_ID, view_type=view_meta.view_type)
         print(f"\n  {view_meta.view_type}:")
         blocks = view.content.get("blocks", [])
