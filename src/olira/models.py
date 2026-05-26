@@ -562,6 +562,13 @@ class IngestionJob(BaseModel):
     patient_event_type_counts: dict[str, dict[str, int]] = Field(default_factory=dict)
     patient_replay_statuses: dict[str, str] = Field(default_factory=dict)
     error_summary: list[IngestionRowError] = Field(default_factory=list)
+    missing_template_slots: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description=(
+            "patient_id → list of summary_type keys missing a view slot. "
+            "Present at AWAITING_CONFIRMATION when affected patients exist."
+        ),
+    )
     estimated_seconds_remaining: int | None = None
     view_backfill_job_id: str | None = None
     backfill_status: str | None = None

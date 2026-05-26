@@ -58,7 +58,6 @@ try:
     print(f"  token_type:   {token.token_type}")
     print(f"  scopes:       {token.scopes}")
 
-
     # ── Forwarding to an MCP client ───────────────────────────────────────────────
     #
     # Pass token.access_token as a Bearer header to the MCP Patient State server:
@@ -69,7 +68,6 @@ try:
     #       headers={"Authorization": f"Bearer {token.access_token}"},
     #       json={"method": "get_view", "params": {"view_type": "weekly_health_summary"}},
     #   )
-
 
     # ── Session helper with automatic refresh ────────────────────────────────────
     #
@@ -96,7 +94,6 @@ try:
     session = PatientSession(client, PATIENT_ID)
     print(f"\nBearer (first call):  {session.bearer()[:40]}…")
     print(f"Bearer (cached call): {session.bearer()[:40]}…")  # no network call
-
 
     # ── Error handling ────────────────────────────────────────────────────────────
 

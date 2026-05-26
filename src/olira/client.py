@@ -516,12 +516,27 @@ class OliraClient:
             params["idempotency_key"] = idempotency_key
         return self._transport.list_ingestion_jobs(params)
 
-    def confirm_ingestion_job(self, *, job_id: str) -> IngestionJob:
+    def confirm_ingestion_job(
+        self,
+        *,
+        job_id: str,
+        initialize_missing_templates: bool = False,
+        skip_backfill: bool = False,
+    ) -> IngestionJob:
         """Confirm a job in AWAITING_CONFIRMATION to start Phase 2 (replay + backfill).
+
+        Pass ``initialize_missing_templates=True`` to auto-initialize missing view
+        slots on affected patients before backfill (recommended when
+        ``job.missing_template_slots`` is non-empty).
+
+        Pass ``skip_backfill=True`` to skip view generation entirely and complete
+        the job after replay only.
 
         Requires sdk:historical-ingest scope.
         """
-        return self._transport.confirm_ingestion_job(job_id)
+        if skip_backfill:
+            self.patch_ingestion_job(job_id=job_id, skip_backfill=True)
+        return self._transport.confirm_ingestion_job(job_id, initialize_missing_templates=initialize_missing_templates)
 
     def cancel_ingestion_job(self, *, job_id: str) -> IngestionJob:
         """Cancel an ingestion job. Requires sdk:historical-ingest scope.
@@ -543,15 +558,19 @@ class OliraClient:
         *,
         job_id: str,
         summary_types: list[str] | None = None,
+        skip_backfill: bool | None = None,
     ) -> IngestionJob:
         """Update mutable fields while the job is AWAITING_CONFIRMATION.
 
         Requires sdk:historical-ingest scope. Currently supports updating ``summary_types``
-        to control which views are backfilled in Phase 2.
+        to control which views are backfilled in Phase 2, and ``skip_backfill`` to skip
+        view generation in Phase 2.
         """
         body: dict[str, Any] = {}
         if summary_types is not None:
             body["summary_types"] = summary_types
+        if skip_backfill is not None:
+            body["skip_backfill"] = skip_backfill
         return self._transport.patch_ingestion_job(job_id, body)
 
     def retry_view_backfill(self, *, job_id: str) -> IngestionJob:
@@ -1089,10 +1108,18 @@ class AsyncOliraClient:
             params["idempotency_key"] = idempotency_key
         return await transport.list_ingestion_jobs(params)
 
-    async def confirm_ingestion_job(self, *, job_id: str) -> IngestionJob:
+    async def confirm_ingestion_job(
+        self,
+        *,
+        job_id: str,
+        initialize_missing_templates: bool = False,
+        skip_backfill: bool = False,
+    ) -> IngestionJob:
         """Async version of confirm_ingestion_job. Requires sdk:historical-ingest scope."""
         transport = self._require_transport("confirm_ingestion_job")
-        return await transport.confirm_ingestion_job(job_id)
+        if skip_backfill:
+            await self.patch_ingestion_job(job_id=job_id, skip_backfill=True)
+        return await transport.confirm_ingestion_job(job_id, initialize_missing_templates=initialize_missing_templates)
 
     async def cancel_ingestion_job(self, *, job_id: str) -> IngestionJob:
         """Async version of cancel_ingestion_job. Requires sdk:historical-ingest scope."""
@@ -1109,12 +1136,15 @@ class AsyncOliraClient:
         *,
         job_id: str,
         summary_types: list[str] | None = None,
+        skip_backfill: bool | None = None,
     ) -> IngestionJob:
         """Async version of patch_ingestion_job. Requires sdk:historical-ingest scope."""
         transport = self._require_transport("patch_ingestion_job")
         body: dict[str, Any] = {}
         if summary_types is not None:
             body["summary_types"] = summary_types
+        if skip_backfill is not None:
+            body["skip_backfill"] = skip_backfill
         return await transport.patch_ingestion_job(job_id, body)
 
     async def retry_view_backfill(self, *, job_id: str) -> IngestionJob:

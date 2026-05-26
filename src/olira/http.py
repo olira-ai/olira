@@ -302,9 +302,12 @@ class HttpTransport:
         raw = self._request("GET", "/v1/ingestion/jobs", params=params)
         return IngestionJobListResult.model_validate(raw)
 
-    def confirm_ingestion_job(self, job_id: str) -> IngestionJob:
+    def confirm_ingestion_job(self, job_id: str, *, initialize_missing_templates: bool = False) -> IngestionJob:
         """Confirm a job in AWAITING_CONFIRMATION to trigger Phase 2 (POST /v1/ingestion/jobs/{job_id}/confirm)."""
-        raw = self._request("POST", f"/v1/ingestion/jobs/{job_id}/confirm")
+        body: dict[str, Any] = {}
+        if initialize_missing_templates:
+            body["initialize_missing_templates"] = True
+        raw = self._request("POST", f"/v1/ingestion/jobs/{job_id}/confirm", json=body or None)
         return IngestionJob.model_validate(raw)
 
     def cancel_ingestion_job(self, job_id: str) -> IngestionJob:
@@ -463,8 +466,11 @@ class AsyncHttpTransport:
         raw = await self._request("GET", "/v1/ingestion/jobs", params=params)
         return IngestionJobListResult.model_validate(raw)
 
-    async def confirm_ingestion_job(self, job_id: str) -> IngestionJob:
-        raw = await self._request("POST", f"/v1/ingestion/jobs/{job_id}/confirm")
+    async def confirm_ingestion_job(self, job_id: str, *, initialize_missing_templates: bool = False) -> IngestionJob:
+        body: dict[str, Any] = {}
+        if initialize_missing_templates:
+            body["initialize_missing_templates"] = True
+        raw = await self._request("POST", f"/v1/ingestion/jobs/{job_id}/confirm", json=body or None)
         return IngestionJob.model_validate(raw)
 
     async def cancel_ingestion_job(self, job_id: str) -> IngestionJob:

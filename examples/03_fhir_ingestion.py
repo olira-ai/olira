@@ -10,7 +10,7 @@ Also covers:
   - Error handling for missing resourceType
 
 Requires: sdk:event-log scope (FHIR ingest) + api:manage-patients scope (patient setup)
-Run: python 06_fhir_ingestion.py
+Run: python 03_fhir_ingestion.py
 """
 
 import os

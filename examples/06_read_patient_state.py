@@ -15,7 +15,7 @@ These are a REST mirror of the MCP Patient State tools — useful for backends a
 pipelines that don't go through the MCP server.
 
 Requires: sdk:state-read scope
-Run: python 05_read_patient_state.py
+Run: python 06_read_patient_state.py
 
 Note: this script expects a patient with existing data. Set PATIENT_ID in .env
 or supply it as the first CLI argument.
@@ -36,7 +36,7 @@ BASE_URL = os.environ.get("OLIRA_BASE_URL", "https://api.prod.olira.ai")
 PATIENT_ID = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("PATIENT_ID", "")
 
 if not PATIENT_ID:
-    print("Usage: python 05_read_patient_state.py <patient_id>")
+    print("Usage: python 06_read_patient_state.py <patient_id>")
     print("  Or set PATIENT_ID in your .env file.")
     raise SystemExit(1)
 
