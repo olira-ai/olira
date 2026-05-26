@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.0.4`
+**Package:** `olira` — **Version:** `1.0.5`
 
 ## Related docs
 
@@ -182,8 +182,10 @@ interpreted or validated by Olira.
 
 | Field         | Required | Type  | Description                                                                          |
 | ------------- | -------- | ----- | ------------------------------------------------------------------------------------ |
-| `object_type` | Yes      | `str` | Category of the linked object, e.g. `'conversation'`, `'message'`, `'questionnaire'` |
-| `object_id`   | Yes      | `str` | Your identifier for the linked object                                                |
+| `object_type` | Yes\*    | `str` | Category of the linked object, e.g. `'conversation'`, `'message'`, `'questionnaire'` |
+| `object_id`   | Yes\*    | `str` | Your identifier for the linked object                                                |
+
+\*Required when sending a trace via `log()` or `log_batch()`. Either field may be `null` on logs returned by `get_logs()` (e.g. historically ingested events).
 
 **Example:**
 

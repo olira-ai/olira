@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-05-26
+
+### Added
+
+- `tests/test_models.py`: regression tests for `OliraTrace` / `LogsResult` deserialization with null trace fields and outbound `_LogWire` trace validation.
+
+### Fixed
+
+- `get_logs()` no longer raises a Pydantic validation error when a log's `trace` has `object_type` or `object_id` set to `null` (common for historically ingested events).
+
 ## [1.0.4] - 2026-05-26
 
 ### Added
