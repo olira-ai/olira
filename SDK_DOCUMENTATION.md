@@ -673,7 +673,7 @@ For **bulk historical data** (e.g. months or years at once, or onboarding backfi
 #### `log`
 
 ```python
-log(*, log_type: OliraLogType, patient_id: str, payload: dict[str, Any] | None = None, trace: OliraTrace | None = None, timestamp: str | None = None) -> None
+log(*, log_type: OliraLogType, patient_id: str, payload: dict[str, Any] | None = None, trace: OliraTrace | None = None, timestamp: str | None = None, metadata: dict[str, Any] | None = None) -> None
 ```
 
 Enqueue an event for background delivery. Module-level proxy to the singleton client.
@@ -685,6 +685,7 @@ Enqueue an event for background delivery. Module-level proxy to the singleton cl
 | `payload`    | No       | `Optional[dict[str, Any]]` | `None`  |
 | `trace`      | No       | `Optional[OliraTrace]`     | `None`  |
 | `timestamp`  | No       | `Optional[str]`            | `None`  |
+| `metadata`   | No       | `Optional[dict[str, Any]]` | `None`  |
 
 Events are enqueued and flushed in the background. Call `olira.flush()` before
 process exit to ensure delivery.
@@ -851,6 +852,7 @@ Lightweight event specification for log_batch(). Not persisted internally.
 | `trace`           | No       | `Optional[OliraTrace]`     | — (default: `None`) |
 | `timestamp`       | No       | `Optional[str]`            | — (default: `None`) |
 | `idempotency_key` | No       | `Optional[str]`            | — (default: `None`) |
+| `metadata`        | No       | `Optional[dict[str, Any]]` | Arbitrary key/value context stored separately from the typed payload. Surfaced in the Olira Console event detail panel. (default: `None`) |
 
 ### `BatchResult`
 

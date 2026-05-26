@@ -179,6 +179,7 @@ class LogSpec:
     trace: OliraTrace | None = None
     timestamp: str | None = None
     idempotency_key: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class BatchError(BaseModel):
@@ -206,6 +207,7 @@ class _LogWire(BaseModel):
     log_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     idempotency_key: str = Field(default_factory=lambda: str(uuid.uuid4()))
     payload: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] | None = None
     context: dict[str, str] = Field(default_factory=dict)
     trace: OliraTrace | None = None
 

@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.3] - 2026-05-26
+## [1.0.4] - 2026-05-26
 
 ### Added
 
@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Example `Run:` (and `Usage:`) headers in `03_fhir_ingestion.py`–`06_read_patient_state.py` still referenced pre-reorder filenames after examples were renumbered in 1.0.2.
+
+## [1.0.3] - 2026-05-22
+
+### Added
+
+- `metadata: dict[str, Any] | None` parameter on `log()`, `LogSpec`, and `_LogWire` — callers can now attach arbitrary key/value context to any event. The metadata is stored server-side as a top-level field, separate from the typed `payload`, and is surfaced in the Olira Console event detail panel.
 
 ## [1.0.2] - 2026-05-22
 

@@ -179,6 +179,7 @@ def log(
     payload: dict[str, Any] | None = None,
     trace: OliraTrace | None = None,
     timestamp: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """Enqueue a log for background delivery. Module-level proxy to the singleton client."""
     _get_client().log(
@@ -187,6 +188,7 @@ def log(
         payload=payload,
         trace=trace,
         timestamp=timestamp,
+        metadata=metadata,
     )
 
 
