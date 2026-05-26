@@ -127,11 +127,13 @@ class OliraClient:
         payload: dict[str, Any],
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         event = _LogWire(
             log_type=log_type.value,
             patient_id=patient_id,
             payload=payload,
+            metadata=metadata,
             context=self._context,
             trace=trace,
             timestamp=timestamp,
@@ -146,9 +148,10 @@ class OliraClient:
         payload: dict[str, Any] | None = None,
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Enqueue a log for background delivery. Returns immediately."""
-        self._emit(log_type, patient_id, payload or {}, trace=trace, timestamp=timestamp)
+        self._emit(log_type, patient_id, payload or {}, trace=trace, timestamp=timestamp, metadata=metadata)
 
     def log_fhir(self, *, patient_id: str, resource: dict[str, Any]) -> BatchResult:
         """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
@@ -181,6 +184,7 @@ class OliraClient:
                 log_type=spec.log_type.value,
                 patient_id=spec.patient_id,
                 payload=spec.payload or {},
+                metadata=spec.metadata,
                 context=self._context,
                 trace=spec.trace,
                 timestamp=spec.timestamp,
@@ -662,11 +666,13 @@ class AsyncOliraClient:
         payload: dict[str, Any],
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         event = _LogWire(
             log_type=log_type.value,
             patient_id=patient_id,
             payload=payload,
+            metadata=metadata,
             context=self._context,
             trace=trace,
             timestamp=timestamp,
@@ -684,9 +690,10 @@ class AsyncOliraClient:
         payload: dict[str, Any] | None = None,
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Enqueue a log for background delivery."""
-        self._emit(log_type, patient_id, payload or {}, trace=trace, timestamp=timestamp)
+        self._emit(log_type, patient_id, payload or {}, trace=trace, timestamp=timestamp, metadata=metadata)
 
     async def log_fhir(self, *, patient_id: str, resource: dict[str, Any]) -> BatchResult:
         """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
@@ -724,6 +731,7 @@ class AsyncOliraClient:
                 log_type=spec.log_type.value,
                 patient_id=spec.patient_id,
                 payload=spec.payload or {},
+                metadata=spec.metadata,
                 context=self._context,
                 trace=spec.trace,
                 timestamp=spec.timestamp,
