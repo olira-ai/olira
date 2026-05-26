@@ -81,8 +81,10 @@ for view_meta in views:
         print(f"\n  {view_meta.view_type}:")
         blocks = view.content.get("blocks", [])
         for block in blocks[:2]:
-            name = block.get("name", block.get("id", ""))
-            text = str(block.get("text") or block.get("content") or "")[:200]
+            tr = block.get("template_ref") or {}
+            result_d = block.get("result") or {}
+            name = tr.get("block_id") or result_d.get("id") or result_d.get("name") or "?"
+            text = str(result_d.get("content") or result_d.get("name") or "")[:200]
             print(f"    [{name}] {text}")
         temp = view.content.get("temp", [])
         if temp:
