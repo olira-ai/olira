@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
 
-from olira import AuthError, OliraClient, OliraEnv  # noqa: E402
+from olira import DEFAULT_BASE_URL, AuthError, OliraClient, OliraEnv  # noqa: E402
 
 API_KEY = os.environ.get("OLIRA_API_KEY")
 if not API_KEY:
@@ -32,7 +32,7 @@ if not API_KEY:
     print("  Copy examples/.env.example to examples/.env and fill in your API key.")
     raise SystemExit(1)
 
-BASE_URL = os.environ.get("OLIRA_BASE_URL", "https://api.prod.olira.ai")
+BASE_URL = os.environ.get("OLIRA_BASE_URL", DEFAULT_BASE_URL)
 PATIENT_ID = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("PATIENT_ID", "")
 
 if not PATIENT_ID:

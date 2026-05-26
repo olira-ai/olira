@@ -97,6 +97,9 @@ from olira import OliraClient
 client = OliraClient(api_key="YOUR_OLIRA_API_KEY")
 ```
 
+Production requests go to `https://app-api.prod.olira.ai/app-api` by default (`DEFAULT_BASE_URL`).
+`OliraClient`, `AsyncOliraClient`, and `init()` all use that value when `base_url` is omitted.
+
 ### `init()` — module-level initialisation
 
 #### `init`

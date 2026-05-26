@@ -29,6 +29,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 from olira import (  # noqa: E402
+    DEFAULT_BASE_URL,
     CreatePatientRequest,
     ExternalIdentifier,
     IngestLogSpec,
@@ -38,7 +39,7 @@ from olira import (  # noqa: E402
 )
 
 API_KEY = os.environ["OLIRA_API_KEY"]
-BASE_URL = os.environ.get("OLIRA_BASE_URL", "https://api.prod.olira.ai")
+BASE_URL = os.environ.get("OLIRA_BASE_URL", DEFAULT_BASE_URL)
 
 client = OliraClient(
     api_key=API_KEY,

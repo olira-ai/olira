@@ -6,6 +6,12 @@ from pydantic import ValidationError
 from olira.models import LogsResult, OliraTrace, _LogWire
 
 
+def test_default_base_url():
+    from olira import DEFAULT_BASE_URL
+
+    assert DEFAULT_BASE_URL == "https://app-api.prod.olira.ai/app-api"
+
+
 def test_logs_result_accepts_null_trace_fields():
     result = LogsResult.model_validate(
         {

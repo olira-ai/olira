@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `tests/test_models.py`: regression tests for `OliraTrace` / `LogsResult` deserialization with null trace fields and outbound `_LogWire` trace validation.
+- `DEFAULT_BASE_URL` exported from the package — single source of truth for the production API base URL.
 
 ### Fixed
 
 - `get_logs()` no longer raises a Pydantic validation error when a log's `trace` has `object_type` or `object_id` set to `null` (common for historically ingested events).
+- Default `base_url` is now `https://app-api.prod.olira.ai/app-api` (was `https://api.prod.olira.ai`, which does not resolve in DNS).
 
 ## [1.0.4] - 2026-05-26
 
