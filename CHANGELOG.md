@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Example `Run:` (and `Usage:`) headers in `03_fhir_ingestion.py`–`06_read_patient_state.py` still referenced pre-reorder filenames after examples were renumbered in 1.0.2.
+- `confirm_ingestion_job(..., skip_backfill=True)` is retry-safe: a retried call tolerates HTTP 409 on PATCH or confirm when the job has already left `AWAITING_CONFIRMATION`, and returns the current job state instead of failing.
 
 ## [1.0.3] - 2026-05-22
 

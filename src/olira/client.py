@@ -10,6 +10,7 @@ import httpx
 
 from .exceptions import ValidationError
 from .http import AsyncHttpTransport, HttpTransport
+from .ingestion_confirm import confirm_ingestion_job_resilient, confirm_ingestion_job_resilient_async
 from .models import (
     BatchResult,
     CreatePatientRequest,
@@ -538,9 +539,14 @@ class OliraClient:
 
         Requires sdk:historical-ingest scope.
         """
-        if skip_backfill:
-            self.patch_ingestion_job(job_id=job_id, skip_backfill=True)
-        return self._transport.confirm_ingestion_job(job_id, initialize_missing_templates=initialize_missing_templates)
+        return confirm_ingestion_job_resilient(
+            skip_backfill=skip_backfill,
+            patch_skip_backfill=lambda: self.patch_ingestion_job(job_id=job_id, skip_backfill=True),
+            get_job=lambda: self.get_ingestion_job(job_id=job_id),
+            confirm=lambda: self._transport.confirm_ingestion_job(
+                job_id, initialize_missing_templates=initialize_missing_templates
+            ),
+        )
 
     def cancel_ingestion_job(self, *, job_id: str) -> IngestionJob:
         """Cancel an ingestion job. Requires sdk:historical-ingest scope.
@@ -1125,9 +1131,14 @@ class AsyncOliraClient:
     ) -> IngestionJob:
         """Async version of confirm_ingestion_job. Requires sdk:historical-ingest scope."""
         transport = self._require_transport("confirm_ingestion_job")
-        if skip_backfill:
-            await self.patch_ingestion_job(job_id=job_id, skip_backfill=True)
-        return await transport.confirm_ingestion_job(job_id, initialize_missing_templates=initialize_missing_templates)
+        return await confirm_ingestion_job_resilient_async(
+            skip_backfill=skip_backfill,
+            patch_skip_backfill=lambda: self.patch_ingestion_job(job_id=job_id, skip_backfill=True),
+            get_job=lambda: self.get_ingestion_job(job_id=job_id),
+            confirm=lambda: transport.confirm_ingestion_job(
+                job_id, initialize_missing_templates=initialize_missing_templates
+            ),
+        )
 
     async def cancel_ingestion_job(self, *, job_id: str) -> IngestionJob:
         """Async version of cancel_ingestion_job. Requires sdk:historical-ingest scope."""
