@@ -14,7 +14,7 @@ Steps:
   3. Confirm and poll to COMPLETED
 
 Requires: api:manage-patients + sdk:historical-ingest scopes
-Run: python 04_logs_only_workflow.py
+Run: python 05_logs_only_workflow.py
 """
 
 import os

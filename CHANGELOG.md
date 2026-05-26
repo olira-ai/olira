@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-05-26
+
+### Added
+
+- `IngestionJob.missing_template_slots`: structured map of `patient_id → [missing_summary_type, …]` returned at `AWAITING_CONFIRMATION` when patients lack view slots for org templates (pairs with `error_summary` entries with code `missing_template_slot`).
+- `confirm_ingestion_job(..., initialize_missing_templates=False, skip_backfill=False)` on `OliraClient` and `AsyncOliraClient` — pass `initialize_missing_templates=True` to auto-initialize missing view slots before Phase 2 backfill; pass `skip_backfill=True` to skip view generation (PATCH then confirm).
+- `patch_ingestion_job(..., skip_backfill=None)` — set `skip_backfill` while the job is in `AWAITING_CONFIRMATION`.
+
+### Changed
+
+- `confirm_ingestion_job` HTTP transport now sends an optional JSON body with `initialize_missing_templates` when set.
+
+### Fixed
+
+- Example `Run:` (and `Usage:`) headers in `03_fhir_ingestion.py`–`06_read_patient_state.py` still referenced pre-reorder filenames after examples were renumbered in 1.0.2.
+- `confirm_ingestion_job(..., skip_backfill=True)` is retry-safe: a retried call tolerates HTTP 409 on PATCH or confirm when the job has already left the review gate (including terminal states such as `cancelled` and `failed`), and returns the current job state instead of failing.
+
 ## [1.0.3] - 2026-05-22
 
 ### Added

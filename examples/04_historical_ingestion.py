@@ -17,7 +17,7 @@ Both paths go through the same five-stage pipeline:
   REPLAYING → BACKFILLING → COMPLETED
 
 Requires: sdk:historical-ingest scope
-Run: python 03_historical_ingestion.py
+Run: python 04_historical_ingestion.py
 """
 
 import os

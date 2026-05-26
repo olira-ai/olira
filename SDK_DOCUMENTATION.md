@@ -9,12 +9,12 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.0.3`
+**Package:** `olira` — **Version:** `1.0.4`
 
 ## Related docs
 
-| Doc                                                           | What it covers                                               | Why you need it                                                                                                                                                             |
-| ------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Doc                                                                             | What it covers                                               | Why you need it                                                                                                                                                             |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Authentication** ([api-docs](https://olira.ai/api-docs) → Authentication tab) | API keys, patient tokens, **scopes**, auth errors            | Choose scopes when creating keys; mint patient tokens for device-facing calls                                                                                               |
 | **MCP Patient State** ([api-docs](https://olira.ai/api-docs) → MCP tab)         | Tools for querying patient health state from AI agents       | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
 | **CLI** ([api-docs](https://olira.ai/api-docs) → CLI tab)                       | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server                                                                             |
@@ -23,14 +23,14 @@ and minting patient-scoped tokens for use with the
 
 Each API key carries one or more scopes. Assign only what your integration needs.
 
-| Scope                   | What it unlocks                                                    |
-| ----------------------- | ------------------------------------------------------------------ |
-| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                               |
-| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, etc.   |
-| `sdk:patient-token`     | `get_patient_token()`                                              |
-| `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods            |
-| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, etc. methods  |
-| `mcp:patient-state`     | Query patient state via the MCP Patient State server               |
+| Scope                   | What it unlocks                                                   |
+| ----------------------- | ----------------------------------------------------------------- |
+| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                              |
+| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, etc.  |
+| `sdk:patient-token`     | `get_patient_token()`                                             |
+| `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods           |
+| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, etc. methods |
+| `mcp:patient-state`     | Query patient state via the MCP Patient State server              |
 
 ## Getting Started
 
@@ -102,24 +102,24 @@ client = OliraClient(api_key="YOUR_OLIRA_API_KEY")
 #### `init`
 
 ```python
-init(api_key: str | None = None, *, environment: OliraEnv = OliraEnv.PRODUCTION, service_name: str | None = None, base_url: str = 'https://api.prod.olira.ai', batch_size: int = 50, flush_interval: float = 1.5, max_queue_size: int = 10000, timeout: float = 5.0, max_retries: int = 3, on_error: str = 'drop', async_flush: bool = True) -> None
+init(api_key: str | None = None, *, environment: OliraEnv = OliraEnv.PRODUCTION, service_name: str | None = None, base_url: str = 'https://app-api.prod.olira.ai/app-api', batch_size: int = 50, flush_interval: float = 1.5, max_queue_size: int = 10000, timeout: float = 5.0, max_retries: int = 3, on_error: str = 'drop', async_flush: bool = True) -> None
 ```
 
 Initialize the SDK. API key can be passed or set via `OLIRA_API_KEY` env var.
 
-| Parameter        | Required | Type            | Default                       | Description |
-| ---------------- | -------- | --------------- | ----------------------------- | ----------- |
-| `api_key`        | No       | `Optional[str]` | `None`                        | API key; falls back to `OLIRA_API_KEY` env var. |
-| `environment`    | No       | `OliraEnv`      | `OliraEnv.PRODUCTION`         | `DEVELOPMENT` tags events for non-production systems; use `PRODUCTION` for live data. |
-| `service_name`   | No       | `Optional[str]` | `None`                        | Optional label attached to every event's `context` for observability (e.g. `"my-service"`). |
-| `base_url`       | No       | `str`           | `'https://api.prod.olira.ai'` | Override for local dev or staging. |
-| `batch_size`     | No       | `int`           | `50`                          | Max events per `/v1/logs/batch` request sent by the background worker. |
-| `flush_interval` | No       | `float`         | `1.5`                         | Seconds between automatic background flushes. |
-| `max_queue_size` | No       | `int`           | `10000`                       | Max events held in the in-process queue; `on_error` applies when full. |
-| `timeout`        | No       | `float`         | `5.0`                         | Per-request HTTP timeout in seconds. |
-| `max_retries`    | No       | `int`           | `3`                           | Retry attempts for 429 / 5xx responses before raising. |
-| `on_error`       | No       | `str`           | `'drop'`                      | What to do when the queue is full or a batch fails after retries: `'drop'` silently discards, `'raise'` raises an exception, or pass a `Callable[[Exception, list[str]], None]` for custom handling. |
-| `async_flush`    | No       | `bool`          | `True`                        | `True` starts a background worker thread that batches and sends events automatically. Set `False` for scripts or tests where you want synchronous delivery via `log_batch()`. |
+| Parameter        | Required | Type            | Default                                   | Description                                                                                                                                                                                          |
+| ---------------- | -------- | --------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api_key`        | No       | `Optional[str]` | `None`                                    | API key; falls back to `OLIRA_API_KEY` env var.                                                                                                                                                      |
+| `environment`    | No       | `OliraEnv`      | `OliraEnv.PRODUCTION`                     | `DEVELOPMENT` tags events for non-production systems; use `PRODUCTION` for live data.                                                                                                                |
+| `service_name`   | No       | `Optional[str]` | `None`                                    | Optional label attached to every event's `context` for observability (e.g. `"my-service"`).                                                                                                          |
+| `base_url`       | No       | `str`           | `'https://app-api.prod.olira.ai/app-api'` | Override for local dev or staging.                                                                                                                                                                   |
+| `batch_size`     | No       | `int`           | `50`                                      | Max events per `/v1/logs/batch` request sent by the background worker.                                                                                                                               |
+| `flush_interval` | No       | `float`         | `1.5`                                     | Seconds between automatic background flushes.                                                                                                                                                        |
+| `max_queue_size` | No       | `int`           | `10000`                                   | Max events held in the in-process queue; `on_error` applies when full.                                                                                                                               |
+| `timeout`        | No       | `float`         | `5.0`                                     | Per-request HTTP timeout in seconds.                                                                                                                                                                 |
+| `max_retries`    | No       | `int`           | `3`                                       | Retry attempts for 429 / 5xx responses before raising.                                                                                                                                               |
+| `on_error`       | No       | `str`           | `'drop'`                                  | What to do when the queue is full or a batch fails after retries: `'drop'` silently discards, `'raise'` raises an exception, or pass a `Callable[[Exception, list[str]], None]` for custom handling. |
+| `async_flush`    | No       | `bool`          | `True`                                    | `True` starts a background worker thread that batches and sends events automatically. Set `False` for scripts or tests where you want synchronous delivery via `log_batch()`.                        |
 
 #### `flush`
 
@@ -786,14 +786,15 @@ Olira maps the resource to one or more platform log types via the FHIR absorber 
 
 Requires `sdk:event-log` scope.
 
-| Parameter    | Required | Type              | Default |
-| ------------ | -------- | ----------------- | ------- |
-| `patient_id` | Yes      | `str`             | —       |
-| `resource`   | Yes      | `dict[str, Any]`  | —       |
+| Parameter    | Required | Type             | Default |
+| ------------ | -------- | ---------------- | ------- |
+| `patient_id` | Yes      | `str`            | —       |
+| `resource`   | Yes      | `dict[str, Any]` | —       |
 
 `resource` must be a valid FHIR R4 JSON object with a `resourceType` field. Supported types include `Condition`, `MedicationRequest`, `MedicationStatement`, `MedicationAdministration`, `AllergyIntolerance`, `Appointment`, `Encounter`, `Procedure`, `Immunization`, `DiagnosticReport`, `DocumentReference`, `CarePlan`, `CareTeam`, `FamilyMemberHistory`, `Goal`, `Observation` (vital-signs), and `Patient`.
 
 **Raises `ValidationError`** if:
+
 - `resourceType` is missing (HTTP 422 from the API)
 - The resource maps to zero Olira events — unsupported type, unrecognized fields, or (for `Observation`) unrecognized category/LOINC code. The exception message explains why.
 
@@ -843,14 +844,14 @@ except ValidationError as e:
 
 Lightweight event specification for log_batch(). Not persisted internally.
 
-| Field             | Required | Type                       | Description         |
-| ----------------- | -------- | -------------------------- | ------------------- |
-| `log_type`        | Yes      | `OliraLogType`             | —                   |
-| `patient_id`      | Yes      | `str`                      | —                   |
-| `payload`         | No       | `Optional[dict[str, Any]]` | — (default: `None`) |
-| `trace`           | No       | `Optional[OliraTrace]`     | — (default: `None`) |
-| `timestamp`       | No       | `Optional[str]`            | — (default: `None`) |
-| `idempotency_key` | No       | `Optional[str]`            | — (default: `None`) |
+| Field             | Required | Type                       | Description                                                                                                                               |
+| ----------------- | -------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `log_type`        | Yes      | `OliraLogType`             | —                                                                                                                                         |
+| `patient_id`      | Yes      | `str`                      | —                                                                                                                                         |
+| `payload`         | No       | `Optional[dict[str, Any]]` | — (default: `None`)                                                                                                                       |
+| `trace`           | No       | `Optional[OliraTrace]`     | — (default: `None`)                                                                                                                       |
+| `timestamp`       | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
+| `idempotency_key` | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
 | `metadata`        | No       | `Optional[dict[str, Any]]` | Arbitrary key/value context stored separately from the typed payload. Surfaced in the Olira Console event detail panel. (default: `None`) |
 
 ### `BatchResult`
@@ -878,10 +879,12 @@ Per-event error from a batch response.
 Patient tokens are short-lived JWTs scoped to a single patient. They are the bridge between your server-side API key and patient-facing or agent-facing calls to the [Olira MCP Patient State server](https://olira.ai/api-docs).
 
 **When to use:**
+
 - An AI agent needs to query a specific patient's state via the MCP server — mint a token and pass it as the Bearer header for that session
 - A patient-facing device or frontend needs to read its own state — your backend mints the token on demand and forwards it; the client never sees your API key
 
 **When not to use:**
+
 - Server-to-server calls from your own backend — use your API key directly with `sdk:state-read` scope instead
 
 Tokens expire after **15 minutes** (`expires_in: 900`). They are locked to the patient supplied at mint time — a token for patient A cannot query patient B. Mint a fresh token for each MCP session or device request; there is no refresh mechanism.
