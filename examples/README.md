@@ -18,7 +18,7 @@ python 00_quickstart.py
 | `01_patient_management.py` | Full patient lifecycle: create, shell patient, batch, lookup, update, delete | `api:manage-patients` |
 | `02_event_logging.py` | `log()` + `flush()` queue vs `log_batch()`, representative payloads, `OliraTrace` | `sdk:event-log`, `api:manage-patients` |
 | `03_fhir_ingestion.py` | `log_fhir()` with Condition, MedicationRequest, Appointment; error handling for unsupported types | `sdk:event-log`, `api:manage-patients` |
-| `04_historical_ingestion.py` | Bulk historical load: file upload (Path A) and inline records (Path B), two-phase confirm flow | `sdk:historical-ingest` |
+| `04_historical_ingestion.py` | Bulk historical load: file upload (Path A) and inline records (Path B), optional `OliraTrace` on logs, two-phase confirm flow | `sdk:historical-ingest` |
 | `05_logs_only_workflow.py` | Historical ingestion when patients already exist — logs-only job, no patient records in file | `sdk:historical-ingest`, `api:manage-patients` |
 | `06_read_patient_state.py` | Read compiled patient state: stable data, event modules, views, logs, events, memories | `sdk:state-read` |
 | `07_patient_token.py` | Mint a patient-scoped JWT, forward to MCP as Bearer, `PatientSession` refresh helper | `sdk:patient-token` |

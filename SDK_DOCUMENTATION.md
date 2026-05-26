@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.0.4`
+**Package:** `olira` — **Version:** `1.0.5`
 
 ## Related docs
 
@@ -97,6 +97,9 @@ from olira import OliraClient
 client = OliraClient(api_key="YOUR_OLIRA_API_KEY")
 ```
 
+Production requests go to `https://app-api.prod.olira.ai/app-api` by default (`DEFAULT_BASE_URL`).
+`OliraClient`, `AsyncOliraClient`, and `init()` all use that value when `base_url` is omitted.
+
 ### `init()` — module-level initialisation
 
 #### `init`
@@ -182,8 +185,10 @@ interpreted or validated by Olira.
 
 | Field         | Required | Type  | Description                                                                          |
 | ------------- | -------- | ----- | ------------------------------------------------------------------------------------ |
-| `object_type` | Yes      | `str` | Category of the linked object, e.g. `'conversation'`, `'message'`, `'questionnaire'` |
-| `object_id`   | Yes      | `str` | Your identifier for the linked object                                                |
+| `object_type` | Yes\*    | `str` | Category of the linked object, e.g. `'conversation'`, `'message'`, `'questionnaire'` |
+| `object_id`   | Yes\*    | `str` | Your identifier for the linked object                                                |
+
+\*Required when sending a trace via `log()` or `log_batch()`. Either field may be `null` on logs returned by `get_logs()` (e.g. historically ingested events).
 
 **Example:**
 
@@ -1855,6 +1860,7 @@ The JSONL file accepted by `file=` contains one JSON object per line. Two record
 ```jsonl
 {"type": "patient", "data": {"first_name": "Jane", "last_name": "Smith", "date_of_birth": "1980-03-22T00:00:00Z", "timezone": "America/New_York", "external_identifiers": [{"system": "epic", "value": "MRN-12345"}]}}
 {"type": "log",     "data": {"event_type": "symptom_report", "patient_id": "MRN-12345", "timestamp": "2025-01-15T09:00:00Z", "payload": {"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]}, "idempotency_key": "report-001"}}
+{"type": "log",     "data": {"event_type": "lab_results_received", "patient_id": "MRN-12345", "timestamp": "2024-03-15T09:00:00Z", "payload": {"results": []}, "trace": {"object_type": "emr_record", "object_id": "epic-encounter-98765"}}}
 ```
 
 **Patient fields** match `CreatePatientRequest`. At least one of `external_identifiers`,
@@ -1867,6 +1873,7 @@ The JSONL file accepted by `file=` contains one JSON object per line. Two record
 - `timestamp` (required) — ISO 8601 datetime, e.g. `"2025-01-15T09:00:00Z"`. **This is how historical events are placed at their correct point in the patient timeline.** Logs are sorted by `timestamp` per patient before graph replay, so ordering in the file does not matter.
 - `payload` (optional) — event-specific data.
 - `idempotency_key` (optional but strongly recommended) — if this log is submitted again in a retry job, the duplicate is silently skipped. Without it, retrying a failed job will insert duplicate log rows.
+- `trace` (optional) — provenance link to an object in your system (`object_type`, `object_id`). Same rules as live `log()`: when present, both fields must be non-empty strings. Most backfills omit this; use it when you need `get_logs(trace_type=...)` filtering on ingested events (e.g. `"emr_record"` / `"epic-encounter-98765"`).
 
 Patient and log records may appear in any order. The pipeline collects all patients first, then resolves all log `patient_id` references — so a log appearing before its patient in the file is fine.
 
@@ -1904,6 +1911,7 @@ For inline records: `olira.validate_ingestion_records(records)` — same checks,
 - `event_type` is a known platform type — with typo suggestions (e.g. `"lab_result_receivd"` → did you mean `"lab_results_received"?`)
 - `timestamp` is parseable ISO 8601
 - `patient_id` resolves to a patient defined anywhere in the same file (order-agnostic)
+- Optional `trace`: when present, `object_type` and `object_id` must be non-empty strings
 
 **What requires a server call (checked by Stage 1):**
 
@@ -2136,13 +2144,14 @@ IngestRecord.log(spec: IngestLogSpec) -> IngestRecord
 
 #### `IngestLogSpec`
 
-| Field             | Type   | Required | Description                                       |
-| ----------------- | ------ | -------- | ------------------------------------------------- |
-| `event_type`      | `str`  | Yes      | Platform event type (e.g. `"symptom_report"`)     |
-| `patient_id`      | `str`  | Yes      | Olira patient UUID or `external_identifier` value |
-| `timestamp`       | `str`  | Yes      | ISO 8601 datetime                                 |
-| `payload`         | `dict` | No       | Event-specific payload                            |
-| `idempotency_key` | `str`  | No       | Prevents duplicate insertion on retry             |
+| Field             | Type                 | Required | Description                                       |
+| ----------------- | -------------------- | -------- | ------------------------------------------------- |
+| `event_type`      | `str`                | Yes      | Platform event type (e.g. `"symptom_report"`)     |
+| `patient_id`      | `str`                | Yes      | Olira patient UUID or `external_identifier` value |
+| `timestamp`       | `str`                | Yes      | ISO 8601 datetime                                 |
+| `payload`         | `dict`               | No       | Event-specific payload                            |
+| `idempotency_key` | `str`                | No       | Prevents duplicate insertion on retry             |
+| `trace`           | `OliraTrace \| None` | No       | Optional provenance; both fields required when set |
 
 #### `IngestionJobListResult`
 

@@ -18,9 +18,9 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 import olira  # noqa: E402
-from olira import OliraEnv, OliraLogType  # noqa: E402
+from olira import DEFAULT_BASE_URL, OliraEnv, OliraLogType  # noqa: E402
 
-BASE_URL = os.environ.get("OLIRA_BASE_URL", "https://api.prod.olira.ai")
+BASE_URL = os.environ.get("OLIRA_BASE_URL", DEFAULT_BASE_URL)
 
 # Initialise once at startup — all module-level functions (olira.log, olira.create_patient…)
 # use this singleton client.

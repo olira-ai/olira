@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from .client import AsyncOliraClient, OliraClient, OliraEnv
+from .client import DEFAULT_BASE_URL, AsyncOliraClient, OliraClient, OliraEnv
 from .exceptions import (
     AuthError,
     NetworkError,
@@ -57,6 +57,7 @@ from .version import __version__
 
 __all__ = [
     "__version__",
+    "DEFAULT_BASE_URL",
     "AsyncOliraClient",
     "OliraClient",
     "OliraEnv",
@@ -132,7 +133,7 @@ def init(
     *,
     environment: OliraEnv = OliraEnv.PRODUCTION,
     service_name: str | None = None,
-    base_url: str = "https://api.prod.olira.ai",
+    base_url: str = DEFAULT_BASE_URL,
     batch_size: int = 50,
     flush_interval: float = 1.5,
     max_queue_size: int = 10_000,

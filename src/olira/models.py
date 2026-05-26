@@ -103,10 +103,14 @@ class OliraTrace(BaseModel):
     ``object_id`` is your identifier for that object — the same string you would use
     to look it up in your own database.  It is stored and returned as-is and is never
     interpreted or validated by Olira.
+
     """
 
-    object_type: str = Field(..., description="Category of the linked object, e.g. 'conversation' or 'message'")
-    object_id: str = Field(..., description="Your identifier for the linked object")
+    object_type: str | None = Field(
+        default=None,
+        description="Category of the linked object, e.g. 'conversation' or 'message'",
+    )
+    object_id: str | None = Field(default=None, description="Your identifier for the linked object")
 
 
 class EsasItem(BaseModel):
@@ -218,6 +222,9 @@ class _LogWire(BaseModel):
 
     @model_validator(mode="after")
     def check_payload_size(self) -> Self:
+        if self.trace is not None:
+            if not self.trace.object_type or not self.trace.object_id:
+                raise ValueError("trace requires both object_type and object_id")
         body = self.model_dump_json()
         if len(body.encode("utf-8")) > MAX_EVENT_PAYLOAD_BYTES:
             raise ValidationError(
@@ -597,6 +604,8 @@ class IngestLogSpec:
     ``patient_id`` may be an Olira patient UUID or an ``external_identifier`` value present
     in the same file or already in the org.
     ``idempotency_key`` prevents duplicate insertion if the same file is re-submitted.
+    ``trace`` is optional provenance (same shape as live ``log()``); when set, both
+    ``object_type`` and ``object_id`` must be non-empty strings.
     """
 
     event_type: str
@@ -604,6 +613,7 @@ class IngestLogSpec:
     timestamp: str
     payload: dict[str, Any] | None = None
     idempotency_key: str | None = None
+    trace: OliraTrace | None = None
 
 
 class IngestRecord(BaseModel):
@@ -635,4 +645,11 @@ class IngestRecord(BaseModel):
             data["payload"] = spec.payload
         if spec.idempotency_key:
             data["idempotency_key"] = spec.idempotency_key
+        if spec.trace is not None:
+            if not spec.trace.object_type or not spec.trace.object_id:
+                raise ValidationError("trace requires both object_type and object_id")
+            data["trace"] = {
+                "object_type": spec.trace.object_type,
+                "object_id": spec.trace.object_id,
+            }
         return cls(type="log", data=data)

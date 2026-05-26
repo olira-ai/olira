@@ -51,7 +51,7 @@ class OliraEnv(StrEnum):
     DEVELOPMENT = "development"
 
 
-DEFAULT_BASE_URL = "https://api.prod.olira.ai"
+DEFAULT_BASE_URL = "https://app-api.prod.olira.ai/app-api"
 
 
 def _build_context(
