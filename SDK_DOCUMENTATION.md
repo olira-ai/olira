@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.0.6`
+**Package:** `olira` — **Version:** `1.0.7`
 
 ## Related docs
 
