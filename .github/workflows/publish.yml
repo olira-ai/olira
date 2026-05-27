@@ -33,6 +33,15 @@ jobs:
         id: version
         run: echo "version=$(grep -E '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')" >> "$GITHUB_OUTPUT"
 
+      - name: Reject pre-release versions
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [[ "$VERSION" =~ -(alpha|beta|rc) ]] || [[ "$VERSION" == *a* ]] || [[ "$VERSION" == *b[0-9] ]]; then
+            echo "::error::Refusing to publish pre-release version ($VERSION) to PyPI."
+            exit 1
+          fi
+          echo "Publishing stable version $VERSION to PyPI."
+
       - name: Fail if tag already exists
         run: |
           if git ls-remote --tags origin "refs/tags/v${{ steps.version.outputs.version }}" | grep -q .; then
@@ -46,15 +55,6 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
-
-      - name: Reject pre-release versions
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          if [[ "$VERSION" =~ -(alpha|beta|rc) ]] || [[ "$VERSION" == *a* ]] || [[ "$VERSION" == *b[0-9] ]]; then
-            echo "::error::Refusing to publish pre-release version ($VERSION) to PyPI."
-            exit 1
-          fi
-          echo "Publishing stable version $VERSION to PyPI."
 
       - name: Build package
         env:
