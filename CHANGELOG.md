@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-05-26
+
+### Fixed
+
+- **`EventEntry.changes` type** (`src/olira/models.py`): Corrected from `dict[str, Any] | None` to `list[dict[str, Any]] | None` — the API returns an array of change records, not a single dict.
+- **`examples/06_read_patient_state.py`**: Updated block traversal to use the current response shape (`template_ref.block_id`, `result.content`).
+
 ## [1.0.5] - 2026-05-26
 
 ### Added

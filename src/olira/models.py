@@ -498,7 +498,7 @@ class EventEntry(BaseModel):
     completed_at: str | None = None
     source_event_log_id: str | None = None
     log_payload: dict[str, Any] | None = None
-    changes: dict[str, Any] | None = None
+    changes: list[dict[str, Any]] | None = None
 
 
 class EventsResult(BaseModel):
