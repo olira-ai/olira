@@ -209,7 +209,7 @@ class _LogWire(BaseModel):
     patient_id: str
     timestamp: str | None = None
     log_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    idempotency_key: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    idempotency_key: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] | None = None
     context: dict[str, str] = Field(default_factory=dict)
