@@ -2,8 +2,8 @@ name: Publish to PyPI
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -42,6 +42,20 @@ jobs:
           fi
           echo "Publishing stable version $VERSION to PyPI."
 
+      - name: Fail if tag already exists
+        run: |
+          if git ls-remote --tags origin "refs/tags/v${{ steps.version.outputs.version }}" | grep -q .; then
+            echo "::error::Tag v${{ steps.version.outputs.version }} already exists. Bump the version before merging."
+            exit 1
+          fi
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+
       - name: Build package
         env:
           UV_INDEX_URL: https://pypi.org/simple/
@@ -52,3 +66,12 @@ jobs:
         with:
           packages-dir: dist/
           print-hash: true
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.version.outputs.version }}" \
+            --title "v${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            dist/*
