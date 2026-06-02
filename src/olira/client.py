@@ -37,6 +37,7 @@ from .models import (
     ViewMeta,
     ViewRecentEventsResult,
     ViewResult,
+    ZoneRowsResult,
     _LogWire,
 )
 from .queue import BackgroundWorker
@@ -52,6 +53,19 @@ class OliraEnv(StrEnum):
 
 
 DEFAULT_BASE_URL = "https://app-api.prod.olira.ai/app-api"
+
+
+def _omit_none_zone_params(**kwargs: Any) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in kwargs.items():
+        if value is None:
+            continue
+        if key in ("include_payload", "include_raw") and value is False:
+            continue
+        if key == "offset" and value == 0:
+            continue
+        out[key] = value
+    return out
 
 
 def _build_context(
@@ -590,6 +604,62 @@ class OliraClient:
         only view materialisation failed. Transitions the job back to BACKFILLING.
         """
         return self._transport.retry_view_backfill(job_id)
+
+    def query_ingestion_validated_rows(
+        self,
+        *,
+        job_id: str,
+        log_type: str | None = None,
+        day_from: str | None = None,
+        day_to: str | None = None,
+        patient_id: str | None = None,
+        line: int | None = None,
+        include_payload: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> ZoneRowsResult:
+        """Page validated rows for an import job. Requires sdk:historical-ingest scope."""
+        params = _omit_none_zone_params(
+            log_type=log_type,
+            day_from=day_from,
+            day_to=day_to,
+            patient_id=patient_id,
+            line=line,
+            include_payload=include_payload,
+            limit=limit,
+            offset=offset,
+        )
+        return self._transport.query_ingestion_validated_rows(job_id, params)
+
+    def query_ingestion_rejected_rows(
+        self,
+        *,
+        job_id: str,
+        code: str | None = None,
+        line: int | None = None,
+        include_raw: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> ZoneRowsResult:
+        """Page rejected rows for an import job. Requires sdk:historical-ingest scope."""
+        params = _omit_none_zone_params(
+            code=code,
+            line=line,
+            include_raw=include_raw,
+            limit=limit,
+            offset=offset,
+        )
+        return self._transport.query_ingestion_rejected_rows(job_id, params)
+
+    def get_ingestion_validated_line(self, *, job_id: str, line: int) -> dict[str, Any] | None:
+        """Return the validated row for a 1-indexed JSONL line, or None if not found."""
+        result = self.query_ingestion_validated_rows(
+            job_id=job_id,
+            line=line,
+            include_payload=True,
+            limit=1,
+        )
+        return result.rows[0] if result.rows else None
 
     def flush(self) -> None:
         """Block until all queued events are sent (or failed)."""
@@ -1170,6 +1240,64 @@ class AsyncOliraClient:
         """Async version of retry_view_backfill. Requires sdk:historical-ingest scope."""
         transport = self._require_transport("retry_view_backfill")
         return await transport.retry_view_backfill(job_id)
+
+    async def query_ingestion_validated_rows(
+        self,
+        *,
+        job_id: str,
+        log_type: str | None = None,
+        day_from: str | None = None,
+        day_to: str | None = None,
+        patient_id: str | None = None,
+        line: int | None = None,
+        include_payload: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> ZoneRowsResult:
+        """Async version of query_ingestion_validated_rows."""
+        transport = self._require_transport("query_ingestion_validated_rows")
+        params = _omit_none_zone_params(
+            log_type=log_type,
+            day_from=day_from,
+            day_to=day_to,
+            patient_id=patient_id,
+            line=line,
+            include_payload=include_payload,
+            limit=limit,
+            offset=offset,
+        )
+        return await transport.query_ingestion_validated_rows(job_id, params)
+
+    async def query_ingestion_rejected_rows(
+        self,
+        *,
+        job_id: str,
+        code: str | None = None,
+        line: int | None = None,
+        include_raw: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> ZoneRowsResult:
+        """Async version of query_ingestion_rejected_rows."""
+        transport = self._require_transport("query_ingestion_rejected_rows")
+        params = _omit_none_zone_params(
+            code=code,
+            line=line,
+            include_raw=include_raw,
+            limit=limit,
+            offset=offset,
+        )
+        return await transport.query_ingestion_rejected_rows(job_id, params)
+
+    async def get_ingestion_validated_line(self, *, job_id: str, line: int) -> dict[str, Any] | None:
+        """Async version of get_ingestion_validated_line."""
+        result = await self.query_ingestion_validated_rows(
+            job_id=job_id,
+            line=line,
+            include_payload=True,
+            limit=1,
+        )
+        return result.rows[0] if result.rows else None
 
     async def flush(self) -> None:
         drained: list[_LogWire] = []

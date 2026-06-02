@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.0.8`
+**Package:** `olira` — **Version:** `1.1.0`
 
 ## Related docs
 
@@ -1763,7 +1763,7 @@ olira.log(
 ## Historical Data Ingestion
 
 Bulk-load months or years of existing patient health data before going live.
-The ingestion pipeline validates records, creates patients, inserts logs as `STALE` rows,
+The ingestion pipeline validates records, creates patients, stages logs for replay,
 replays them through the graph in chronological order, and backfills summary views —
 making imported data fully queryable in the Olira Console.
 
@@ -1790,7 +1790,7 @@ import olira, time
 
 olira.init(api_key="YOUR_sdk:historical-ingest_KEY")
 
-# Create the job — SDK streams the file to S3 automatically
+# Create the job — SDK uploads the file automatically
 job = olira.create_ingestion_job(
     file="patients_and_logs.jsonl",
     idempotency_key="initial-onboarding-2026",   # optional but recommended
@@ -1806,11 +1806,15 @@ while job.status not in ("awaiting_confirmation", "completed", "failed"):
 print(f"Patients: {job.patients_processed}")
 print(f"Logs:     {job.logs_processed} inserted, {job.logs_failed} failed")
 if job.error_summary:
-    print(f"First errors (up to 100 shown):")
+    print(f"First errors (up to 100 shown; {job.error_count} total):")
     for err in job.error_summary:
         print(f"  Line {err.line}: {err.code} — {err.message}")
-    if job.logs_failed > len(job.error_summary):
-        print(f"  … and {job.logs_failed - len(job.error_summary)} more (re-run with a corrected file)")
+    if job.error_count > len(job.error_summary):
+        print(f"  … and {job.error_count - len(job.error_summary)} more (fix and resubmit)")
+
+if job.missing_template_slots:
+    print(f"Missing view slots: {job.missing_template_slots}")
+    # Use OliraClient.confirm_ingestion_job(..., initialize_missing_templates=True) — see below
 
 # Confirm to start Phase 2 (graph replay + view backfill)
 job = olira.confirm_ingestion_job(job_id=job.job_id)
@@ -1819,8 +1823,7 @@ job = olira.confirm_ingestion_job(job_id=job.job_id)
 while job.status not in ("completed", "completed_with_errors", "failed"):
     time.sleep(30)
     job = olira.get_ingestion_job(job_id=job.job_id)
-    eta = f"  ETA ~{job.estimated_seconds_remaining}s" if job.estimated_seconds_remaining else ""
-    print(f"{job.stage}  {job.progress_pct:.0f}%{eta}")
+    print(f"{job.stage}  {job.progress_pct:.0f}%")
 ```
 
 ### Quickstart — inline records (for smaller datasets, ≤ 50,000 records)
@@ -1882,7 +1885,7 @@ Patient and log records may appear in any order. The pipeline collects all patie
 - **File size limit: 100 MB.** `validate_ingestion_file()` and `create_ingestion_job()` both reject files larger than this before making any network call. The limit is configurable server-side; the SDK reads it from the upload URL response.
 - **For very large datasets (millions of rows), split into batches** of ~100k–500k records per job. This keeps the review window manageable and limits the blast radius if a job fails.
 - **Phase 1 (validate + insert)** typically takes seconds to a few minutes regardless of file size.
-- **Phase 2 (replay) runtime** scales with the number of patients and events: expect roughly 0.1–2 seconds per patient per log, depending on event complexity. A job with 10,000 patients and 50 logs each could take 1–3 hours. Use `estimated_seconds_remaining` in the poll loop to track progress.
+- **Phase 2 (replay) runtime** scales with the number of patients and events: expect roughly 0.1–2 seconds per patient per log, depending on event types. After Phase 1, `job.complexity` is one of `"simple"`, `"moderate"`, or `"heavy"` (AI pipeline load from event mix). A job with 10,000 patients and 50 logs each could take 1–3 hours — poll on `stage` and `progress_pct` rather than relying on a fixed duration.
 - **Webhooks are not currently supported.** Poll `get_ingestion_job()` every 10–30 seconds during Phase 1 and every 30–60 seconds during Phase 2.
 
 ### Local pre-flight validation
@@ -1935,11 +1938,11 @@ create_ingestion_job(
 
 | Parameter              | Required                | Type                 | Default | Description                                                                                                                                                                                                                                                                                            |
 | ---------------------- | ----------------------- | -------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `file`                 | One of `file`/`records` | `str`                | —       | Path to a JSONL file. SDK handles S3 upload. Max 100 MB — `ValidationError` raised before upload if exceeded. For larger datasets, split into multiple jobs.                                                                                                                                           |
+| `file`                 | One of `file`/`records` | `str`                | —       | Path to a JSONL file. SDK handles secure upload. Max 100 MB — `ValidationError` raised before upload if exceeded. For larger datasets, split into multiple jobs.                                                                                                                                      |
 | `records`              | One of `file`/`records` | `list[IngestRecord]` | —       | Inline records (≤ 50,000). For larger datasets use `file=`.                                                                                                                                                                                                                                            |
 | `idempotency_key`      | No                      | `str`                | `None`  | Prevents duplicate jobs on retry. Returns 409 if an active or successfully completed job with this key exists. If the previous job failed, a new job is created instead.                                                                                                                               |
 | `require_confirmation` | No                      | `bool`               | `True`  | Pause at `AWAITING_CONFIRMATION` for review before Phase 2. Set `False` to run straight through.                                                                                                                                                                                                       |
-| `rollback_on_cancel`   | No                      | `bool`               | `False` | Controls what happens to **patients** when the job is cancelled. STALE logs are **always** deleted on cancel regardless of this setting (an unprocessed STALE log with no future replay job is meaningless). Set `True` to also delete created patients on cancel.                                     |
+| `rollback_on_cancel`   | No                      | `bool`               | `False` | Controls what happens to **patients** when the job is cancelled. Logs that have not been replayed are **always** removed on cancel regardless of this setting. Set `True` to also delete patients created by this job; otherwise those patients are retained.                                          |
 | `summary_types`        | No                      | `list[str]`          | `None`  | Which view types to backfill in Phase 2. `None` = all view templates active for your org. Valid values are the `summary_type` identifiers on your org's active templates (e.g. `"emotional_state_snapshot"`, `"symptom_snapshot"`). You can update this via `patch_ingestion_job()` before confirming. |
 | `max_event_logs`       | No                      | `int`                | `None`  | **Per-patient** cap on the number of event logs considered during view backfill. Logs above the cap are skipped **for backfill only** — they are fully inserted and permanently stored. This is a cost-control knob for orgs with extremely log-dense patients. Omit for standard use.                 |
 
@@ -1954,7 +1957,7 @@ Poll the current status of a job.
 **Recommended polling cadence:**
 
 - Phase 1 (up to `AWAITING_CONFIRMATION`): every **10 seconds**
-- Phase 2 (`REPLAYING` / `BACKFILLING`): every **30–60 seconds** — replay is slow by design (sequential per patient to avoid state corruption). Use `estimated_seconds_remaining` to set user expectations.
+- Phase 2 (`REPLAYING` / `BACKFILLING`): every **30–60 seconds** — replay is slow by design (sequential per patient to avoid state corruption). Surface `stage` and `progress_pct` to operators; durations vary widely by volume and `complexity`.
 
 ### `list_ingestion_jobs`
 
@@ -1972,12 +1975,26 @@ Filter by `idempotency_key` to retrieve a specific job by the key you supplied a
 
 ### `confirm_ingestion_job`
 
+On **`OliraClient`** / **`AsyncOliraClient`** (recommended — full options):
+
 ```python
-confirm_ingestion_job(*, job_id: str) -> IngestionJob
+confirm_ingestion_job(
+    *,
+    job_id: str,
+    initialize_missing_templates: bool = False,
+    skip_backfill: bool = False,
+) -> IngestionJob
 ```
 
-Confirm a job in `AWAITING_CONFIRMATION` to trigger Phase 2 (graph replay + view backfill).
+Confirm a job in `AWAITING_CONFIRMATION` to trigger Phase 2 (graph replay + optional view backfill).
 Only available while the job is paused at `AWAITING_CONFIRMATION`.
+
+| Parameter                      | Description                                                                                                                                                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `initialize_missing_templates` | When `True`, the server initializes missing view slots on patients listed in `job.missing_template_slots` before backfill. Recommended when that map is non-empty at review time.                           |
+| `skip_backfill`                | When `True`, skip view generation after replay (replay-only import). The client updates the job, then confirms; safe to retry if the job already left the review gate.                                      |
+
+The module-level `olira.confirm_ingestion_job(job_id=...)` proxy confirms with defaults only (`initialize_missing_templates=False`, `skip_backfill=False`).
 
 > **Note:** Jobs in `AWAITING_CONFIRMATION` that are not acted on within 7 days are automatically cancelled.
 
@@ -1989,10 +2006,10 @@ cancel_ingestion_job(*, job_id: str) -> IngestionJob
 
 Cancel a job. Behaviour depends on the current status:
 
-- **`AWAITING_CONFIRMATION`** — immediate cleanup. STALE logs are always deleted. If `rollback_on_cancel=True` was set at job creation, created patients are also deleted; otherwise patients are retained.
+- **`AWAITING_CONFIRMATION`** — immediate cleanup. Unreplayed logs from the job are always removed. If `rollback_on_cancel=True` was set at job creation, patients created by the job are also deleted; otherwise those patients are retained.
 - **`REPLAYING` / `BACKFILLING`** — cooperative stop. The current patient finishes processing before the job stops. Already-replayed patients are **not** rolled back — their state and events persist permanently.
 
-> **STALE log cleanup:** Regardless of `rollback_on_cancel`, cancelling a job always deletes all STALE logs associated with it. An unprocessed STALE log has no replay job to process it and would occupy space indefinitely.
+> **Unreplayed logs:** Regardless of `rollback_on_cancel`, cancelling a job always removes logs that were staged but not yet replayed.
 
 ### `delete_ingestion_job_patient`
 
@@ -2000,19 +2017,29 @@ Cancel a job. Behaviour depends on the current status:
 delete_ingestion_job_patient(*, job_id: str, patient_id: str) -> None
 ```
 
-Remove a patient and their STALE logs while the job is `AWAITING_CONFIRMATION`.
+Remove a patient and their unreplayed logs while the job is `AWAITING_CONFIRMATION`.
 Useful when you spot a patient that was uploaded by mistake.
 Only allowed during the review window; once confirmed, patients are locked.
 
 ### `patch_ingestion_job`
 
+On **`OliraClient`** / **`AsyncOliraClient`**:
+
 ```python
-patch_ingestion_job(*, job_id: str, summary_types: list[str] | None = None) -> IngestionJob
+patch_ingestion_job(
+    *,
+    job_id: str,
+    summary_types: list[str] | None = None,
+    skip_backfill: bool | None = None,
+) -> IngestionJob
 ```
 
 Update mutable fields while the job is `AWAITING_CONFIRMATION`.
-Use this to change which view types are backfilled before confirming.
+Use `summary_types` to change which view types are backfilled before confirming.
+Use `skip_backfill=True` to persist replay-only mode on the job (or pass `skip_backfill=True` on `confirm_ingestion_job`, which PATCHes then confirms).
 Valid values for `summary_types` are the `summary_type` identifiers on your org's active templates.
+
+The module-level `olira.patch_ingestion_job(job_id=..., summary_types=...)` proxy supports `summary_types` only.
 
 ### `retry_view_backfill`
 
@@ -2020,9 +2047,78 @@ Valid values for `summary_types` are the `summary_type` identifiers on your org'
 retry_view_backfill(*, job_id: str) -> IngestionJob
 ```
 
-Retry a failed `ViewBackfillJob` on a `COMPLETED_WITH_ERRORS` job.
+Retry view backfill on a `COMPLETED_WITH_ERRORS` job.
 Patient and log data are fully intact — only view materialisation failed.
 Transitions the job back to `BACKFILLING`.
+
+### Querying validated and rejected rows
+
+After Phase 1 completes, you can page through the rows Olira stored for the job — validated (accepted) and rejected — without downloading the original file again. Available on **`OliraClient`** / **`AsyncOliraClient`** and as module-level proxies after `init()`.
+
+Requires import row querying to be enabled for your Olira environment (contact Olira if queries return HTTP 404).
+
+#### `query_ingestion_validated_rows`
+
+```python
+query_ingestion_validated_rows(
+    *,
+    job_id: str,
+    log_type: str | None = None,
+    day_from: str | None = None,
+    day_to: str | None = None,
+    patient_id: str | None = None,
+    line: int | None = None,
+    include_payload: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+) -> ZoneRowsResult
+```
+
+Filter accepted rows by event type, date range (`YYYY-MM-DD`), patient, or a single 1-indexed JSONL `line`. Set `include_payload=True` (or pass `line`) to include event payloads. `limit` is 1–1000 per page; use `offset` to paginate.
+
+#### `query_ingestion_rejected_rows`
+
+```python
+query_ingestion_rejected_rows(
+    *,
+    job_id: str,
+    code: str | None = None,
+    line: int | None = None,
+    include_raw: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+) -> ZoneRowsResult
+```
+
+Filter rejected rows by error `code` (e.g. `missing_patient`) or `line`. Set `include_raw=True` to include the original JSONL text for each reject.
+
+#### `get_ingestion_validated_line`
+
+```python
+get_ingestion_validated_line(*, job_id: str, line: int) -> dict[str, Any] | None
+```
+
+Convenience helper: returns the validated row dict for one JSONL line (with payload), or `None` if that line was not validated.
+
+#### `ZoneRowsResult`
+
+| Field           | Type                    | Description                          |
+| --------------- | ----------------------- | ------------------------------------ |
+| `columns`       | `list[str]`             | Column names in `rows`               |
+| `rows`          | `list[dict[str, Any]]`  | Result rows for the current page     |
+| `scanned_bytes` | `int`                   | Query cost indicator (platform metric) |
+
+```python
+# Page through all rejects for a job
+offset = 0
+while True:
+    page = olira.query_ingestion_rejected_rows(job_id=job.job_id, limit=500, offset=offset)
+    for row in page.rows:
+        print(row["line"], row["code"], row.get("message"))
+    if len(page.rows) < 500:
+        break
+    offset += 500
+```
 
 ### Job failure and retry
 
@@ -2030,9 +2126,11 @@ Two terminal error states exist with different recovery paths:
 
 #### `FAILED` — job did not complete
 
-Caused by validation failures (all rows invalid), a missing S3 file, or an unrecoverable system error during Stages 1–4.
+Caused by validation failures (all rows invalid), a missing or unreadable upload, or an unrecoverable error during Phase 1.
+Check `job.terminal_failure_reason` for a short machine-readable reason (for example, when every row failed validation).
+Row-level detail is in `error_summary` (first 100) and `error_count` (full total when present).
 
-**Data state:** STALE logs inserted before the failure remain in the database. Patient documents created in Stage 2 are retained. (`rollback_on_cancel` has no effect on `FAILED` jobs — it only applies to explicit cancellation.)
+**Data state:** Logs inserted before the failure may remain until you cancel or start a new job. Patients created during Phase 1 are retained. (`rollback_on_cancel` has no effect on `FAILED` jobs — it only applies to explicit cancellation.)
 
 **Recovery:** Submit a new job. Per-log `idempotency_key` dedup in the retry job skips any logs whose `event_id` already exists from the previous attempt — preventing duplicates. Patients from the failed job are upserted rather than re-created.
 
@@ -2048,7 +2146,7 @@ job = olira.create_ingestion_job(
 
 #### `COMPLETED_WITH_ERRORS` — data imported, views not materialised
 
-The patient data and logs are **fully intact and queryable**. Phase 2 replay completed but the view backfill (`ViewBackfillJob`) failed — typically because the org has no active view templates, or a transient error in the view generation pipeline.
+The patient data and logs are **fully intact and queryable**. Phase 2 replay completed but view backfill failed — typically because the org has no active view templates, or a transient error in the view generation pipeline.
 
 **Recovery:** Use `retry_view_backfill()` to re-run the backfill without re-ingesting any data.
 
@@ -2069,13 +2167,17 @@ To remediate: submit a new job containing only the failed patients' records. Per
 
 ### Working with `error_summary`
 
-`error_summary` is capped at 100 entries on the job document. If your file has more than 100 invalid rows, the remaining errors are not surfaced directly. **To handle large error volumes:**
+`error_summary` is a **preview** capped at 100 entries. **`error_count`** is the total number of failed rows when the API returns it (uncapped). When `error_count > len(error_summary)`, use the preview to fix patterns, then cancel and resubmit.
 
-1. Check `logs_failed` for the total failure count. If `logs_failed > len(error_summary)`, there are more errors than shown.
+**To handle large error volumes:**
+
+1. Read `error_count` (and `logs_failed`, which tracks insert/validation failures on the job counters).
 2. Fix the errors visible in `error_summary`, then cancel the job and resubmit with a corrected file (per-log `idempotency_key` dedup ensures already-valid rows are not re-inserted).
-3. Repeat until `logs_failed == 0` at `AWAITING_CONFIRMATION`.
+3. Repeat until `error_count == 0` (and `logs_failed == 0`) at `AWAITING_CONFIRMATION`.
 
-Most validation errors fall into a small number of categories (`missing_patient`, `invalid_log`, `unknown_record_type`). The first 100 are representative — fixing the root cause typically clears all instances of that error type.
+Most validation errors fall into a small number of categories (`missing_patient`, `invalid_log`, `unknown_record_type`, `missing_template_slot`). The first 100 are representative — fixing the root cause typically clears all instances of that error type.
+
+> **Many errors:** When `error_count` is larger than the preview in `error_summary`, use `query_ingestion_rejected_rows()` to page through all rejects programmatically, or open the import job in the **Olira Console** for the same data in the UI.
 
 ---
 
@@ -2098,10 +2200,17 @@ Most validation errors fall into a small number of categories (`missing_patient`
 | `logs_failed`                 | `int`                     | Logs that failed validation or insert                                                               |
 | `logs_by_event_type`          | `dict[str, int]`          | Inserted log count per event type                                                                   |
 | `patient_log_counts`          | `dict[str, int]`          | `patient_id → log count` for the review table                                                       |
+| `patient_event_type_counts`   | `dict[str, dict[str, int]]` | `patient_id → {event_type → count}` after log insert (Phase 1)                                  |
 | `patient_replay_statuses`     | `dict[str, str]`          | `patient_id → "pending"\|"completed"\|"failed"\|"skipped"`                                          |
-| `error_summary`               | `list[IngestionRowError]` | Per-row errors (capped at 100)                                                                      |
-| `estimated_seconds_remaining` | `int \| None`             | Rough ETA during REPLAYING                                                                          |
-| `view_backfill_job_id`        | `str \| None`             | ID of the associated `ViewBackfillJob`                                                              |
+| `error_summary`               | `list[IngestionRowError]` | Per-row errors (preview, capped at 100)                                                             |
+| `error_count`                 | `int`                     | Total failed rows when returned by the API (uncapped; `0` if omitted)                                 |
+| `terminal_failure_reason`     | `str \| None`             | Short reason when `status` is `failed`                                                              |
+| `missing_template_slots`      | `dict[str, list[str]]`    | `patient_id → [summary_type, …]` missing view slots at `AWAITING_CONFIRMATION`                      |
+| `complexity`                  | `str \| None`             | `"simple"` \| `"moderate"` \| `"heavy"` — AI pipeline load after Phase 1                            |
+| `tokens_used`                 | `int`                     | LLM tokens consumed during backfill (when applicable)                                               |
+| `cost_usd`                    | `float`                   | Estimated LLM cost during backfill (when applicable)                                                |
+| `started_at`                  | `str \| None`             | ISO 8601 when processing started                                                                    |
+| `view_backfill_job_id`        | `str \| None`             | Identifier of the view backfill run (when backfill is in progress or failed)                        |
 | `backfill_status`             | `str \| None`             | Current status of the nested backfill                                                               |
 | `backfill_progress_pct`       | `float \| None`           | Progress of the nested backfill                                                                     |
 | `created_at`                  | `str \| None`             | ISO 8601 creation time                                                                              |

@@ -55,8 +55,7 @@ def poll_until(client, job_id, target_statuses, interval=10, timeout=300):
     deadline = time.time() + timeout
     while time.time() < deadline:
         job = client.get_ingestion_job(job_id=job_id)
-        eta = f"  ETA ~{job.estimated_seconds_remaining}s" if job.estimated_seconds_remaining else ""
-        print(f"  [{job.status}] {job.progress_pct:.0f}%  {job.stage}{eta}")
+        print(f"  [{job.status}] {job.progress_pct:.0f}%  {job.stage}")
         if job.status in target_statuses:
             return job
         time.sleep(interval)

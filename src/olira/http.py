@@ -25,6 +25,7 @@ from .models import (
     ViewBlocksListResult,
     ViewRecentEventsResult,
     ViewResult,
+    ZoneRowsResult,
 )
 
 logger = logging.getLogger("olira")
@@ -329,6 +330,16 @@ class HttpTransport:
         raw = self._request("POST", f"/v1/ingestion/jobs/{job_id}/retry-backfill")
         return IngestionJob.model_validate(raw)
 
+    def query_ingestion_validated_rows(self, job_id: str, params: dict[str, Any]) -> ZoneRowsResult:
+        """Query validated import rows (GET /v1/ingestion/jobs/{job_id}/rows)."""
+        raw = self._request("GET", f"/v1/ingestion/jobs/{job_id}/rows", params=params)
+        return ZoneRowsResult.model_validate(raw)
+
+    def query_ingestion_rejected_rows(self, job_id: str, params: dict[str, Any]) -> ZoneRowsResult:
+        """Query rejected import rows (GET /v1/ingestion/jobs/{job_id}/rejected-rows)."""
+        raw = self._request("GET", f"/v1/ingestion/jobs/{job_id}/rejected-rows", params=params)
+        return ZoneRowsResult.model_validate(raw)
+
     def log_fhir(self, patient_id: str, resource: dict[str, Any]) -> BatchResult:
         """Submit a single FHIR R4 resource (POST /v1/fhir/resource). Requires sdk:event-log scope."""
         raw = self._request("POST", "/v1/fhir/resource", json={"patient_id": patient_id, "resource": resource})
@@ -487,6 +498,14 @@ class AsyncHttpTransport:
     async def retry_view_backfill(self, job_id: str) -> IngestionJob:
         raw = await self._request("POST", f"/v1/ingestion/jobs/{job_id}/retry-backfill")
         return IngestionJob.model_validate(raw)
+
+    async def query_ingestion_validated_rows(self, job_id: str, params: dict[str, Any]) -> ZoneRowsResult:
+        raw = await self._request("GET", f"/v1/ingestion/jobs/{job_id}/rows", params=params)
+        return ZoneRowsResult.model_validate(raw)
+
+    async def query_ingestion_rejected_rows(self, job_id: str, params: dict[str, Any]) -> ZoneRowsResult:
+        raw = await self._request("GET", f"/v1/ingestion/jobs/{job_id}/rejected-rows", params=params)
+        return ZoneRowsResult.model_validate(raw)
 
     async def log_fhir(self, patient_id: str, resource: dict[str, Any]) -> BatchResult:
         """Submit a single FHIR R4 resource (POST /v1/fhir/resource). Requires sdk:event-log scope."""

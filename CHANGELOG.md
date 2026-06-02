@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-06-02
+
+### Added
+
+- **Import job row queries** on `OliraClient`, `AsyncOliraClient`, and module-level proxies: `query_ingestion_validated_rows`, `query_ingestion_rejected_rows`, and `get_ingestion_validated_line` (paginated validated/rejected rows for a job).
+- **`ZoneRowsResult`** model for query responses.
+- **`IngestionJob`** Phase 2 status fields: `error_count`, `terminal_failure_reason`, `complexity`.
+
+> **Note:** Row query endpoints require import job querying to be enabled on your Olira environment. Merge and publish this release when your platform deployment includes that capability.
+
 ## [1.0.8] - 2026-05-27
 
 ### Changed

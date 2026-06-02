@@ -578,10 +578,14 @@ class IngestionJob(BaseModel):
             "Present at AWAITING_CONFIRMATION when affected patients exist."
         ),
     )
+    # Phase 2 job status: error_summary is capped (<=100); error_count is the full total.
+    error_count: int = 0
+    terminal_failure_reason: str | None = None
     estimated_seconds_remaining: int | None = None
     view_backfill_job_id: str | None = None
     backfill_status: str | None = None
     backfill_progress_pct: float | None = None
+    complexity: str | None = None
     tokens_used: int = 0
     cost_usd: float = 0.0
     created_at: str | None = None
@@ -594,6 +598,14 @@ class IngestionJobListResult(BaseModel):
 
     total: int
     jobs: list[IngestionJob] = Field(default_factory=list)
+
+
+class ZoneRowsResult(BaseModel):
+    """Paginated rows from an import job query (validated or rejected)."""
+
+    columns: list[str] = Field(default_factory=list)
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    scanned_bytes: int = 0
 
 
 @dataclass

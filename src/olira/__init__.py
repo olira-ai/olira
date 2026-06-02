@@ -51,6 +51,7 @@ from .models import (
     ViewMeta,
     ViewRecentEventsResult,
     ViewResult,
+    ZoneRowsResult,
 )
 from .validation import validate_ingestion_file, validate_ingestion_records
 from .version import __version__
@@ -550,3 +551,63 @@ def retry_view_backfill(*, job_id: str) -> IngestionJob:
     Requires sdk:historical-ingest scope.
     """
     return _get_client().retry_view_backfill(job_id=job_id)
+
+
+def query_ingestion_validated_rows(
+    *,
+    job_id: str,
+    log_type: str | None = None,
+    day_from: str | None = None,
+    day_to: str | None = None,
+    patient_id: str | None = None,
+    line: int | None = None,
+    include_payload: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+) -> ZoneRowsResult:
+    """Page validated rows for an import job. Module-level proxy.
+
+    Requires sdk:historical-ingest scope.
+    """
+    return _get_client().query_ingestion_validated_rows(
+        job_id=job_id,
+        log_type=log_type,
+        day_from=day_from,
+        day_to=day_to,
+        patient_id=patient_id,
+        line=line,
+        include_payload=include_payload,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def query_ingestion_rejected_rows(
+    *,
+    job_id: str,
+    code: str | None = None,
+    line: int | None = None,
+    include_raw: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+) -> ZoneRowsResult:
+    """Page rejected rows for an import job. Module-level proxy.
+
+    Requires sdk:historical-ingest scope.
+    """
+    return _get_client().query_ingestion_rejected_rows(
+        job_id=job_id,
+        code=code,
+        line=line,
+        include_raw=include_raw,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def get_ingestion_validated_line(*, job_id: str, line: int) -> dict[str, Any] | None:
+    """Return the validated row for a 1-indexed JSONL line. Module-level proxy.
+
+    Requires sdk:historical-ingest scope.
+    """
+    return _get_client().get_ingestion_validated_line(job_id=job_id, line=line)
