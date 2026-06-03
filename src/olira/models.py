@@ -58,6 +58,7 @@ class OliraLogType(StrEnum):
     ALLERGY_INTOLERANCE_REPORTED = "allergy_intolerance_reported"
     FAMILY_HISTORY_REPORTED = "family_history_reported"
     DEVICE_REPORTED = "device_reported"
+    CARE_ACTION_LOGGED = "care_action_logged"
     MEMORY_REPORT = "memory_report"
     UNSTRUCTURED_REPORT_RECEIVED = "unstructured_report_received"
 
@@ -111,66 +112,6 @@ class OliraTrace(BaseModel):
         description="Category of the linked object, e.g. 'conversation' or 'message'",
     )
     object_id: str | None = Field(default=None, description="Your identifier for the linked object")
-
-
-class EsasItem(BaseModel):
-    """Single ESAS-r symptom item (name + score 0–10).
-
-    Optional type, snomed_code, and meddra_code are used for server-side symptom matching.
-    """
-
-    name: str = Field(..., description="ESAS item name (display); not used for matching")
-    score: int = Field(..., ge=0, le=10, description="Score 0–10")
-    type: str | None = Field(
-        default=None,
-        description="Symptom type for matching when snomed_code and meddra_code unset (e.g. pain, nausea)",
-    )
-    snomed_code: str | None = Field(default=None, description="SNOMED CT code; first choice for matching")
-    meddra_code: str | None = Field(default=None, description="MedDRA code; used when snomed_code unset")
-
-
-class LabResultItem(BaseModel):
-    """One result item from lab_results_received.results[] (with or without LOINC).
-
-    At least one of loinc_code or test_name; at least one of value_numeric or value_string.
-    """
-
-    loinc_code: str | None = Field(
-        default=None,
-        description="LOINC code when available; test_name/specimen resolved server-side",
-    )
-    test_name: str | None = Field(default=None, description="Required when loinc_code not provided")
-    specimen_type: str | None = Field(default=None, description="Optional when no LOINC")
-    test_category: str | None = Field(default=None, description="e.g. hematology, metabolic, lipid")
-    value_numeric: float | None = Field(default=None, description="Quantitative result")
-    value_string: str | None = Field(default=None, description="Non-quantitative result")
-    unit: str = Field(default="", description="Unit of measure (prefer explicit e.g. g/dL)")
-    abnormal_flag: str | None = Field(default=None, description="H, L, N, HH, LL")
-    reference_range_low: float | None = None
-    reference_range_high: float | None = None
-    result_status: str | None = Field(default=None, description="final, preliminary, corrected")
-
-    @model_validator(mode="after")
-    def check_identifier_and_value(self) -> Self:
-        if not self.loinc_code and not self.test_name:
-            raise ValueError("at least one of loinc_code or test_name is required")
-        if self.value_numeric is None and self.value_string is None:
-            raise ValueError("at least one of value_numeric or value_string is required")
-        return self
-
-
-class PerformingLab(BaseModel):
-    """Performing lab from a lab_results_received envelope."""
-
-    name: str | None = Field(default=None)
-    clia_number: str | None = Field(default=None)
-
-
-class TimePeriod(BaseModel):
-    """Time range in ISO 8601 datetimes (start_datetime, end_datetime)."""
-
-    start_datetime: str
-    end_datetime: str
 
 
 @dataclass
