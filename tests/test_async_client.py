@@ -43,16 +43,14 @@ async def test_async_client_log_with_payload():
         async def aclose(self):
             pass
 
-    from olira import EsasItem
-
     transport = MockTransport()
     async with AsyncOliraClient(api_key="key", batch_size=10) as client:
         client._transport = transport
         payload = {
             "instrument": "esas_r",
             "symptoms": [
-                EsasItem(name="pain", score=3).model_dump(),
-                EsasItem(name="tiredness", score=2).model_dump(),
+                {"name": "pain", "score": 3},
+                {"name": "tiredness", "score": 2},
             ],
         }
         await client.log(
