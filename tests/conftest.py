@@ -6,9 +6,9 @@ import pytest
 @pytest.fixture(autouse=True)
 def reset_singleton():
     """Reset the module-level client so tests don't leak state."""
-    import olira
+    from olira import _module_api
 
-    old = olira._client
-    olira._client = None
+    old = _module_api._client
+    _module_api._client = None
     yield
-    olira._client = old
+    _module_api._client = old
