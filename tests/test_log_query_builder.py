@@ -477,7 +477,7 @@ def test_without_with_count_total_count_is_none():
 def test_with_count_chaining():
     t = MockTransport(rows=[], count=0, total_count=0)
     q = LogQuery(t, patient_id="p1").eq("type", "t").with_count().limit(100).offset(0)
-    result = q.execute()
+    q.execute()
     assert t.last_body["include_total"] is True
     assert t.last_body["limit"] == 100
 
