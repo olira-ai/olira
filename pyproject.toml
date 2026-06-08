@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "olira"
-version = "1.0.9"
+version = "1.1.0"
 description = "Olira Python SDK — event ingestion client for the Olira platform"
 readme = "README.md"
 requires-python = ">=3.11"
