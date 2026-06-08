@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.0.9`
+**Package:** `olira` — **Version:** `1.1.0`
 
 ## Related docs
 
@@ -29,7 +29,7 @@ Each API key carries one or more scopes. Assign only what your integration needs
 | `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, etc.  |
 | `sdk:patient-token`     | `get_patient_token()`                                             |
 | `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods           |
-| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, etc. methods |
+| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc. |
 | `mcp:patient-state`     | Query patient state via the MCP Patient State server              |
 
 ## Getting Started
@@ -973,6 +973,7 @@ All state-read functions require an API key with the `sdk:state-read` scope.
 | `get_view_block`           | `get_view_block`                      |
 | `get_view_recent_events`   | `get_view_recent_events`              |
 | `get_logs`                 | `get_logs`                            |
+| `logs` / `population_logs` | *(no MCP equivalent — SDK only)*      |
 | `get_events`               | `get_events`                          |
 | `read_memories`            | `read_memories` (list-all mode)       |
 
@@ -1376,6 +1377,202 @@ for entry in logs.logs:
 }
 ```
 
+---
+
+### Log query builder
+
+`get_logs()` is a simple time-cursor fetch. Use `logs()` / `population_logs()` when you need richer filtering, field projection, or server-side aggregation. Both return a `LogQuery` (or `AsyncLogQuery`) builder that compiles a DSL spec and POSTs it to the server — no client-side query evaluation.
+
+Requires `sdk:state-read` scope. Backend must be app-api ≥ 2.15.0.
+
+#### `logs`
+
+```python
+client.logs(patient_id: str) -> LogQuery
+```
+
+Returns a builder scoped to one patient. Chain methods then call a terminal.
+
+**Builder methods (all return `self` for chaining):**
+
+| Category | Method | Description |
+| --- | --- | --- |
+| **Filters** | `.eq(field, value)` | Exact match |
+| | `.neq(field, value)` | Not equal |
+| | `.gt / .gte / .lt / .lte` | Numeric / datetime comparisons |
+| | `.in_(field, values)` | Field value in list |
+| | `.nin(field, values)` | Field value not in list |
+| | `.like(field, pattern)` | Case-sensitive SQL-style pattern (`%`) |
+| | `.ilike(field, pattern)` | Case-insensitive pattern |
+| | `.is_(field, value)` | Null / boolean match |
+| | `.exists(field, present=True)` | Field presence check |
+| | `.contains(field, value)` | Array / string contains |
+| | `.or_(*conditions)` | OR group — pass `F(field).op(value)` expressions |
+| | `.and_(*conditions)` | AND group |
+| **Projection** | `.select(*paths, **aliases)` | Include only named paths; `alias=path` kwargs rename fields |
+| | `.select_array(path, *, where, element, first, alias)` | Array sub-field expansion |
+| **Ordering** | `.order(field, desc=False)` | Sort |
+| **Pagination** | `.limit(n)` | Max rows |
+| | `.offset(n)` | Skip rows |
+| | `.range(start, end)` | Inclusive slice (sets offset + limit) |
+| **Aggregation** | `.group_by(*fields)` | Group by field(s) |
+| | `.count_agg(alias)` | Count per group |
+| | `.sum / .avg / .min / .max(field, alias)` | Numeric aggregations |
+| | `.agg(op, field, alias=)` | Generic aggregation |
+
+**Allowed field roots:** `type`, `timestamp`, `trace`, `payload`. Any other root (e.g. `id`) returns HTTP 422 → `ValidationError`.
+
+**Terminals:**
+
+| Terminal | Returns | Behaviour |
+| --- | --- | --- |
+| `.execute()` | `LogQueryResult` | All matching rows |
+| `.count()` | `int` | Count only; sets `count:true` in the body, no rows returned |
+| `.single()` | `dict` | Exactly one row; `ValidationError` if 0 or > 1 |
+| `.maybe_single()` | `dict \| None` | Zero or one row; `ValidationError` if > 1 |
+| `.as_logs()` | `list[LogEntry]` | Execute and parse rows into typed `LogEntry`; only valid when no `.select()` was used |
+
+**Examples:**
+
+```python
+import olira
+from olira import F
+
+olira.init(api_key="YOUR_API_KEY")
+
+# Filter + order + limit
+rows = (
+    olira.logs("patient-uuid")
+        .eq("type", "symptom_report")
+        .gt("payload.score", 4)
+        .order("timestamp", desc=True)
+        .limit(25)
+        .execute()
+)
+for row in rows:
+    print(row["timestamp"], row["payload"])
+
+# ilike + IN
+rows = (
+    olira.logs("patient-uuid")
+        .ilike("payload.metric_type", "%pain%")
+        .in_("type", ["symptom_report", "health_metric_reported"])
+        .limit(10)
+        .execute()
+)
+
+# OR boolean group via F()
+rows = (
+    olira.logs("patient-uuid")
+        .or_(F("payload.score").gt(7), F("type").eq("mood_reported"))
+        .limit(10)
+        .execute()
+)
+
+# Projection with alias
+rows = (
+    olira.logs("patient-uuid")
+        .eq("type", "health_metric_reported")
+        .select("timestamp", score="payload.score")
+        .limit(10)
+        .execute()
+)
+
+# Count only
+n = olira.logs("patient-uuid").eq("type", "symptom_report").count()
+
+# Aggregation
+agg = (
+    olira.logs("patient-uuid")
+        .group_by("type")
+        .count_agg("n")
+        .avg("payload.score", "avg_score")
+        .execute()
+)
+
+# maybe_single — returns None if empty, raises if > 1 row
+row = (
+    olira.logs("patient-uuid")
+        .eq("type", "demographics_updated")
+        .order("timestamp", desc=True)
+        .limit(1)
+        .maybe_single()
+)
+```
+
+#### `population_logs`
+
+```python
+client.population_logs(patient_ids: list[str] | None = None) -> LogQuery
+```
+
+Returns a builder scoped to the whole organisation (`patient_ids=None`) or an explicit cohort. Posts to `POST /v1/state/logs/query`. All builder and terminal methods are identical to `logs()`.
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `patient_ids` | `list[str] \| None` | `None` | Cohort. `None` = whole org. Pass `[]` only if you intend an empty set. |
+
+**Examples:**
+
+```python
+# Whole org — recent health_metric_reported events
+rows = (
+    olira.population_logs()
+        .eq("type", "health_metric_reported")
+        .order("timestamp", desc=True)
+        .limit(50)
+        .execute()
+)
+
+# Explicit cohort
+rows = (
+    olira.population_logs(patient_ids=["pid-1", "pid-2"])
+        .gt("payload.score", 6)
+        .limit(100)
+        .execute()
+)
+
+# Org-wide aggregation
+agg = (
+    olira.population_logs()
+        .group_by("type")
+        .count_agg("n")
+        .execute()
+)
+```
+
+#### `F` — field expression helper
+
+`F(field)` builds sub-condition dicts for use inside `.or_()` / `.and_()`. Every operator method on `F` mirrors the corresponding `LogQuery` filter method.
+
+```python
+from olira import F
+
+# Inside an OR group:
+.or_(F("payload.score").gt(7), F("type").eq("mood_reported"))
+
+# Nested AND inside OR:
+.or_(
+    {"and": [F("type").eq("symptom_report"), F("payload.score").gt(6)]},
+    F("type").eq("lab_results_received"),
+)
+```
+
+`F` methods: `.eq`, `.neq`, `.gt`, `.gte`, `.lt`, `.lte`, `.in_`, `.nin`, `.like`, `.ilike`, `.is_`, `.exists`, `.contains` — each returns a condition dict.
+
+#### `AsyncLogQuery`
+
+`AsyncOliraClient.logs()` / `.population_logs()` return `AsyncLogQuery` with the same interface and `async def` terminals:
+
+```python
+async with AsyncOliraClient(api_key="YOUR_API_KEY") as client:
+    rows = await client.logs("patient-uuid").eq("type", "symptom_report").limit(10).execute()
+    n = await client.logs("patient-uuid").count()
+    row = await client.logs("patient-uuid").eq("type", "demographics_updated").maybe_single()
+```
+
+---
+
 #### `get_events`
 
 ```python
@@ -1554,6 +1751,27 @@ for m in memories.results:
 | `patient_id` | `str`            | Patient ID        |
 | `count`      | `int`            | Number of entries |
 | `logs`       | `list[LogEntry]` | Event log entries |
+
+### `LogQueryResult`
+
+Result of `LogQuery.execute()`. Iterable, indexable, and supports `len()`.
+
+| Field             | Type              | Description |
+| ----------------- | ----------------- | ----------- |
+| `count`           | `int`             | Total rows matched (or just the count when `count:true`). |
+| `rows`            | `list[dict]`      | Projected / raw log dicts. Empty when `.count()` terminal is used. |
+| `patient_id`      | `str \| None`     | Echo of the queried patient id. |
+| `organization_id` | `str \| None`     | Set on `population_logs()` queries. |
+
+`.as_logs() -> list[LogEntry]` — validates `rows` into typed `LogEntry` objects. Only valid when no `.select()` was used (projection makes the dict shape arbitrary).
+
+### `LogQuery` / `AsyncLogQuery`
+
+Builder classes returned by `client.logs(patient_id)` and `client.population_logs(patient_ids)`. Not constructed directly. See the [Log query builder](#log-query-builder) section above for all methods.
+
+### `F`
+
+Field expression helper for `.or_()` / `.and_()` conditions. Constructed as `F("field.path")`. Methods — `.eq`, `.neq`, `.gt`, `.gte`, `.lt`, `.lte`, `.in_`, `.nin`, `.like`, `.ilike`, `.is_`, `.exists`, `.contains` — each returns a condition dict accepted by the builder.
 
 ### `EventEntry`
 

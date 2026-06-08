@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-06-08
+
+### Added
+
+- `LogQuery` / `AsyncLogQuery` — fluent, chainable log query builder that compiles to the
+  `POST /v1/state/{patient_id}/logs/query` and `POST /v1/state/logs/query` DSL. Entry points: `olira.logs(patient_id)` and
+  `olira.population_logs(patient_ids)`.
+- Filter operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in_`, `nin`, `like`, `ilike`,
+  `is_`, `exists`, `contains` — plus `.or_()` / `.and_()` boolean groups.
+- Projection: `.select(*paths, **aliases)`, `.select_array()` for array sub-fields.
+- Aggregation: `.group_by()`, `.agg()`, `.count_agg()`, `.sum()`, `.avg()`, `.min()`, `.max()`.
+- Modifiers: `.order()`, `.limit()`, `.offset()`, `.range()`.
+- Terminals: `.execute() -> LogQueryResult`, `.count() -> int`, `.single()`, `.maybe_single()`.
+- `F(field)` expression helper for sub-conditions in `.or_()` / `.and_()`.
+- `LogQueryResult` model — iterable, supports `len()` and index access; `.as_logs()` returns
+  typed `list[LogEntry]` for no-projection queries.
+- Module-level `olira.logs()` / `olira.population_logs()` proxies (singleton-backed, same as
+  other module-level helpers).
+
 ## [1.0.9] - 2026-06-03
 
 ### Added
