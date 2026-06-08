@@ -98,7 +98,7 @@ olira.flush()  # block until delivery
 Send a batch directly and get back a result:
 
 ```python
-from olira import OliraClient, LogSpec, OliraLogType, EsasItem
+from olira import OliraClient, LogSpec, OliraLogType
 
 client = OliraClient(api_key="olira_prod_...")
 result = client.log_batch([
@@ -108,7 +108,7 @@ result = client.log_batch([
         patient_id=patient_id,
         payload={
             "instrument": "esas_r",
-            "symptoms": [EsasItem(name="pain", score=4).model_dump()],
+            "symptoms": [{"name": "pain", "score": 4}],
         },
     ),
 ])

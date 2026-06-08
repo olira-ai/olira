@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.0.8`
+**Package:** `olira` — **Version:** `1.0.9`
 
 ## Related docs
 
@@ -214,15 +214,6 @@ The trace is visible in the event log returned by `get_recent_event_logs` on the
 MCP Patient State server, so your agents can see exactly which conversation
 produced a given data point.
 
-### `TimePeriod`
-
-Time range in ISO 8601 datetimes (`start_datetime`, `end_datetime`).
-
-| Field            | Required | Type  | Description |
-| ---------------- | -------- | ----- | ----------- |
-| `start_datetime` | Yes      | `str` | —           |
-| `end_datetime`   | Yes      | `str` | —           |
-
 ### `OliraLogType`
 
 `StrEnum` of all supported log types. Use these constants as `log_type`
@@ -256,6 +247,7 @@ in `log()` and `log_batch()`.
 - `OliraLogType.ALLERGY_INTOLERANCE_REPORTED` → `"allergy_intolerance_reported"`
 - `OliraLogType.FAMILY_HISTORY_REPORTED` → `"family_history_reported"`
 - `OliraLogType.DEVICE_REPORTED` → `"device_reported"`
+- `OliraLogType.CARE_ACTION_LOGGED` → `"care_action_logged"`
 - `OliraLogType.MEMORY_REPORT` → `"memory_report"`
 - `OliraLogType.UNSTRUCTURED_REPORT_RECEIVED` → `"unstructured_report_received"`
 
@@ -1007,7 +999,7 @@ Get stable patient data (demographics, condition/diagnosis, medications, prefere
 | `patient_id` | Yes      | `str`               | —            |
 | `modules`    | No       | `list[str] \| None` | `None` (all) |
 
-Valid module names (`StableModuleType`): `demographics`, `condition_diagnosis`, `medications`, `user_preferences`, `emergency_contact`, `care_team`, `insurance`, `social`, `pharmacy`, `procedures`, `allergies`, `immunizations`, `devices`, `family_history`. Which are populated depends on what data has been ingested for this patient. Omit `modules` to fetch all.
+Valid module names (`StableModuleType`): `demographics`, `condition_diagnosis`, `medications`, `user_preferences`, `emergency_contact`, `care_team`, `insurance`, `social`, `pharmacy`, `procedures`, `allergies`, `immunizations`, `devices`, `family_history`, `treatment_phase`. Which are populated depends on what data has been ingested for this patient. Omit `modules` to fetch all.
 
 **Example:**
 
@@ -1103,7 +1095,7 @@ get_event_state_module(*, patient_id: str, module_type: str) -> EventStateModule
 
 Get a specific event state module by type. Mirrors `get_event_state_module` on the MCP.
 
-Valid module types (`EventStateModuleType`): `symptoms`, `emotional_state`, `adherence`, `physical_activity`, `engagement`, `heart`, `sleep`, `lab_results`, `vitals`, `clinical_context`, `questionnaires`, `conversations`, `glucose`. Use `list_event_state_modules()` to discover which are present and populated for a specific patient.
+Valid module types (`EventStateModuleType`): `symptoms`, `behavioral_state`, `adherence`, `physical_activity`, `engagement`, `heart`, `sleep`, `lab_results`, `vitals`, `clinical_context`, `questionnaires`, `conversations`, `glucose`, `alerts_and_tasks`. Use `list_event_state_modules()` to discover which are present and populated for a specific patient.
 
 **Example:**
 
@@ -1678,22 +1670,6 @@ olira.log(
     },
 )
 ```
-
-The `EsasItem` model is a typed helper for individual symptom entries — use it instead of plain dicts when you want validation:
-
-```python
-from olira import EsasItem
-
-payload = {
-    "instrument": "esas_r",
-    "symptoms": [
-        EsasItem(name="pain", score=4).model_dump(),
-        EsasItem(name="tiredness", score=6).model_dump(),
-    ],
-}
-```
-
-`EsasItem` validates that `score` is in range and `name` matches the catalog. Both forms produce identical wire JSON.
 
 ### `lab_results_received`
 

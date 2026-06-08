@@ -1,64 +1,17 @@
-"""Tests for log() wire format, log_batch(), and Pydantic payload helpers."""
+"""Tests for log() wire format and log_batch()."""
 
 import pytest
 
 from olira import (
     BatchError,
     BatchResult,
-    EsasItem,
-    LabResultItem,
     LogSpec,
     OliraClient,
     OliraEnv,
     OliraLogType,
     OliraTrace,
-    PerformingLab,
     ValidationError,
 )
-
-# --- Pydantic helper model tests ---
-
-
-def test_esas_item_valid():
-    item = EsasItem(name="pain", score=4)
-    assert item.name == "pain"
-    assert item.score == 4
-
-
-def test_esas_item_optional_type_and_codes():
-    """Optional type/snomed_code/meddra_code (common-models EsasSymptomItem shape) serialize to wire."""
-    item = EsasItem(name="pain", score=4, type="pain", snomed_code="222433008", meddra_code="10061472")
-    out = item.model_dump(mode="json")
-    assert out["name"] == "pain"
-    assert out["score"] == 4
-    assert out["type"] == "pain"
-    assert out["snomed_code"] == "222433008"
-    assert out["meddra_code"] == "10061472"
-
-
-def test_esas_item_score_out_of_range():
-    with pytest.raises(ValueError, match="greater than or equal to 0"):
-        EsasItem(name="pain", score=-1)
-    with pytest.raises(ValueError, match="less than or equal to 10"):
-        EsasItem(name="pain", score=11)
-
-
-def test_lab_result_item_requires_identifier():
-    with pytest.raises(ValueError, match="loinc_code or test_name"):
-        LabResultItem(unit="g/dL", value_numeric=10.0)
-
-
-def test_lab_result_item_requires_value():
-    with pytest.raises(ValueError, match="value_numeric or value_string"):
-        LabResultItem(loinc_code="718-7", unit="g/dL")
-
-
-def test_lab_result_item_valid():
-    item = LabResultItem(loinc_code="718-7", unit="g/dL", value_numeric=11.2)
-    assert item.loinc_code == "718-7"
-    assert item.unit == "g/dL"
-    assert item.value_numeric == 11.2
-
 
 # --- log() wire format tests ---
 
@@ -84,8 +37,8 @@ def test_log_symptom_report_wire_format():
     payload = {
         "instrument": "esas_r",
         "symptoms": [
-            EsasItem(name="pain", score=4).model_dump(),
-            EsasItem(name="nausea", score=2).model_dump(),
+            {"name": "pain", "score": 4},
+            {"name": "nausea", "score": 2},
         ],
     }
     client.log(
@@ -128,10 +81,9 @@ def test_log_with_trace():
 
 def test_log_lab_results_with_performing_lab():
     client, events_sent = _make_sync_client()
-    lab = PerformingLab(name="Acme Lab", clia_number="12D345678")
     payload = {
-        "results": [LabResultItem(loinc_code="718-7", unit="g/dL", value_numeric=12.0).model_dump(exclude_none=True)],
-        "performing_lab": lab.model_dump(exclude_none=True),
+        "results": [{"loinc_code": "718-7", "unit": "g/dL", "value_numeric": 12.0}],
+        "performing_lab": {"name": "Acme Lab", "clia_number": "12D345678"},
     }
     client.log(
         log_type=OliraLogType.LAB_RESULTS_RECEIVED,

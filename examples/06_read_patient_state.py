@@ -61,7 +61,7 @@ module_summaries = client.list_event_state_modules(patient_id=PATIENT_ID)
 print(f"  Present modules: {[m.module_type for m in module_summaries]}")
 
 # Fetch a specific module in full — adjust module_type to one that's present
-for preferred in ("symptoms", "emotional_state", "lab_results", "vitals"):
+for preferred in ("symptoms", "behavioral_state", "lab_results", "vitals"):
     if any(m.module_type == preferred for m in module_summaries):
         module = client.get_event_state_module(patient_id=PATIENT_ID, module_type=preferred)
         print(f"\n  {preferred} module:")
