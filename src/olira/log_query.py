@@ -210,6 +210,11 @@ class _BaseLogQuery:
     def max(self, field: str, alias: str) -> _BaseLogQuery:
         return self.agg("max", field, alias=alias)
 
+    def with_count(self) -> _BaseLogQuery:
+        """Include total_count and has_more in the response (one extra COUNT op server-side)."""
+        self._spec["include_total"] = True
+        return self
+
     # --- spec finalization ---
 
     def _build(self, *, count: bool = False) -> dict[str, Any]:

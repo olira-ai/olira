@@ -435,6 +435,8 @@ class LogQueryResult(BaseModel):
     rows: list[dict[str, Any]] = Field(default_factory=list)
     organization_id: str | None = None
     patient_id: str | None = None
+    total_count: int | None = None
+    has_more: bool | None = None
 
     def __iter__(self) -> Any:
         return iter(self.rows)

@@ -11,43 +11,65 @@ from olira.log_query import _OPS
 
 
 class MockTransport:
-    def __init__(self, rows=None, count=0):
+    def __init__(self, rows=None, count=0, total_count=None):
         self._rows = rows or []
         self._count = count
+        self._total_count = total_count
         self.last_patient_id: str | None = None
         self.last_body: dict = {}
         self.last_endpoint: str | None = None
+
+    def _make_result(self, body: dict) -> LogQueryResult:
+        if body.get("include_total") and self._total_count is not None:
+            offset = body.get("offset", 0)
+            has_more = (offset + len(self._rows)) < self._total_count
+            return LogQueryResult(
+                count=self._count, rows=self._rows,
+                total_count=self._total_count, has_more=has_more,
+            )
+        return LogQueryResult(count=self._count, rows=self._rows)
 
     def query_logs(self, patient_id: str, body: dict) -> LogQueryResult:
         self.last_patient_id = patient_id
         self.last_body = body
         self.last_endpoint = f"/v1/state/{patient_id}/logs/query"
-        return LogQueryResult(count=self._count, rows=self._rows)
+        return self._make_result(body)
 
     def query_population_logs(self, body: dict) -> LogQueryResult:
         self.last_body = body
         self.last_endpoint = "/v1/state/logs/query"
-        return LogQueryResult(count=self._count, rows=self._rows)
+        return self._make_result(body)
 
 
 class MockAsyncTransport:
-    def __init__(self, rows=None, count=0):
+    def __init__(self, rows=None, count=0, total_count=None):
         self._rows = rows or []
         self._count = count
+        self._total_count = total_count
         self.last_patient_id: str | None = None
         self.last_body: dict = {}
         self.last_endpoint: str | None = None
+
+    def _make_result(self, body: dict) -> LogQueryResult:
+        if body.get("include_total") and self._total_count is not None:
+            offset = body.get("offset", 0)
+            has_more = (offset + len(self._rows)) < self._total_count
+            return LogQueryResult(
+                count=self._count, rows=self._rows,
+                total_count=self._total_count, has_more=has_more,
+            )
+        return LogQueryResult(count=self._count, rows=self._rows)
 
     async def query_logs(self, patient_id: str, body: dict) -> LogQueryResult:
         self.last_patient_id = patient_id
         self.last_body = body
         self.last_endpoint = f"/v1/state/{patient_id}/logs/query"
-        return LogQueryResult(count=self._count, rows=self._rows)
+        return self._make_result(body)
 
     async def query_population_logs(self, body: dict) -> LogQueryResult:
         self.last_body = body
         self.last_endpoint = "/v1/state/logs/query"
-        return LogQueryResult(count=self._count, rows=self._rows)
+        return self._make_result(body)
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +431,71 @@ def test_transport_422_propagates_as_validation_error():
 
     with pytest.raises(ValidationError, match="invalid field path"):
         LogQuery(RaisingTransport(), patient_id="p1").eq("user_id", "x").execute()
+
+
+# ---------------------------------------------------------------------------
+# with_count / total_count / has_more
+# ---------------------------------------------------------------------------
+
+
+def test_with_count_sets_include_total_in_body():
+    t = MockTransport(rows=[{"id": "1"}], count=1, total_count=100)
+    LogQuery(t, patient_id="p1").eq("type", "t").with_count().execute()
+    assert t.last_body.get("include_total") is True
+
+
+def test_with_count_returns_total_count_and_has_more():
+    rows = [{"id": str(i)} for i in range(50)]
+    t = MockTransport(rows=rows, count=50, total_count=5000)
+    result = LogQuery(t, patient_id="p1").limit(50).with_count().execute()
+    assert result.total_count == 5000
+    assert result.has_more is True
+
+
+def test_has_more_false_on_last_page():
+    rows = [{"id": "1"}, {"id": "2"}]
+    t = MockTransport(rows=rows, count=2, total_count=52)
+    result = LogQuery(t, patient_id="p1").limit(50).offset(50).with_count().execute()
+    assert result.total_count == 52
+    assert result.has_more is False
+
+
+def test_has_more_false_when_all_rows_fit_in_one_page():
+    rows = [{"id": "1"}, {"id": "2"}]
+    t = MockTransport(rows=rows, count=2, total_count=2)
+    result = LogQuery(t, patient_id="p1").with_count().execute()
+    assert result.has_more is False
+
+
+def test_without_with_count_total_count_is_none():
+    t = MockTransport(rows=[{"id": "1"}], count=1)
+    result = LogQuery(t, patient_id="p1").execute()
+    assert result.total_count is None
+    assert result.has_more is None
+
+
+def test_with_count_chaining():
+    t = MockTransport(rows=[], count=0, total_count=0)
+    q = LogQuery(t, patient_id="p1").eq("type", "t").with_count().limit(100).offset(0)
+    result = q.execute()
+    assert t.last_body["include_total"] is True
+    assert t.last_body["limit"] == 100
+
+
+@pytest.mark.asyncio
+async def test_async_with_count():
+    rows = [{"id": str(i)} for i in range(50)]
+    t = MockAsyncTransport(rows=rows, count=50, total_count=5000)
+    result = await AsyncLogQuery(t, patient_id="p1").limit(50).with_count().execute()
+    assert result.total_count == 5000
+    assert result.has_more is True
+
+
+@pytest.mark.asyncio
+async def test_async_has_more_false_on_last_page():
+    t = MockAsyncTransport(rows=[{"id": "x"}], count=1, total_count=51)
+    result = await AsyncLogQuery(t, patient_id="p1").limit(50).offset(50).with_count().execute()
+    assert result.has_more is False
 
 
 # ---------------------------------------------------------------------------
