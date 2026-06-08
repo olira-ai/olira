@@ -11,6 +11,7 @@ import httpx
 from .exceptions import ValidationError
 from .http import AsyncHttpTransport, HttpTransport
 from .ingestion_confirm import confirm_ingestion_job_resilient, confirm_ingestion_job_resilient_async
+from .log_query import AsyncLogQuery, LogQuery
 from .models import (
     BatchResult,
     CreatePatientRequest,
@@ -396,6 +397,14 @@ class OliraClient:
         if trace_id:
             params["trace_id"] = trace_id
         return self._transport.get_logs(patient_id, params)
+
+    def logs(self, patient_id: str) -> LogQuery:
+        """Build a structured query over one patient's logs. Requires sdk:state-read."""
+        return LogQuery(self._transport, patient_id=patient_id)
+
+    def population_logs(self, patient_ids: list[str] | None = None) -> LogQuery:
+        """Build a structured query across the org (or a cohort). Requires sdk:state-read."""
+        return LogQuery(self._transport, patient_ids=patient_ids, population=True)
 
     def get_events(
         self,
@@ -1004,6 +1013,16 @@ class AsyncOliraClient:
         if trace_id:
             params["trace_id"] = trace_id
         return await transport.get_logs(patient_id, params)
+
+    def logs(self, patient_id: str) -> AsyncLogQuery:
+        """Build a structured query over one patient's logs. Requires sdk:state-read."""
+        transport = self._require_transport("logs")
+        return AsyncLogQuery(transport, patient_id=patient_id)
+
+    def population_logs(self, patient_ids: list[str] | None = None) -> AsyncLogQuery:
+        """Build a structured query across the org (or a cohort). Requires sdk:state-read."""
+        transport = self._require_transport("population_logs")
+        return AsyncLogQuery(transport, patient_ids=patient_ids, population=True)
 
     async def get_events(
         self,

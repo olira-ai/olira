@@ -11,6 +11,7 @@ from typing import Any
 
 from .client import DEFAULT_BASE_URL, OliraClient, OliraEnv
 from .exceptions import OliraError
+from .log_query import LogQuery
 from .models import (
     BatchResult,
     CreatePatientRequest,
@@ -463,3 +464,19 @@ def retry_view_backfill(*, job_id: str) -> IngestionJob:
     Requires sdk:historical-ingest scope.
     """
     return _get_client().retry_view_backfill(job_id=job_id)
+
+
+def logs(patient_id: str) -> LogQuery:
+    """Build a structured query over one patient's logs. Module-level proxy.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().logs(patient_id)
+
+
+def population_logs(patient_ids: list[str] | None = None) -> LogQuery:
+    """Build a structured query across the org (or a cohort). Module-level proxy.
+
+    Requires sdk:state-read scope.
+    """
+    return _get_client().population_logs(patient_ids)

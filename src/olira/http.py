@@ -14,6 +14,7 @@ from .models import (
     EventStateModuleResult,
     IngestionJob,
     IngestionJobListResult,
+    LogQueryResult,
     LogsResult,
     MemoriesResult,
     Patient,
@@ -271,6 +272,14 @@ class HttpTransport:
         raw = self._request("GET", f"/v1/state/{patient_id}/logs", params=params)
         return LogsResult.model_validate(raw)
 
+    def query_logs(self, patient_id: str, body: dict[str, Any]) -> LogQueryResult:
+        raw = self._request("POST", f"/v1/state/{patient_id}/logs/query", json=body)
+        return LogQueryResult.model_validate(raw)
+
+    def query_population_logs(self, body: dict[str, Any]) -> LogQueryResult:
+        raw = self._request("POST", "/v1/state/logs/query", json=body)
+        return LogQueryResult.model_validate(raw)
+
     def get_events(self, patient_id: str, params: dict[str, Any]) -> EventsResult:
         raw = self._request("GET", f"/v1/state/{patient_id}/events", params=params)
         return EventsResult.model_validate(raw)
@@ -439,6 +448,14 @@ class AsyncHttpTransport:
     async def get_logs(self, patient_id: str, params: dict[str, Any]) -> LogsResult:
         raw = await self._request("GET", f"/v1/state/{patient_id}/logs", params=params)
         return LogsResult.model_validate(raw)
+
+    async def query_logs(self, patient_id: str, body: dict[str, Any]) -> LogQueryResult:
+        raw = await self._request("POST", f"/v1/state/{patient_id}/logs/query", json=body)
+        return LogQueryResult.model_validate(raw)
+
+    async def query_population_logs(self, body: dict[str, Any]) -> LogQueryResult:
+        raw = await self._request("POST", "/v1/state/logs/query", json=body)
+        return LogQueryResult.model_validate(raw)
 
     async def get_events(self, patient_id: str, params: dict[str, Any]) -> EventsResult:
         raw = await self._request("GET", f"/v1/state/{patient_id}/events", params=params)

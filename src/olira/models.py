@@ -428,6 +428,28 @@ class LogsResult(BaseModel):
     logs: list[LogEntry] = Field(default_factory=list)
 
 
+class LogQueryResult(BaseModel):
+    """Result of LogQuery.execute(). Mirrors POST /v1/state/.../logs/query."""
+
+    count: int
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    organization_id: str | None = None
+    patient_id: str | None = None
+
+    def __iter__(self):  # type: ignore[override]
+        return iter(self.rows)
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __getitem__(self, i: int) -> dict[str, Any]:
+        return self.rows[i]
+
+    def as_logs(self) -> list["LogEntry"]:
+        """Validate rows into typed LogEntry. Only valid when no .select() was used."""
+        return [LogEntry.model_validate(r) for r in self.rows]
+
+
 class EventEntry(BaseModel):
     """One event returned by get_events()."""
 
