@@ -266,21 +266,21 @@ class AsyncLogQuery(_BaseLogQuery):
 
     _t: AsyncHttpTransport
 
-    async def _run(self, *, count: bool = False) -> LogQueryResult:  # type: ignore[override]
+    async def _run(self, *, count: bool = False) -> LogQueryResult:
         body = self._build(count=count)
         if not self._population:
             return await self._t.query_logs(self._patient_id or "", body)
         return await self._t.query_population_logs(body)
 
-    async def execute(self) -> LogQueryResult:  # type: ignore[override]
+    async def execute(self) -> LogQueryResult:
         """Execute the query and return all matching rows."""
         return await self._run()
 
-    async def count(self) -> int:  # type: ignore[override]
+    async def count(self) -> int:
         """Return only the total count."""
         return (await self._run(count=True)).count
 
-    async def single(self) -> dict[str, Any]:  # type: ignore[override]
+    async def single(self) -> dict[str, Any]:
         """Execute and assert exactly one row is returned."""
         if "limit" not in self._spec:
             self.limit(2)
@@ -289,7 +289,7 @@ class AsyncLogQuery(_BaseLogQuery):
             raise ValidationError(f"expected exactly one row, got {len(res)}")
         return res[0]
 
-    async def maybe_single(self) -> dict[str, Any] | None:  # type: ignore[override]
+    async def maybe_single(self) -> dict[str, Any] | None:
         """Execute and return one row or None; raises if more than one row is returned."""
         if "limit" not in self._spec:
             self.limit(2)
@@ -298,6 +298,6 @@ class AsyncLogQuery(_BaseLogQuery):
             raise ValidationError(f"expected at most one row, got {len(res)}")
         return res[0] if res else None
 
-    async def as_logs(self) -> list[LogEntry]:  # type: ignore[override]
+    async def as_logs(self) -> list[LogEntry]:
         """Execute and parse rows into typed LogEntry."""
         return (await self._run()).as_logs()

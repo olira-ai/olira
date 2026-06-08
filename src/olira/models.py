@@ -436,7 +436,7 @@ class LogQueryResult(BaseModel):
     organization_id: str | None = None
     patient_id: str | None = None
 
-    def __iter__(self):  # type: ignore[override]
+    def __iter__(self) -> Any:
         return iter(self.rows)
 
     def __len__(self) -> int:
