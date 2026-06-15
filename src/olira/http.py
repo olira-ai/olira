@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
@@ -40,6 +40,9 @@ from .models import (
     ViewRecentEventsResult,
     ViewResult,
 )
+
+if TYPE_CHECKING:
+    from .signals import SignalJob
 
 logger = logging.getLogger("olira")
 
@@ -142,6 +145,8 @@ class HttpTransport:
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         retryable: bool = True,
+        content: bytes | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Any:
         # retryable=False for non-idempotent calls (e.g. project create/duplicate):
         # replaying a POST whose response was lost could create a duplicate resource.
@@ -155,7 +160,9 @@ class HttpTransport:
             retry_after_seconds = 0
 
             try:
-                response = self._client.request(method, path, json=json, params=params)
+                response = self._client.request(
+                    method, path, json=json, params=params, content=content, headers=headers
+                )
             except (httpx.ConnectError, httpx.TimeoutException, httpx.ReadError) as e:
                 last_exception = NetworkError(str(e))
                 if attempt < max_retries:
@@ -489,6 +496,43 @@ class HttpTransport:
         """Submit a single FHIR R4 resource (POST /v1/fhir/resource). Requires sdk:event-log scope."""
         raw = self._request("POST", "/v1/fhir/resource", json={"patient_id": patient_id, "resource": resource})
         return BatchResult.model_validate(raw)
+
+    # ------------------------------------------------------------------
+    # Passive signal ingestion (requires sdk:event-log scope)
+    # ------------------------------------------------------------------
+
+    def send_signal_batch(self, *, params: dict[str, Any], content: bytes, headers: dict[str, str]) -> dict[str, Any]:
+        """Sync door: POST /v1/signals:batch with a Parquet body."""
+        return cast(
+            dict[str, Any],
+            self._request("POST", "/v1/signals:batch", params=params, content=content, headers=headers),
+        )
+
+    def get_signal_upload_urls(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Bulk door step 1: POST /v1/signals:upload-url."""
+        return cast(dict[str, Any], self._request("POST", "/v1/signals:upload-url", json=body))
+
+    def commit_signal_manifest(self, body: dict[str, Any]) -> "SignalJob":
+        """Bulk door step 2: POST /v1/signals:manifest (all-or-nothing commit)."""
+        from .signals import SignalJob  # noqa: PLC0415 - avoid import cycle
+
+        raw = self._request("POST", "/v1/signals:manifest", json=body)
+        return SignalJob.model_validate(raw)
+
+    def get_signal_job(self, job_id: str) -> "SignalJob":
+        """Poll a signal ingestion job (GET /v1/signals/jobs/{job_id})."""
+        from .signals import SignalJob  # noqa: PLC0415 - avoid import cycle
+
+        raw = self._request("GET", f"/v1/signals/jobs/{job_id}")
+        return SignalJob.model_validate(raw)
+
+    def put_presigned(self, url: str, blob: bytes) -> None:
+        """PUT bytes to a presigned S3 URL (heavy payloads never traverse the API)."""
+        response = httpx.put(url, content=blob, timeout=300)
+        if response.status_code >= 300:
+            raise ServerError(
+                f"Presigned upload failed (HTTP {response.status_code})", status_code=response.status_code
+            )
 
 
 class AsyncHttpTransport:
