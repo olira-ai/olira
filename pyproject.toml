@@ -36,12 +36,16 @@ Documentation = "https://docs.olira.ai"
 index-url = "https://pypi.org/simple"
 
 [project.optional-dependencies]
+signals = [
+    "pyarrow>=15.0",
+]
 dev = [
     "mypy>=1.0",
     "pytest>=7.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=4.0",
     "ruff>=0.5",
+    "pyarrow>=15.0",
 ]
 
 [tool.hatch.build.targets.wheel]
