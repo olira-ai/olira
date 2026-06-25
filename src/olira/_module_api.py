@@ -14,6 +14,12 @@ from .exceptions import OliraError
 from .log_query import LogQuery
 from .models import (
     BatchResult,
+    Cohort,
+    CohortDeleteResult,
+    CohortListResult,
+    CohortPatientMutationResult,
+    CohortTemplateAssignment,
+    CohortTemplatesResult,
     CreatePatientRequest,
     EventsResult,
     EventStateModuleResult,
@@ -480,3 +486,97 @@ def population_logs(patient_ids: list[str] | None = None) -> LogQuery:
     Requires sdk:state-read scope.
     """
     return _get_client().population_logs(patient_ids)
+
+
+# ---------------------------------------------------------------------------
+# Cohort management proxies (api:manage-patients scope)
+# ---------------------------------------------------------------------------
+
+
+def create_cohort(*, name: str, description: str | None = None) -> Cohort:
+    """Create a named patient cohort. Module-level proxy to the singleton client.
+
+    Requires an API key with the api:manage-patients scope. Returns a :class:`Cohort`
+    with an Olira-assigned ``id``. Names must be unique per organisation.
+    """
+    return _get_client().create_cohort(name=name, description=description)
+
+
+def list_cohorts() -> CohortListResult:
+    """List all cohorts in the organisation. Module-level proxy to the singleton client.
+
+    Requires an API key with the api:manage-patients scope.
+    """
+    return _get_client().list_cohorts()
+
+
+def get_cohort(*, cohort_id: str) -> Cohort:
+    """Get a cohort by id, including the full patient id list. Module-level proxy.
+
+    Requires an API key with the api:manage-patients scope.
+    """
+    return _get_client().get_cohort(cohort_id=cohort_id)
+
+
+def update_cohort(
+    *,
+    cohort_id: str,
+    name: str | None = None,
+    description: str | None = None,
+) -> Cohort:
+    """Update a cohort's name or description. Module-level proxy to the singleton client.
+
+    Requires an API key with the api:manage-patients scope.
+    Only supplied fields are changed; omitted fields are left as-is.
+    """
+    return _get_client().update_cohort(cohort_id=cohort_id, name=name, description=description)
+
+
+def delete_cohort(*, cohort_id: str) -> CohortDeleteResult:
+    """Permanently delete a cohort and all its template assignments. Module-level proxy.
+
+    Requires an API key with the api:manage-patients scope. Patient records are not affected.
+    """
+    return _get_client().delete_cohort(cohort_id=cohort_id)
+
+
+def add_patients_to_cohort(*, cohort_id: str, patient_ids: list[str]) -> CohortPatientMutationResult:
+    """Add patients to a cohort (max 500 per call). Module-level proxy.
+
+    Requires an API key with the api:manage-patients scope. Idempotent — patients already
+    in the cohort are silently skipped.
+    """
+    return _get_client().add_patients_to_cohort(cohort_id=cohort_id, patient_ids=patient_ids)
+
+
+def remove_patients_from_cohort(*, cohort_id: str, patient_ids: list[str]) -> CohortPatientMutationResult:
+    """Remove patients from a cohort (max 500 per call). Module-level proxy.
+
+    Requires an API key with the api:manage-patients scope.
+    """
+    return _get_client().remove_patients_from_cohort(cohort_id=cohort_id, patient_ids=patient_ids)
+
+
+def assign_cohort_template(*, cohort_id: str, summary_type: str) -> CohortTemplateAssignment:
+    """Assign a summary type to a cohort. Module-level proxy to the singleton client.
+
+    Requires an API key with the api:manage-patients scope. Snapshot documents for
+    existing cohort patients are seeded in the background.
+    """
+    return _get_client().assign_cohort_template(cohort_id=cohort_id, summary_type=summary_type)
+
+
+def unassign_cohort_template(*, cohort_id: str, summary_type: str) -> dict[str, Any]:
+    """Remove a summary type assignment from a cohort. Module-level proxy.
+
+    Requires an API key with the api:manage-patients scope.
+    """
+    return _get_client().unassign_cohort_template(cohort_id=cohort_id, summary_type=summary_type)
+
+
+def list_cohort_templates(*, cohort_id: str) -> CohortTemplatesResult:
+    """List all template assignments for a cohort. Module-level proxy.
+
+    Requires an API key with the api:manage-patients scope.
+    """
+    return _get_client().list_cohort_templates(cohort_id=cohort_id)

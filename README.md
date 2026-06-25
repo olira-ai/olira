@@ -1,6 +1,6 @@
 # Olira Python SDK
 
-Log ingestion, patient management, historical backfill, and patient state client for the Olira platform.
+Log ingestion, patient management, cohort management, historical backfill, and patient state client for the Olira platform.
 
 ## Install
 
@@ -23,7 +23,7 @@ All SDK methods authenticate with an **Olira API key** (`olira_prod_...`). Creat
 | Scope                     | What it unlocks                                        |
 | ------------------------- | ------------------------------------------------------ |
 | `sdk:event-log`           | Log events                                             |
-| `api:manage-patients`     | Create, read, update, delete patients                  |
+| `api:manage-patients`     | Create, read, update, delete patients and cohorts      |
 | `sdk:patient-token`       | Mint short-lived patient-scoped JWTs                   |
 | `sdk:historical-ingest`   | Create and manage historical data ingestion jobs       |
 | `sdk:state-read`          | Read Patient State (modules, views, logs, memories)    |
@@ -74,6 +74,41 @@ patient = client.update_patient(patient_id=patient_id, disease_stage="III")
 
 # Soft-delete
 client.delete_patient(patient_id=patient_id)
+```
+
+---
+
+## Cohort Management
+
+Group patients into named cohorts and assign summary templates to them. Requires the `api:manage-patients` scope.
+
+```python
+from olira import OliraClient
+
+client = OliraClient(api_key="olira_prod_...")
+
+# Create a cohort
+cohort = client.create_cohort(name="High-Risk Patients", description="Weekly review")
+cohort_id = cohort.id
+
+# Enrol patients (up to 500 per call, idempotent)
+client.add_patients_to_cohort(cohort_id=cohort_id, patient_ids=[patient_id])
+
+# Assign a summary type — patients in the cohort get this template
+client.assign_cohort_template(cohort_id=cohort_id, summary_type="symptom_overview")
+
+# List, get, update
+result = client.list_cohorts()
+cohort = client.get_cohort(cohort_id=cohort_id)
+client.update_cohort(cohort_id=cohort_id, description="Updated description")
+
+# Remove patients / unassign template
+client.remove_patients_from_cohort(cohort_id=cohort_id, patient_ids=[patient_id])
+client.unassign_cohort_template(cohort_id=cohort_id, summary_type="symptom_overview")
+
+# Delete (cascades template assignments; patient records are unaffected)
+client.delete_cohort(cohort_id=cohort_id)
+client.close()
 ```
 
 ---
@@ -274,6 +309,7 @@ Runnable scripts under `examples/`:
 | `05_logs_only_workflow.py` | Historical ingestion with log-only records when patients already exist in the org |
 | `06_read_patient_state.py` | Stable data, event modules, views, logs, memories |
 | `07_patient_token.py` | Mint token, MCP Bearer forwarding, `PatientSession` refresh helper |
+| `08_cohort_management.py` | Create cohorts, enrol patients, assign templates, full lifecycle |
 
 `06_read_patient_state.py` and `07_patient_token.py` require a patient with existing data — run `00_quickstart.py` or `02_event_logging.py` first and use the printed patient id. See [`examples/README.md`](examples/README.md) for setup instructions (`cp .env.example .env`, `uv sync`).
 

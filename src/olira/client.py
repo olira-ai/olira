@@ -14,6 +14,12 @@ from .ingestion_confirm import confirm_ingestion_job_resilient, confirm_ingestio
 from .log_query import AsyncLogQuery, LogQuery
 from .models import (
     BatchResult,
+    Cohort,
+    CohortDeleteResult,
+    CohortListResult,
+    CohortPatientMutationResult,
+    CohortTemplateAssignment,
+    CohortTemplatesResult,
     CreatePatientRequest,
     EventsResult,
     EventStateModuleResult,
@@ -301,6 +307,80 @@ class OliraClient:
     def delete_patient(self, *, patient_id: str) -> None:
         """Soft-delete a patient. Requires api:manage-patients scope."""
         self._transport.delete_patient(patient_id)
+
+    # ------------------------------------------------------------------
+    # Cohort management (api:manage-patients scope)
+    # ------------------------------------------------------------------
+
+    def create_cohort(self, *, name: str, description: str | None = None) -> Cohort:
+        """Create a named patient cohort. Requires api:manage-patients scope.
+
+        Names must be unique per organisation. Returns a :class:`Cohort` with an
+        Olira-assigned ``id`` — use it in all subsequent cohort calls.
+        """
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        return self._transport.create_cohort(body)
+
+    def list_cohorts(self) -> CohortListResult:
+        """List all cohorts in the organisation. Requires api:manage-patients scope."""
+        return self._transport.list_cohorts()
+
+    def get_cohort(self, *, cohort_id: str) -> Cohort:
+        """Get a cohort by id, including the full patient id list. Requires api:manage-patients scope."""
+        return self._transport.get_cohort(cohort_id)
+
+    def update_cohort(
+        self,
+        *,
+        cohort_id: str,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> Cohort:
+        """Update a cohort's name or description. Requires api:manage-patients scope.
+
+        Only supplied fields are changed; omitted fields are left as-is.
+        """
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        return self._transport.update_cohort(cohort_id, body)
+
+    def delete_cohort(self, *, cohort_id: str) -> CohortDeleteResult:
+        """Permanently delete a cohort and all its template assignments. Requires api:manage-patients scope.
+
+        Patient records are not affected.
+        """
+        return self._transport.delete_cohort(cohort_id)
+
+    def add_patients_to_cohort(self, *, cohort_id: str, patient_ids: list[str]) -> CohortPatientMutationResult:
+        """Add patients to a cohort (max 500 per call). Requires api:manage-patients scope.
+
+        Idempotent — patients already in the cohort are silently skipped.
+        """
+        return self._transport.add_patients_to_cohort(cohort_id, {"patient_ids": patient_ids})
+
+    def remove_patients_from_cohort(self, *, cohort_id: str, patient_ids: list[str]) -> CohortPatientMutationResult:
+        """Remove patients from a cohort (max 500 per call). Requires api:manage-patients scope."""
+        return self._transport.remove_patients_from_cohort(cohort_id, {"patient_ids": patient_ids})
+
+    def assign_cohort_template(self, *, cohort_id: str, summary_type: str) -> CohortTemplateAssignment:
+        """Assign a summary type to a cohort. Requires api:manage-patients scope.
+
+        Snapshot documents for existing cohort patients are seeded in the background.
+        """
+        return self._transport.assign_cohort_template(cohort_id, {"summary_type": summary_type})
+
+    def unassign_cohort_template(self, *, cohort_id: str, summary_type: str) -> dict[str, Any]:
+        """Remove a summary type assignment from a cohort. Requires api:manage-patients scope."""
+        return self._transport.unassign_cohort_template(cohort_id, summary_type)
+
+    def list_cohort_templates(self, *, cohort_id: str) -> CohortTemplatesResult:
+        """List all template assignments for a cohort. Requires api:manage-patients scope."""
+        return self._transport.list_cohort_templates(cohort_id)
 
     def get_patient_token(self, *, patient_id: str) -> PatientToken:
         """Mint a short-lived patient-scoped JWT. Requires sdk:patient-token scope.
@@ -904,6 +984,75 @@ class AsyncOliraClient:
                 "AsyncOliraClient must be used as an async context manager before calling delete_patient()"
             )
         await self._transport.delete_patient(patient_id)
+
+    # ------------------------------------------------------------------
+    # Cohort management (api:manage-patients scope)
+    # ------------------------------------------------------------------
+
+    async def create_cohort(self, *, name: str, description: str | None = None) -> Cohort:
+        """Create a named patient cohort. Requires api:manage-patients scope."""
+        t = self._require_transport("create_cohort")
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        return await t.create_cohort(body)
+
+    async def list_cohorts(self) -> CohortListResult:
+        """List all cohorts in the organisation. Requires api:manage-patients scope."""
+        return await self._require_transport("list_cohorts").list_cohorts()
+
+    async def get_cohort(self, *, cohort_id: str) -> Cohort:
+        """Get a cohort by id. Requires api:manage-patients scope."""
+        return await self._require_transport("get_cohort").get_cohort(cohort_id)
+
+    async def update_cohort(
+        self,
+        *,
+        cohort_id: str,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> Cohort:
+        """Update a cohort's name or description. Requires api:manage-patients scope."""
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        return await self._require_transport("update_cohort").update_cohort(cohort_id, body)
+
+    async def delete_cohort(self, *, cohort_id: str) -> CohortDeleteResult:
+        """Permanently delete a cohort and all its template assignments. Requires api:manage-patients scope."""
+        return await self._require_transport("delete_cohort").delete_cohort(cohort_id)
+
+    async def add_patients_to_cohort(self, *, cohort_id: str, patient_ids: list[str]) -> CohortPatientMutationResult:
+        """Add patients to a cohort (max 500 per call). Requires api:manage-patients scope."""
+        return await self._require_transport("add_patients_to_cohort").add_patients_to_cohort(
+            cohort_id, {"patient_ids": patient_ids}
+        )
+
+    async def remove_patients_from_cohort(
+        self, *, cohort_id: str, patient_ids: list[str]
+    ) -> CohortPatientMutationResult:
+        """Remove patients from a cohort (max 500 per call). Requires api:manage-patients scope."""
+        return await self._require_transport("remove_patients_from_cohort").remove_patients_from_cohort(
+            cohort_id, {"patient_ids": patient_ids}
+        )
+
+    async def assign_cohort_template(self, *, cohort_id: str, summary_type: str) -> CohortTemplateAssignment:
+        """Assign a summary type to a cohort. Requires api:manage-patients scope."""
+        return await self._require_transport("assign_cohort_template").assign_cohort_template(
+            cohort_id, {"summary_type": summary_type}
+        )
+
+    async def unassign_cohort_template(self, *, cohort_id: str, summary_type: str) -> dict[str, Any]:
+        """Remove a summary type assignment from a cohort. Requires api:manage-patients scope."""
+        return await self._require_transport("unassign_cohort_template").unassign_cohort_template(
+            cohort_id, summary_type
+        )
+
+    async def list_cohort_templates(self, *, cohort_id: str) -> CohortTemplatesResult:
+        """List all template assignments for a cohort. Requires api:manage-patients scope."""
+        return await self._require_transport("list_cohort_templates").list_cohort_templates(cohort_id)
 
     async def get_patient_token(self, *, patient_id: str) -> PatientToken:
         """Mint a short-lived patient-scoped JWT. Requires sdk:patient-token scope."""

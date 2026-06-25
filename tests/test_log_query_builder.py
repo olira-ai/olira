@@ -24,8 +24,10 @@ class MockTransport:
             offset = body.get("offset", 0)
             has_more = (offset + len(self._rows)) < self._total_count
             return LogQueryResult(
-                count=self._count, rows=self._rows,
-                total_count=self._total_count, has_more=has_more,
+                count=self._count,
+                rows=self._rows,
+                total_count=self._total_count,
+                has_more=has_more,
             )
         return LogQueryResult(count=self._count, rows=self._rows)
 
@@ -55,8 +57,10 @@ class MockAsyncTransport:
             offset = body.get("offset", 0)
             has_more = (offset + len(self._rows)) < self._total_count
             return LogQueryResult(
-                count=self._count, rows=self._rows,
-                total_count=self._total_count, has_more=has_more,
+                count=self._count,
+                rows=self._rows,
+                total_count=self._total_count,
+                has_more=has_more,
             )
         return LogQueryResult(count=self._count, rows=self._rows)
 
@@ -360,7 +364,8 @@ def test_as_logs_parses_into_log_entries():
     from olira import LogEntry
 
     result = LogQueryResult(
-        count=1, rows=[{"id": "x", "type": "health_metric_reported", "timestamp": "2026-01-01T00:00:00Z", "payload": {}}]
+        count=1,
+        rows=[{"id": "x", "type": "health_metric_reported", "timestamp": "2026-01-01T00:00:00Z", "payload": {}}],
     )
     entries = result.as_logs()
     assert len(entries) == 1

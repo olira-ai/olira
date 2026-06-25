@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.1.0`
+**Package:** `olira` — **Version:** `1.2.0`
 
 ## Related docs
 
@@ -26,7 +26,7 @@ Each API key carries one or more scopes. Assign only what your integration needs
 | Scope                   | What it unlocks                                                   |
 | ----------------------- | ----------------------------------------------------------------- |
 | `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                              |
-| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, etc.  |
+| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc. |
 | `sdk:patient-token`     | `get_patient_token()`                                             |
 | `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods           |
 | `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc. |
@@ -654,6 +654,210 @@ and expires after `expires_in` seconds (default 15 minutes).
 | `token_type`   | No       | `str`       | — (default: `'bearer'`) |
 | `expires_in`   | Yes      | `int`       | —                       |
 | `scopes`       | Yes      | `list[str]` | —                       |
+
+## Cohorts
+
+All cohort functions require an API key with `api:manage-patients` scope.
+
+Cohorts are named patient groups scoped to your organisation. Use them to assign summary types to a defined set of patients without touching individual records. Template assignments cascade to patients when they are added to a cohort, and to all existing cohort members when a template is assigned.
+
+---
+
+### `create_cohort`
+
+```python
+cohort = client.create_cohort(name="High-Risk Patients", description="Weekly review")
+# module-level: olira.create_cohort(name=..., description=...)
+```
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `str` | Yes | Display name. Must be unique per organisation (1–200 chars). |
+| `description` | `str \| None` | No | Optional free-text description. |
+
+**Returns** `Cohort` — `id`, `name`, `description`, `patient_ids`, `created_at`, `updated_at`.
+
+---
+
+### `list_cohorts`
+
+```python
+result = client.list_cohorts()
+for c in result.data:
+    print(c.id, c.name, c.patient_count, c.template_assignment_count)
+```
+
+**Returns** `CohortListResult` — `data: list[CohortListItem]`.
+
+`CohortListItem` fields: `id`, `name`, `description`, `patient_count`, `template_assignment_count`, `created_at`, `updated_at`.
+
+---
+
+### `get_cohort`
+
+```python
+cohort = client.get_cohort(cohort_id="...")
+print(cohort.patient_ids)
+```
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+
+**Returns** `Cohort` including the full `patient_ids` list.
+
+---
+
+### `update_cohort`
+
+```python
+cohort = client.update_cohort(cohort_id="...", description="New description")
+```
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+| `name` | `str \| None` | No | New display name. Must be unique per org. |
+| `description` | `str \| None` | No | New description. |
+
+Only supplied fields are changed. **Returns** `Cohort`.
+
+---
+
+### `delete_cohort`
+
+```python
+result = client.delete_cohort(cohort_id="...")
+print(result.deleted)  # True
+```
+
+Permanently deletes the cohort and all its template assignments. Patient records are not affected.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+
+**Returns** `CohortDeleteResult` — `deleted: bool`, `cohort_id: str`.
+
+---
+
+### `add_patients_to_cohort`
+
+```python
+result = client.add_patients_to_cohort(cohort_id="...", patient_ids=["pid1", "pid2"])
+print(result.patient_count)  # total enrolled after operation
+```
+
+Idempotent — patients already in the cohort are silently skipped. Max 500 per call.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+| `patient_ids` | `list[str]` | Yes | Olira patient ids to enrol (max 500). |
+
+**Returns** `CohortPatientMutationResult` — `cohort_id`, `patient_count`.
+
+---
+
+### `remove_patients_from_cohort`
+
+```python
+result = client.remove_patients_from_cohort(cohort_id="...", patient_ids=["pid1"])
+print(result.patient_count)  # total enrolled after operation
+```
+
+Max 500 per call. Patient records are not affected.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+| `patient_ids` | `list[str]` | Yes | Olira patient ids to remove (max 500). |
+
+**Returns** `CohortPatientMutationResult`.
+
+---
+
+### `assign_cohort_template`
+
+```python
+assignment = client.assign_cohort_template(cohort_id="...", summary_type="symptom_overview")
+print(assignment.template_id)
+```
+
+Assigns a summary type to the cohort. Snapshot documents for existing cohort patients are seeded in the background.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+| `summary_type` | `str` | Yes | Summary type slug (e.g. `symptom_overview`). |
+
+**Returns** `CohortTemplateAssignment` — `id`, `summary_type`, `template_id`, `cohort_id`, `assigned_at`.
+
+---
+
+### `unassign_cohort_template`
+
+```python
+result = client.unassign_cohort_template(cohort_id="...", summary_type="symptom_overview")
+print(result["deleted"])  # True
+```
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+| `summary_type` | `str` | Yes | Summary type slug to remove. |
+
+**Returns** `dict` — `{"deleted": True}`.
+
+---
+
+### `list_cohort_templates`
+
+```python
+result = client.list_cohort_templates(cohort_id="...")
+for t in result.data:
+    print(t.summary_type, t.assigned_at)
+```
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+
+**Returns** `CohortTemplatesResult` — `data: list[CohortTemplateAssignment]`.
+
+---
+
+### Cohort response models
+
+| Model | Fields |
+| --- | --- |
+| `Cohort` | `id`, `name`, `description`, `patient_ids`, `created_at`, `updated_at` |
+| `CohortListItem` | `id`, `name`, `description`, `patient_count`, `template_assignment_count`, `created_at`, `updated_at` |
+| `CohortListResult` | `data: list[CohortListItem]` |
+| `CohortPatientMutationResult` | `cohort_id`, `patient_count` |
+| `CohortTemplateAssignment` | `id`, `summary_type`, `template_id`, `cohort_id`, `assigned_at` |
+| `CohortTemplatesResult` | `data: list[CohortTemplateAssignment]` |
+| `CohortDeleteResult` | `deleted`, `cohort_id` |
+
+---
 
 ## Logs
 

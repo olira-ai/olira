@@ -10,6 +10,12 @@ import httpx
 from .exceptions import AuthError, NetworkError, RateLimitError, ServerError, ValidationError
 from .models import (
     BatchResult,
+    Cohort,
+    CohortDeleteResult,
+    CohortListResult,
+    CohortPatientMutationResult,
+    CohortTemplateAssignment,
+    CohortTemplatesResult,
     EventsResult,
     EventStateModuleResult,
     IngestionJob,
@@ -226,6 +232,56 @@ class HttpTransport:
         """Soft-delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope."""
         self._request("DELETE", f"/v1/patients/{patient_id}")
 
+    def create_cohort(self, body: dict[str, Any]) -> Cohort:
+        """Create a cohort (POST /v1/cohorts). Requires api:manage-patients scope."""
+        raw = self._request("POST", "/v1/cohorts", json=body)
+        return Cohort.model_validate(raw)
+
+    def list_cohorts(self) -> CohortListResult:
+        """List cohorts (GET /v1/cohorts). Requires api:manage-patients scope."""
+        raw = self._request("GET", "/v1/cohorts")
+        return CohortListResult.model_validate(raw)
+
+    def get_cohort(self, cohort_id: str) -> Cohort:
+        """Get a cohort by id (GET /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""
+        raw = self._request("GET", f"/v1/cohorts/{cohort_id}")
+        return Cohort.model_validate(raw)
+
+    def update_cohort(self, cohort_id: str, body: dict[str, Any]) -> Cohort:
+        """Update a cohort (PUT /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""
+        raw = self._request("PUT", f"/v1/cohorts/{cohort_id}", json=body)
+        return Cohort.model_validate(raw)
+
+    def delete_cohort(self, cohort_id: str) -> CohortDeleteResult:
+        """Delete a cohort (DELETE /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""
+        raw = self._request("DELETE", f"/v1/cohorts/{cohort_id}")
+        return CohortDeleteResult.model_validate(raw)
+
+    def add_patients_to_cohort(self, cohort_id: str, body: dict[str, Any]) -> CohortPatientMutationResult:
+        """Add patients to a cohort (POST /v1/cohorts/{cohort_id}/patients). Requires api:manage-patients scope."""
+        raw = self._request("POST", f"/v1/cohorts/{cohort_id}/patients", json=body)
+        return CohortPatientMutationResult.model_validate(raw)
+
+    def remove_patients_from_cohort(self, cohort_id: str, body: dict[str, Any]) -> CohortPatientMutationResult:
+        """Remove patients from a cohort (DELETE /v1/cohorts/{cohort_id}/patients). Requires api:manage-patients scope."""
+        raw = self._request("DELETE", f"/v1/cohorts/{cohort_id}/patients", json=body)
+        return CohortPatientMutationResult.model_validate(raw)
+
+    def assign_cohort_template(self, cohort_id: str, body: dict[str, Any]) -> CohortTemplateAssignment:
+        """Assign a template to a cohort (POST /v1/cohorts/{cohort_id}/templates). Requires api:manage-patients scope."""
+        raw = self._request("POST", f"/v1/cohorts/{cohort_id}/templates", json=body)
+        return CohortTemplateAssignment.model_validate(raw)
+
+    def unassign_cohort_template(self, cohort_id: str, summary_type: str) -> dict[str, Any]:
+        """Unassign a template from a cohort (DELETE /v1/cohorts/{cohort_id}/templates/{summary_type}). Requires api:manage-patients scope."""
+        raw: dict[str, Any] = self._request("DELETE", f"/v1/cohorts/{cohort_id}/templates/{summary_type}")
+        return raw
+
+    def list_cohort_templates(self, cohort_id: str) -> CohortTemplatesResult:
+        """List templates assigned to a cohort (GET /v1/cohorts/{cohort_id}/templates). Requires api:manage-patients scope."""
+        raw = self._request("GET", f"/v1/cohorts/{cohort_id}/templates")
+        return CohortTemplatesResult.model_validate(raw)
+
     def create_patients_batch(self, patients: list[dict[str, Any]]) -> PatientBatchResult:
         """Batch-create patients (POST /v1/patients/batch). Requires api:manage-patients scope."""
         raw = self._request("POST", "/v1/patients/batch", json={"patients": patients})
@@ -400,6 +456,56 @@ class AsyncHttpTransport:
     async def delete_patient(self, patient_id: str) -> None:
         """Soft-delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope."""
         await self._request("DELETE", f"/v1/patients/{patient_id}")
+
+    async def create_cohort(self, body: dict[str, Any]) -> Cohort:
+        """Create a cohort (POST /v1/cohorts). Requires api:manage-patients scope."""
+        raw = await self._request("POST", "/v1/cohorts", json=body)
+        return Cohort.model_validate(raw)
+
+    async def list_cohorts(self) -> CohortListResult:
+        """List cohorts (GET /v1/cohorts). Requires api:manage-patients scope."""
+        raw = await self._request("GET", "/v1/cohorts")
+        return CohortListResult.model_validate(raw)
+
+    async def get_cohort(self, cohort_id: str) -> Cohort:
+        """Get a cohort by id (GET /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""
+        raw = await self._request("GET", f"/v1/cohorts/{cohort_id}")
+        return Cohort.model_validate(raw)
+
+    async def update_cohort(self, cohort_id: str, body: dict[str, Any]) -> Cohort:
+        """Update a cohort (PUT /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""
+        raw = await self._request("PUT", f"/v1/cohorts/{cohort_id}", json=body)
+        return Cohort.model_validate(raw)
+
+    async def delete_cohort(self, cohort_id: str) -> CohortDeleteResult:
+        """Delete a cohort (DELETE /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""
+        raw = await self._request("DELETE", f"/v1/cohorts/{cohort_id}")
+        return CohortDeleteResult.model_validate(raw)
+
+    async def add_patients_to_cohort(self, cohort_id: str, body: dict[str, Any]) -> CohortPatientMutationResult:
+        """Add patients to a cohort (POST /v1/cohorts/{cohort_id}/patients). Requires api:manage-patients scope."""
+        raw = await self._request("POST", f"/v1/cohorts/{cohort_id}/patients", json=body)
+        return CohortPatientMutationResult.model_validate(raw)
+
+    async def remove_patients_from_cohort(self, cohort_id: str, body: dict[str, Any]) -> CohortPatientMutationResult:
+        """Remove patients from a cohort (DELETE /v1/cohorts/{cohort_id}/patients). Requires api:manage-patients scope."""
+        raw = await self._request("DELETE", f"/v1/cohorts/{cohort_id}/patients", json=body)
+        return CohortPatientMutationResult.model_validate(raw)
+
+    async def assign_cohort_template(self, cohort_id: str, body: dict[str, Any]) -> CohortTemplateAssignment:
+        """Assign a template to a cohort (POST /v1/cohorts/{cohort_id}/templates). Requires api:manage-patients scope."""
+        raw = await self._request("POST", f"/v1/cohorts/{cohort_id}/templates", json=body)
+        return CohortTemplateAssignment.model_validate(raw)
+
+    async def unassign_cohort_template(self, cohort_id: str, summary_type: str) -> dict[str, Any]:
+        """Unassign a template from a cohort (DELETE /v1/cohorts/{cohort_id}/templates/{summary_type}). Requires api:manage-patients scope."""
+        raw: dict[str, Any] = await self._request("DELETE", f"/v1/cohorts/{cohort_id}/templates/{summary_type}")
+        return raw
+
+    async def list_cohort_templates(self, cohort_id: str) -> CohortTemplatesResult:
+        """List templates assigned to a cohort (GET /v1/cohorts/{cohort_id}/templates). Requires api:manage-patients scope."""
+        raw = await self._request("GET", f"/v1/cohorts/{cohort_id}/templates")
+        return CohortTemplatesResult.model_validate(raw)
 
     async def create_patients_batch(self, patients: list[dict[str, Any]]) -> PatientBatchResult:
         """Batch-create patients (POST /v1/patients/batch). Requires api:manage-patients scope."""

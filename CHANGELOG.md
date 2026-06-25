@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-25
+
+### Added
+
+- **Cohort management** — 10 new methods on `OliraClient`, `AsyncOliraClient`, and module-level
+  API (all require `api:manage-patients` scope):
+  - `create_cohort(name, description)` → `Cohort`
+  - `list_cohorts()` → `CohortListResult`
+  - `get_cohort(cohort_id)` → `Cohort`
+  - `update_cohort(cohort_id, name, description)` → `Cohort`
+  - `delete_cohort(cohort_id)` → `CohortDeleteResult`
+  - `add_patients_to_cohort(cohort_id, patient_ids)` → `CohortPatientMutationResult`
+  - `remove_patients_from_cohort(cohort_id, patient_ids)` → `CohortPatientMutationResult`
+  - `assign_cohort_template(cohort_id, summary_type)` → `CohortTemplateAssignment`
+  - `unassign_cohort_template(cohort_id, summary_type)` → `dict`
+  - `list_cohort_templates(cohort_id)` → `CohortTemplatesResult`
+- New exported models: `Cohort`, `CohortListItem`, `CohortListResult`,
+  `CohortPatientMutationResult`, `CohortTemplateAssignment`, `CohortTemplatesResult`,
+  `CohortDeleteResult`.
+- Example script `examples/08_cohort_management.py` — full cohort lifecycle with patient
+  enrolment and template assignment.
+
 ## [1.1.0] - 2026-06-08
 
 ### Added

@@ -618,3 +618,67 @@ class IngestRecord(BaseModel):
                 "object_id": spec.trace.object_id,
             }
         return cls(type="log", data=data)
+
+
+# ---------------------------------------------------------------------------
+# Cohort models
+# ---------------------------------------------------------------------------
+
+
+class Cohort(BaseModel):
+    """A named patient cohort returned by create/get/update cohort operations."""
+
+    id: str
+    name: str
+    description: str | None = None
+    patient_ids: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class CohortListItem(BaseModel):
+    """Summary entry returned by list_cohorts()."""
+
+    id: str
+    name: str
+    description: str | None = None
+    patient_count: int = 0
+    template_assignment_count: int = 0
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class CohortListResult(BaseModel):
+    """Result of list_cohorts()."""
+
+    data: list[CohortListItem] = Field(default_factory=list)
+
+
+class CohortPatientMutationResult(BaseModel):
+    """Result of add_patients_to_cohort() and remove_patients_from_cohort()."""
+
+    cohort_id: str
+    patient_count: int
+
+
+class CohortTemplateAssignment(BaseModel):
+    """One template assignment returned by assign/list cohort template operations."""
+
+    id: str
+    summary_type: str
+    template_id: str
+    cohort_id: str
+    assigned_at: str | None = None
+
+
+class CohortTemplatesResult(BaseModel):
+    """Result of list_cohort_templates()."""
+
+    data: list[CohortTemplateAssignment] = Field(default_factory=list)
+
+
+class CohortDeleteResult(BaseModel):
+    """Result of delete_cohort()."""
+
+    deleted: bool
+    cohort_id: str
