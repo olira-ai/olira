@@ -25,6 +25,10 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 
+# Secrets
+.env
+examples/.env
+
 # IDEs
 .idea/
 .vscode/
