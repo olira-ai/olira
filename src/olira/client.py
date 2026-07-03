@@ -130,7 +130,7 @@ class OliraClient:
 
     def _emit(
         self,
-        log_type: OliraLogType,
+        log_type: OliraLogType | str,
         patient_id: str,
         payload: dict[str, Any],
         trace: OliraTrace | None = None,
@@ -138,7 +138,7 @@ class OliraClient:
         metadata: dict[str, Any] | None = None,
     ) -> None:
         event = _LogWire(
-            log_type=log_type.value,
+            log_type=str(log_type),
             patient_id=patient_id,
             payload=payload,
             metadata=metadata,
@@ -151,7 +151,7 @@ class OliraClient:
     def log(
         self,
         *,
-        log_type: OliraLogType,
+        log_type: OliraLogType | str,
         patient_id: str,
         payload: dict[str, Any] | None = None,
         trace: OliraTrace | None = None,
@@ -189,7 +189,7 @@ class OliraClient:
         wire_events: list[dict[str, Any]] = []
         for spec in events:
             event = _LogWire(
-                log_type=spec.log_type.value,
+                log_type=str(spec.log_type),
                 patient_id=spec.patient_id,
                 payload=spec.payload or {},
                 metadata=spec.metadata,
@@ -775,7 +775,7 @@ class AsyncOliraClient:
 
     def _emit(
         self,
-        log_type: OliraLogType,
+        log_type: OliraLogType | str,
         patient_id: str,
         payload: dict[str, Any],
         trace: OliraTrace | None = None,
@@ -783,7 +783,7 @@ class AsyncOliraClient:
         metadata: dict[str, Any] | None = None,
     ) -> None:
         event = _LogWire(
-            log_type=log_type.value,
+            log_type=str(log_type),
             patient_id=patient_id,
             payload=payload,
             metadata=metadata,
@@ -799,7 +799,7 @@ class AsyncOliraClient:
     async def log(
         self,
         *,
-        log_type: OliraLogType,
+        log_type: OliraLogType | str,
         patient_id: str,
         payload: dict[str, Any] | None = None,
         trace: OliraTrace | None = None,
@@ -842,7 +842,7 @@ class AsyncOliraClient:
         wire_events: list[dict[str, Any]] = []
         for spec in events:
             event = _LogWire(
-                log_type=spec.log_type.value,
+                log_type=str(spec.log_type),
                 patient_id=spec.patient_id,
                 payload=spec.payload or {},
                 metadata=spec.metadata,
