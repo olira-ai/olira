@@ -92,6 +92,96 @@ def test_validate_ingestion_records_rejects_invalid_trace():
     assert errors[0].code == "invalid_trace"
 
 
+def test_validate_ingestion_records_accepts_org_native_event_type():
+    records = [
+        IngestRecord(
+            type="log",
+            data={
+                "event_type": "myorg_custom_event",
+                "patient_id": "507f1f77bcf86cd799439011",
+                "timestamp": "2024-03-15T09:00:00Z",
+            },
+        )
+    ]
+    assert validate_ingestion_records(records) == []
+
+
+def test_validate_ingestion_records_flags_near_miss_platform_typo():
+    records = [
+        IngestRecord(
+            type="log",
+            data={
+                "event_type": "symptom_repor",
+                "patient_id": "507f1f77bcf86cd799439011",
+                "timestamp": "2024-03-15T09:00:00Z",
+            },
+        )
+    ]
+    errors = validate_ingestion_records(records)
+    assert len(errors) == 1
+    assert errors[0].code == "unknown_event_type"
+    assert "symptom_report" in errors[0].message
+
+
+def test_validate_ingestion_records_rejects_non_string_event_type():
+    records = [
+        IngestRecord(
+            type="log",
+            data={
+                "event_type": 12345,
+                "patient_id": "507f1f77bcf86cd799439011",
+                "timestamp": "2024-03-15T09:00:00Z",
+            },
+        )
+    ]
+    errors = validate_ingestion_records(records)
+    assert len(errors) == 1
+    assert errors[0].code == "invalid_event_type"
+
+
+def test_validate_ingestion_file_flags_near_miss_platform_typo(tmp_path: Path):
+    jsonl = tmp_path / "ingest.jsonl"
+    jsonl.write_text(
+        json.dumps(
+            {
+                "type": "log",
+                "data": {
+                    "event_type": "symptom_repor",
+                    "patient_id": "507f1f77bcf86cd799439011",
+                    "timestamp": "2024-03-15T09:00:00Z",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    errors = validate_ingestion_file(jsonl)
+    assert len(errors) == 1
+    assert errors[0].code == "unknown_event_type"
+    assert "symptom_report" in errors[0].message
+
+
+def test_validate_ingestion_file_rejects_non_string_event_type(tmp_path: Path):
+    jsonl = tmp_path / "ingest.jsonl"
+    jsonl.write_text(
+        json.dumps(
+            {
+                "type": "log",
+                "data": {
+                    "event_type": 12345,
+                    "patient_id": "507f1f77bcf86cd799439011",
+                    "timestamp": "2024-03-15T09:00:00Z",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    errors = validate_ingestion_file(jsonl)
+    assert len(errors) == 1
+    assert errors[0].code == "invalid_event_type"
+
+
 def test_validate_ingestion_file_accepts_trace(tmp_path: Path):
     jsonl = tmp_path / "ingest.jsonl"
     jsonl.write_text(

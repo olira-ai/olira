@@ -47,7 +47,9 @@ def _looks_org_native(et: str) -> bool:
     """
     if "@" in et:
         return True
-    return "_" in et and et not in _VALID_EVENT_TYPES
+    if et in _VALID_EVENT_TYPES:
+        return False
+    return "_" in et and _suggest(et) is None
 
 
 def _has_anchor(data: dict[str, Any]) -> bool:
@@ -220,7 +222,15 @@ def validate_ingestion_file(
             )
         else:
             et = data["event_type"]
-            if et not in _VALID_EVENT_TYPES and not _looks_org_native(et):
+            if not isinstance(et, str):
+                errors.append(
+                    IngestionRowError(
+                        line=line_num,
+                        code="invalid_event_type",
+                        message="Log record 'event_type' must be a string",
+                    )
+                )
+            elif et not in _VALID_EVENT_TYPES and not _looks_org_native(et):
                 suggestion = _suggest(et)
                 msg = f"Unknown event_type {et!r}"
                 if suggestion:
@@ -325,6 +335,14 @@ def validate_ingestion_records(records: list[IngestRecord]) -> list[IngestionRow
                 errors.append(
                     IngestionRowError(
                         line=i, code="missing_event_type", message="Log record must have an 'event_type' field"
+                    )
+                )
+            elif not isinstance(et, str):
+                errors.append(
+                    IngestionRowError(
+                        line=i,
+                        code="invalid_event_type",
+                        message="Log record 'event_type' must be a string",
                     )
                 )
             elif et not in _VALID_EVENT_TYPES and not _looks_org_native(et):
