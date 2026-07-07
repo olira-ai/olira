@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-07
+
+### Added
+
+- **`OliraLogType`** — added canonical noun-only members for every log type renamed by the
+  platform's OLI-1943 nomenclature change (e.g. `MOOD_REPORT`, `CONVERSATION`, `LAB_RESULTS`,
+  `CLINICAL_NOTE`, `CONTENT_INTERACTION`, `TASK_OUTCOME`, `DEMOGRAPHICS`, ...). The platform
+  accepts both the new and the old verb-suffixed values indefinitely, so existing deprecated
+  members (e.g. `MOODS_REPORT`, `CONVERSATION_COMPLETED`) are unchanged and continue to work;
+  new integrations should prefer the canonical member noted in each one's docstring/doc entry.
+
 ## [1.2.0] - 2026-06-25
 
 ### Added
