@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.2.0`
+**Package:** `olira` — **Version:** `1.3.0`
 
 ## Related docs
 
@@ -219,37 +219,42 @@ produced a given data point.
 `StrEnum` of all supported log types. Use these constants as `log_type`
 in `log()` and `log_batch()`.
 
+As of OLI-1943 the platform renamed most verb-suffixed subtypes to noun-only
+canonical names (e.g. `moods_report` → `mood_report`). The platform accepts
+both forms indefinitely, so the deprecated members below keep working — but
+new integrations should use the canonical name listed alongside each one.
+
 **Symptom reports**
 
 - `OliraLogType.SYMPTOM_REPORT` → `"symptom_report"`
 - `OliraLogType.SYMPTOM_FREE_TEXT` → `"symptom_free_text"`
 - `OliraLogType.SYMPTOM_DETAIL` → `"symptom_detail"`
-- `OliraLogType.MOODS_REPORT` → `"moods_report"`
-- `OliraLogType.FUNCTIONAL_CLASS_REPORTED` → `"functional_class_reported"`
-- `OliraLogType.HEALTH_METRIC_REPORTED` → `"health_metric_reported"`
+- `OliraLogType.MOOD_REPORT` → `"mood_report"` (deprecated alias: `MOODS_REPORT` → `"moods_report"`)
+- `OliraLogType.FUNCTIONAL_CLASS` → `"functional_class"` (deprecated alias: `FUNCTIONAL_CLASS_REPORTED` → `"functional_class_reported"`)
+- `OliraLogType.HEALTH_METRIC` → `"health_metric"` (deprecated alias: `HEALTH_METRIC_REPORTED` → `"health_metric_reported"`)
 
 **Lab & clinical**
 
-- `OliraLogType.LAB_RESULTS_RECEIVED` → `"lab_results_received"`
+- `OliraLogType.LAB_RESULTS` → `"lab_results"` (deprecated alias: `LAB_RESULTS_RECEIVED` → `"lab_results_received"`)
 - `OliraLogType.VITALS_MEASUREMENT` → `"vitals_measurement"`
-- `OliraLogType.CLINICAL_NOTE_RECEIVED` → `"clinical_note_received"`
-- `OliraLogType.CLINICAL_FINDING_REPORTED` → `"clinical_finding_reported"`
-- `OliraLogType.PROCEDURE_RESULT_RECEIVED` → `"procedure_result_received"`
-- `OliraLogType.PROCEDURE_PERFORMED` → `"procedure_performed"`
-- `OliraLogType.GENOMIC_VARIANT_REPORTED` → `"genomic_variant_reported"`
-- `OliraLogType.IMAGING_RESULT_RECEIVED` → `"imaging_result_received"`
-- `OliraLogType.CLINICAL_MEASUREMENT_REPORTED` → `"clinical_measurement_reported"`
-- `OliraLogType.TREATMENT_RESPONSE_ASSESSMENT_REPORTED` → `"treatment_response_assessment_reported"`
-- `OliraLogType.CLINICAL_PLAN_ITEM_REPORTED` → `"clinical_plan_item_reported"`
-- `OliraLogType.CARE_ENCOUNTER_REPORTED` → `"care_encounter_reported"`
-- `OliraLogType.CARE_GOAL_REPORTED` → `"care_goal_reported"`
-- `OliraLogType.IMMUNIZATION_REPORTED` → `"immunization_reported"`
-- `OliraLogType.ALLERGY_INTOLERANCE_REPORTED` → `"allergy_intolerance_reported"`
-- `OliraLogType.FAMILY_HISTORY_REPORTED` → `"family_history_reported"`
-- `OliraLogType.DEVICE_REPORTED` → `"device_reported"`
-- `OliraLogType.CARE_ACTION_LOGGED` → `"care_action_logged"`
+- `OliraLogType.CLINICAL_NOTE` → `"clinical_note"` (deprecated alias: `CLINICAL_NOTE_RECEIVED` → `"clinical_note_received"`)
+- `OliraLogType.CLINICAL_FINDING` → `"clinical_finding"` (deprecated alias: `CLINICAL_FINDING_REPORTED` → `"clinical_finding_reported"`)
+- `OliraLogType.PROCEDURE_RESULT` → `"procedure_result"` (deprecated alias: `PROCEDURE_RESULT_RECEIVED` → `"procedure_result_received"`)
+- `OliraLogType.PROCEDURE` → `"procedure"` (deprecated alias: `PROCEDURE_PERFORMED` → `"procedure_performed"`)
+- `OliraLogType.GENOMIC_VARIANT` → `"genomic_variant"` (deprecated alias: `GENOMIC_VARIANT_REPORTED` → `"genomic_variant_reported"`)
+- `OliraLogType.IMAGING_RESULT` → `"imaging_result"` (deprecated alias: `IMAGING_RESULT_RECEIVED` → `"imaging_result_received"`)
+- `OliraLogType.CLINICAL_MEASUREMENT` → `"clinical_measurement"` (deprecated alias: `CLINICAL_MEASUREMENT_REPORTED` → `"clinical_measurement_reported"`)
+- `OliraLogType.TREATMENT_RESPONSE_ASSESSMENT` → `"treatment_response_assessment"` (deprecated alias: `TREATMENT_RESPONSE_ASSESSMENT_REPORTED` → `"treatment_response_assessment_reported"`)
+- `OliraLogType.CLINICAL_PLAN_ITEM` → `"clinical_plan_item"` (deprecated alias: `CLINICAL_PLAN_ITEM_REPORTED` → `"clinical_plan_item_reported"`)
+- `OliraLogType.CARE_ENCOUNTER` → `"care_encounter"` (deprecated alias: `CARE_ENCOUNTER_REPORTED` → `"care_encounter_reported"`)
+- `OliraLogType.CARE_GOAL` → `"care_goal"` (deprecated alias: `CARE_GOAL_REPORTED` → `"care_goal_reported"`)
+- `OliraLogType.IMMUNIZATION` → `"immunization"` (deprecated alias: `IMMUNIZATION_REPORTED` → `"immunization_reported"`)
+- `OliraLogType.ALLERGY_INTOLERANCE` → `"allergy_intolerance"` (deprecated alias: `ALLERGY_INTOLERANCE_REPORTED` → `"allergy_intolerance_reported"`)
+- `OliraLogType.FAMILY_HISTORY` → `"family_history"` (deprecated alias: `FAMILY_HISTORY_REPORTED` → `"family_history_reported"`)
+- `OliraLogType.DEVICE` → `"device"` (deprecated alias: `DEVICE_REPORTED` → `"device_reported"`)
+- `OliraLogType.CARE_ACTION` → `"care_action"` (deprecated alias: `CARE_ACTION_LOGGED` → `"care_action_logged"`)
 - `OliraLogType.MEMORY_REPORT` → `"memory_report"`
-- `OliraLogType.UNSTRUCTURED_REPORT_RECEIVED` → `"unstructured_report_received"`
+- `OliraLogType.UNSTRUCTURED_REPORT` → `"unstructured_report"` (deprecated alias: `UNSTRUCTURED_REPORT_RECEIVED` → `"unstructured_report_received"`)
 
 **Questionnaires**
 
@@ -258,45 +263,45 @@ in `log()` and `log_batch()`.
 
 **Conversations**
 
-- `OliraLogType.CONVERSATION_COMPLETED` → `"conversation_completed"`
-- `OliraLogType.CONVERSATION_TURN_LOGGED` → `"conversation_turn_logged"`
+- `OliraLogType.CONVERSATION` → `"conversation"` (deprecated alias: `CONVERSATION_COMPLETED` → `"conversation_completed"`)
+- `OliraLogType.CONVERSATION_TURN` → `"conversation_turn"` (deprecated alias: `CONVERSATION_TURN_LOGGED` → `"conversation_turn_logged"`)
 
 **Passive data**
 
-- `OliraLogType.HEART_RATE_DATA_RECEIVED` → `"heart_rate_data_received"`
-- `OliraLogType.SLEEP_DATA_RECEIVED` → `"sleep_data_received"`
-- `OliraLogType.ACTIVITY_DATA_RECEIVED` → `"activity_data_received"`
-- `OliraLogType.CGM_READING_RECEIVED` → `"cgm_reading_received"`
-- `OliraLogType.SPO2_READING_RECEIVED` → `"spo2_reading_received"`
-- `OliraLogType.WEIGHT_MEASUREMENT_RECEIVED` → `"weight_measurement_received"`
+- `OliraLogType.HEART_RATE_DATA` → `"heart_rate_data"` (deprecated alias: `HEART_RATE_DATA_RECEIVED` → `"heart_rate_data_received"`)
+- `OliraLogType.SLEEP_DATA` → `"sleep_data"` (deprecated alias: `SLEEP_DATA_RECEIVED` → `"sleep_data_received"`)
+- `OliraLogType.ACTIVITY_DATA` → `"activity_data"` (deprecated alias: `ACTIVITY_DATA_RECEIVED` → `"activity_data_received"`)
+- `OliraLogType.CGM_READING` → `"cgm_reading"` (deprecated alias: `CGM_READING_RECEIVED` → `"cgm_reading_received"`)
+- `OliraLogType.SPO2_READING` → `"spo2_reading"` (deprecated alias: `SPO2_READING_RECEIVED` → `"spo2_reading_received"`)
+- `OliraLogType.WEIGHT_MEASUREMENT` → `"weight_measurement"` (deprecated alias: `WEIGHT_MEASUREMENT_RECEIVED` → `"weight_measurement_received"`)
 
 **Medications**
 
-- `OliraLogType.MEDICATION_ACTION` → `"medication_action"`
-- `OliraLogType.MEDICATION_DOSE_UPDATE` → `"medication_dose_update"`
-- `OliraLogType.MEDICATION_ADVERSE_EVENT_REPORTED` → `"medication_adverse_event_reported"`
+- `OliraLogType.MEDICATION_LIST_UPDATE` → `"medication_list_update"` (deprecated alias: `MEDICATION_ACTION` → `"medication_action"`)
+- `OliraLogType.MEDICATION_ADHERENCE` → `"medication_adherence"` (deprecated alias: `MEDICATION_DOSE_UPDATE` → `"medication_dose_update"`)
+- `OliraLogType.MEDICATION_ADVERSE_EVENT` → `"medication_adverse_event"` (deprecated alias: `MEDICATION_ADVERSE_EVENT_REPORTED` → `"medication_adverse_event_reported"`)
 
 **Engagement**
 
 - `OliraLogType.USER_LOGIN` → `"user_login"`
 - `OliraLogType.USER_LOGOUT` → `"user_logout"`
-- `OliraLogType.CONTENT_INTERACTED` → `"content_interacted"`
-- `OliraLogType.NOTIFICATION_INTERACTED` → `"notification_interacted"`
-- `OliraLogType.TASK_UPDATED` → `"task_updated"`
+- `OliraLogType.CONTENT_INTERACTION` → `"content_interaction"` (deprecated alias: `CONTENT_INTERACTED` → `"content_interacted"`)
+- `OliraLogType.NOTIFICATION_INTERACTION` → `"notification_interaction"` (deprecated alias: `NOTIFICATION_INTERACTED` → `"notification_interacted"`)
+- `OliraLogType.TASK_OUTCOME` → `"task_outcome"` (deprecated alias: `TASK_UPDATED` → `"task_updated"`)
 - `OliraLogType.INTERACTION_FEEDBACK` → `"interaction_feedback"`
-- `OliraLogType.FEATURE_USED` → `"feature_used"`
+- `OliraLogType.FEATURE_USAGE` → `"feature_usage"` (deprecated alias: `FEATURE_USED` → `"feature_used"`)
 
 **Profile**
 
-- `OliraLogType.DEMOGRAPHICS_UPDATED` → `"demographics_updated"`
-- `OliraLogType.CONDITION_RECORDED` → `"condition_recorded"`
-- `OliraLogType.PREFERENCES_UPDATED` → `"preferences_updated"`
-- `OliraLogType.EMERGENCY_CONTACT_UPDATED` → `"emergency_contact_updated"`
-- `OliraLogType.CARE_TEAM_UPDATED` → `"care_team_updated"`
-- `OliraLogType.INSURANCE_UPDATED` → `"insurance_updated"`
-- `OliraLogType.SOCIAL_UPDATED` → `"social_updated"`
-- `OliraLogType.PHARMACY_UPDATED` → `"pharmacy_updated"`
-- `OliraLogType.TREATMENT_PHASE_CHANGED` → `"treatment_phase_changed"`
+- `OliraLogType.DEMOGRAPHICS` → `"demographics"` (deprecated alias: `DEMOGRAPHICS_UPDATED` → `"demographics_updated"`)
+- `OliraLogType.CONDITION` → `"condition"` (deprecated alias: `CONDITION_RECORDED` → `"condition_recorded"`)
+- `OliraLogType.PREFERENCES` → `"preferences"` (deprecated alias: `PREFERENCES_UPDATED` → `"preferences_updated"`)
+- `OliraLogType.EMERGENCY_CONTACT` → `"emergency_contact"` (deprecated alias: `EMERGENCY_CONTACT_UPDATED` → `"emergency_contact_updated"`)
+- `OliraLogType.CARE_TEAM` → `"care_team"` (deprecated alias: `CARE_TEAM_UPDATED` → `"care_team_updated"`)
+- `OliraLogType.INSURANCE` → `"insurance"` (deprecated alias: `INSURANCE_UPDATED` → `"insurance_updated"`)
+- `OliraLogType.SOCIAL_DETERMINANTS` → `"social_determinants"` (deprecated alias: `SOCIAL_UPDATED` → `"social_updated"`)
+- `OliraLogType.PHARMACY` → `"pharmacy"` (deprecated alias: `PHARMACY_UPDATED` → `"pharmacy_updated"`)
+- `OliraLogType.TREATMENT_PHASE` → `"treatment_phase"` (deprecated alias: `TREATMENT_PHASE_CHANGED` → `"treatment_phase_changed"`)
 
 ## Patients
 

@@ -32,70 +32,130 @@ def _validate_patient_id(value: str) -> str:
 
 
 class OliraLogType(StrEnum):
-    """Customer-facing log types. Values match the platform log catalog."""
+    """Customer-facing log types. Values match the platform log catalog.
+
+    As of OLI-1943, the platform renamed most verb-suffixed subtypes (e.g.
+    ``moods_report``, ``conversation_completed``) to noun-only canonical names
+    (e.g. ``mood_report``, ``conversation``). Both forms are accepted by the
+    platform indefinitely, so members marked "deprecated" below are kept for
+    backwards compatibility and are safe to keep using — but new integrations
+    should prefer the canonical member listed in each deprecation note.
+    """
 
     SYMPTOM_REPORT = "symptom_report"
     SYMPTOM_FREE_TEXT = "symptom_free_text"
     SYMPTOM_DETAIL = "symptom_detail"
-    MOODS_REPORT = "moods_report"
-    FUNCTIONAL_CLASS_REPORTED = "functional_class_reported"
-    HEALTH_METRIC_REPORTED = "health_metric_reported"
+    MOODS_REPORT = "moods_report"  # deprecated: use MOOD_REPORT
+    FUNCTIONAL_CLASS_REPORTED = "functional_class_reported"  # deprecated: use FUNCTIONAL_CLASS
+    HEALTH_METRIC_REPORTED = "health_metric_reported"  # deprecated: use HEALTH_METRIC
 
-    LAB_RESULTS_RECEIVED = "lab_results_received"
+    LAB_RESULTS_RECEIVED = "lab_results_received"  # deprecated: use LAB_RESULTS
     VITALS_MEASUREMENT = "vitals_measurement"
-    CLINICAL_NOTE_RECEIVED = "clinical_note_received"
-    CLINICAL_FINDING_REPORTED = "clinical_finding_reported"
-    PROCEDURE_RESULT_RECEIVED = "procedure_result_received"
-    PROCEDURE_PERFORMED = "procedure_performed"
-    GENOMIC_VARIANT_REPORTED = "genomic_variant_reported"
-    IMAGING_RESULT_RECEIVED = "imaging_result_received"
-    CLINICAL_MEASUREMENT_REPORTED = "clinical_measurement_reported"
-    TREATMENT_RESPONSE_ASSESSMENT_REPORTED = "treatment_response_assessment_reported"
-    CLINICAL_PLAN_ITEM_REPORTED = "clinical_plan_item_reported"
-    CARE_ENCOUNTER_REPORTED = "care_encounter_reported"
-    CARE_GOAL_REPORTED = "care_goal_reported"
-    IMMUNIZATION_REPORTED = "immunization_reported"
-    ALLERGY_INTOLERANCE_REPORTED = "allergy_intolerance_reported"
-    FAMILY_HISTORY_REPORTED = "family_history_reported"
-    DEVICE_REPORTED = "device_reported"
-    CARE_ACTION_LOGGED = "care_action_logged"
+    CLINICAL_NOTE_RECEIVED = "clinical_note_received"  # deprecated: use CLINICAL_NOTE
+    CLINICAL_FINDING_REPORTED = "clinical_finding_reported"  # deprecated: use CLINICAL_FINDING
+    PROCEDURE_RESULT_RECEIVED = "procedure_result_received"  # deprecated: use PROCEDURE_RESULT
+    PROCEDURE_PERFORMED = "procedure_performed"  # deprecated: use PROCEDURE
+    GENOMIC_VARIANT_REPORTED = "genomic_variant_reported"  # deprecated: use GENOMIC_VARIANT
+    IMAGING_RESULT_RECEIVED = "imaging_result_received"  # deprecated: use IMAGING_RESULT
+    CLINICAL_MEASUREMENT_REPORTED = "clinical_measurement_reported"  # deprecated: use CLINICAL_MEASUREMENT
+    TREATMENT_RESPONSE_ASSESSMENT_REPORTED = (
+        "treatment_response_assessment_reported"  # deprecated: use TREATMENT_RESPONSE_ASSESSMENT
+    )
+    CLINICAL_PLAN_ITEM_REPORTED = "clinical_plan_item_reported"  # deprecated: use CLINICAL_PLAN_ITEM
+    CARE_ENCOUNTER_REPORTED = "care_encounter_reported"  # deprecated: use CARE_ENCOUNTER
+    CARE_GOAL_REPORTED = "care_goal_reported"  # deprecated: use CARE_GOAL
+    IMMUNIZATION_REPORTED = "immunization_reported"  # deprecated: use IMMUNIZATION
+    ALLERGY_INTOLERANCE_REPORTED = "allergy_intolerance_reported"  # deprecated: use ALLERGY_INTOLERANCE
+    FAMILY_HISTORY_REPORTED = "family_history_reported"  # deprecated: use FAMILY_HISTORY
+    DEVICE_REPORTED = "device_reported"  # deprecated: use DEVICE
+    CARE_ACTION_LOGGED = "care_action_logged"  # deprecated: use CARE_ACTION
     MEMORY_REPORT = "memory_report"
-    UNSTRUCTURED_REPORT_RECEIVED = "unstructured_report_received"
+    UNSTRUCTURED_REPORT_RECEIVED = "unstructured_report_received"  # deprecated: use UNSTRUCTURED_REPORT
 
     QUESTIONNAIRE_RESPONSE = "questionnaire_response"
     QUESTIONNAIRE_ITEM_RESPONSE = "questionnaire_item_response"
 
-    CONVERSATION_COMPLETED = "conversation_completed"
-    CONVERSATION_TURN_LOGGED = "conversation_turn_logged"
+    CONVERSATION_COMPLETED = "conversation_completed"  # deprecated: use CONVERSATION
+    CONVERSATION_TURN_LOGGED = "conversation_turn_logged"  # deprecated: use CONVERSATION_TURN
 
-    HEART_RATE_DATA_RECEIVED = "heart_rate_data_received"
-    SLEEP_DATA_RECEIVED = "sleep_data_received"
-    ACTIVITY_DATA_RECEIVED = "activity_data_received"
-    CGM_READING_RECEIVED = "cgm_reading_received"
-    SPO2_READING_RECEIVED = "spo2_reading_received"
-    WEIGHT_MEASUREMENT_RECEIVED = "weight_measurement_received"
+    HEART_RATE_DATA_RECEIVED = "heart_rate_data_received"  # deprecated: use HEART_RATE_DATA
+    SLEEP_DATA_RECEIVED = "sleep_data_received"  # deprecated: use SLEEP_DATA
+    ACTIVITY_DATA_RECEIVED = "activity_data_received"  # deprecated: use ACTIVITY_DATA
+    CGM_READING_RECEIVED = "cgm_reading_received"  # deprecated: use CGM_READING
+    SPO2_READING_RECEIVED = "spo2_reading_received"  # deprecated: use SPO2_READING
+    WEIGHT_MEASUREMENT_RECEIVED = "weight_measurement_received"  # deprecated: use WEIGHT_MEASUREMENT
 
-    MEDICATION_ACTION = "medication_action"
-    MEDICATION_DOSE_UPDATE = "medication_dose_update"
-    MEDICATION_ADVERSE_EVENT_REPORTED = "medication_adverse_event_reported"
+    MEDICATION_ACTION = "medication_action"  # deprecated: use MEDICATION_LIST_UPDATE
+    MEDICATION_DOSE_UPDATE = "medication_dose_update"  # deprecated: use MEDICATION_ADHERENCE
+    MEDICATION_ADVERSE_EVENT_REPORTED = "medication_adverse_event_reported"  # deprecated: use MEDICATION_ADVERSE_EVENT
 
     USER_LOGIN = "user_login"
     USER_LOGOUT = "user_logout"
-    CONTENT_INTERACTED = "content_interacted"
-    NOTIFICATION_INTERACTED = "notification_interacted"
-    TASK_UPDATED = "task_updated"
+    CONTENT_INTERACTED = "content_interacted"  # deprecated: use CONTENT_INTERACTION
+    NOTIFICATION_INTERACTED = "notification_interacted"  # deprecated: use NOTIFICATION_INTERACTION
+    TASK_UPDATED = "task_updated"  # deprecated: use TASK_OUTCOME
     INTERACTION_FEEDBACK = "interaction_feedback"
-    FEATURE_USED = "feature_used"
+    FEATURE_USED = "feature_used"  # deprecated: use FEATURE_USAGE
 
-    DEMOGRAPHICS_UPDATED = "demographics_updated"
-    CONDITION_RECORDED = "condition_recorded"
-    PREFERENCES_UPDATED = "preferences_updated"
-    EMERGENCY_CONTACT_UPDATED = "emergency_contact_updated"
-    CARE_TEAM_UPDATED = "care_team_updated"
-    INSURANCE_UPDATED = "insurance_updated"
-    SOCIAL_UPDATED = "social_updated"
-    PHARMACY_UPDATED = "pharmacy_updated"
-    TREATMENT_PHASE_CHANGED = "treatment_phase_changed"
+    DEMOGRAPHICS_UPDATED = "demographics_updated"  # deprecated: use DEMOGRAPHICS
+    CONDITION_RECORDED = "condition_recorded"  # deprecated: use CONDITION
+    PREFERENCES_UPDATED = "preferences_updated"  # deprecated: use PREFERENCES
+    EMERGENCY_CONTACT_UPDATED = "emergency_contact_updated"  # deprecated: use EMERGENCY_CONTACT
+    CARE_TEAM_UPDATED = "care_team_updated"  # deprecated: use CARE_TEAM
+    INSURANCE_UPDATED = "insurance_updated"  # deprecated: use INSURANCE
+    SOCIAL_UPDATED = "social_updated"  # deprecated: use SOCIAL_DETERMINANTS
+    PHARMACY_UPDATED = "pharmacy_updated"  # deprecated: use PHARMACY
+    TREATMENT_PHASE_CHANGED = "treatment_phase_changed"  # deprecated: use TREATMENT_PHASE
+
+    # ------------------------------------------------------------------
+    # Canonical noun-only names (OLI-1943). Prefer these for new integrations;
+    # the deprecated members above remain valid and continue to work.
+    # ------------------------------------------------------------------
+    MOOD_REPORT = "mood_report"
+    FUNCTIONAL_CLASS = "functional_class"
+    HEALTH_METRIC = "health_metric"
+    LAB_RESULTS = "lab_results"
+    CLINICAL_NOTE = "clinical_note"
+    CLINICAL_FINDING = "clinical_finding"
+    PROCEDURE_RESULT = "procedure_result"
+    PROCEDURE = "procedure"
+    GENOMIC_VARIANT = "genomic_variant"
+    IMAGING_RESULT = "imaging_result"
+    CLINICAL_MEASUREMENT = "clinical_measurement"
+    TREATMENT_RESPONSE_ASSESSMENT = "treatment_response_assessment"
+    CLINICAL_PLAN_ITEM = "clinical_plan_item"
+    CARE_ENCOUNTER = "care_encounter"
+    CARE_GOAL = "care_goal"
+    IMMUNIZATION = "immunization"
+    ALLERGY_INTOLERANCE = "allergy_intolerance"
+    FAMILY_HISTORY = "family_history"
+    DEVICE = "device"
+    CARE_ACTION = "care_action"
+    UNSTRUCTURED_REPORT = "unstructured_report"
+    CONVERSATION = "conversation"
+    CONVERSATION_TURN = "conversation_turn"
+    HEART_RATE_DATA = "heart_rate_data"
+    SLEEP_DATA = "sleep_data"
+    ACTIVITY_DATA = "activity_data"
+    CGM_READING = "cgm_reading"
+    SPO2_READING = "spo2_reading"
+    WEIGHT_MEASUREMENT = "weight_measurement"
+    MEDICATION_LIST_UPDATE = "medication_list_update"
+    MEDICATION_ADHERENCE = "medication_adherence"
+    MEDICATION_ADVERSE_EVENT = "medication_adverse_event"
+    CONTENT_INTERACTION = "content_interaction"
+    NOTIFICATION_INTERACTION = "notification_interaction"
+    TASK_OUTCOME = "task_outcome"
+    FEATURE_USAGE = "feature_usage"
+    DEMOGRAPHICS = "demographics"
+    CONDITION = "condition"
+    PREFERENCES = "preferences"
+    EMERGENCY_CONTACT = "emergency_contact"
+    CARE_TEAM = "care_team"
+    INSURANCE = "insurance"
+    SOCIAL_DETERMINANTS = "social_determinants"
+    PHARMACY = "pharmacy"
+    TREATMENT_PHASE = "treatment_phase"
 
 
 class OliraTrace(BaseModel):
