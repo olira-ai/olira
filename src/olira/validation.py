@@ -37,6 +37,21 @@ _VALID_EVENT_TYPES: frozenset[str] = frozenset(t.value for t in OliraLogType)
 _ANCHOR_FIELDS = ("external_identifiers", "email", "phone_number", "first_name", "last_name", "date_of_birth")
 
 
+def _looks_org_native(et: str) -> bool:
+    """Return True if event_type looks like an org-native (custom) type.
+
+    Org-native types are validated server-side, not against the platform catalog.
+    A value looks org-native if it carries an ``@`` version pin, or it contains an
+    underscore and is not a known platform type (i.e. it looks org-prefixed rather
+    than a near-miss typo of a platform name).
+    """
+    if "@" in et:
+        return True
+    if et in _VALID_EVENT_TYPES:
+        return False
+    return "_" in et and _suggest(et) is None
+
+
 def _has_anchor(data: dict[str, Any]) -> bool:
     if data.get("external_identifiers"):
         return True
@@ -207,7 +222,15 @@ def validate_ingestion_file(
             )
         else:
             et = data["event_type"]
-            if et not in _VALID_EVENT_TYPES:
+            if not isinstance(et, str):
+                errors.append(
+                    IngestionRowError(
+                        line=line_num,
+                        code="invalid_event_type",
+                        message="Log record 'event_type' must be a string",
+                    )
+                )
+            elif et not in _VALID_EVENT_TYPES and not _looks_org_native(et):
                 suggestion = _suggest(et)
                 msg = f"Unknown event_type {et!r}"
                 if suggestion:
@@ -314,7 +337,15 @@ def validate_ingestion_records(records: list[IngestRecord]) -> list[IngestionRow
                         line=i, code="missing_event_type", message="Log record must have an 'event_type' field"
                     )
                 )
-            elif et not in _VALID_EVENT_TYPES:
+            elif not isinstance(et, str):
+                errors.append(
+                    IngestionRowError(
+                        line=i,
+                        code="invalid_event_type",
+                        message="Log record 'event_type' must be a string",
+                    )
+                )
+            elif et not in _VALID_EVENT_TYPES and not _looks_org_native(et):
                 suggestion = _suggest(et)
                 msg = f"Unknown event_type {et!r}"
                 if suggestion:

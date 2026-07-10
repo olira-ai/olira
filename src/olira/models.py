@@ -178,7 +178,7 @@ class OliraTrace(BaseModel):
 class LogSpec:
     """Lightweight log specification for log_batch()."""
 
-    log_type: OliraLogType
+    log_type: OliraLogType | str
     patient_id: str
     payload: dict[str, Any] | None = None
     trace: OliraTrace | None = None

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-09
+
+### Added
+
+- **Org-native (custom) event types** — `log()`, `log_batch()`, and `LogSpec.log_type`
+  now accept an `OliraLogType | str`, so orgs can emit their own custom/versioned event
+  types (e.g. `myorg_custom_event` or `some_type@2`) alongside the platform catalog. The
+  backend validates org-native types against the org's schema.
+
+### Changed
+
+- Ingestion validation (`validate_ingestion_file`, `validate_ingestion_records`) no longer
+  reports "Unknown event_type" for values that look org-native — those carrying an `@`
+  version pin, or containing an underscore and not matching a known platform type. Typos
+  that do not look org-native still surface an "Unknown event_type" error with a
+  suggestion.
+- Ingestion validation rejects non-string `event_type` values with a clear error and
+  improves org-native detection so near-miss typos of platform types are not silently
+  treated as org-native.
+
 ## [1.3.0] - 2026-07-07
 
 ### Added
