@@ -30,6 +30,8 @@ Each API key carries one or more scopes. Assign only what your integration needs
 | `sdk:patient-token`     | `get_patient_token()`                                             |
 | `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods           |
 | `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc. |
+| `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — EHR write-back requests (also requires platform-side write configuration) |
+| `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [EHR Integrations & Instances](#ehr-integrations--instances) |
 | `mcp:patient-state`     | Query patient state via the MCP Patient State server              |
 
 ## Getting Started
