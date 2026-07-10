@@ -23,8 +23,7 @@ python 00_quickstart.py
 | `06_read_patient_state.py` | Read compiled patient state: stable data, event modules, views, logs, events, memories | `sdk:state-read` |
 | `07_patient_token.py` | Mint a patient-scoped JWT, forward to MCP as Bearer, `PatientSession` refresh helper | `sdk:patient-token` |
 | `08_cohort_management.py` | Full cohort lifecycle: create, list, get, update, enrol patients, assign/unassign templates, delete | `api:manage-patients` |
-| `09_ehr_write_back.py` | Request EHR write-back from `log()`/`log_batch()` (`write_back`, `write_back_integration_id` for multi-instance orgs) | `sdk:event-log`, `sdk:integration-write`, `api:manage-patients` |
-| `10_integration_management.py` | EHR integration management via raw REST: catalog, connect an instance, probe polling, data point subscribe + sync-now, per-instance patient lookup, rename/disconnect | `sdk:integrations` |
+| `09_ehr_integrations.py` | EHR integrations end-to-end: management via raw REST (catalog, connect an instance, probe polling, data points + sync-now, per-instance patient lookup, rename) and write-back from `log()`/`log_batch()` (`write_back`, `write_back_integration_id` for multi-instance orgs) | `sdk:integrations`, `sdk:event-log`, `sdk:integration-write`, `api:manage-patients` |
 
 ## Notes
 
