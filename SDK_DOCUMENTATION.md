@@ -1108,11 +1108,18 @@ Per-event error from a batch response.
 
 ## EHR Integrations & Instances
 
-Olira can pull structured clinical data into the same patients you log against, via EHR
-integrations (Epic, Healthie, Vivlio, …). An organization may connect **multiple
-integrations of the same type** — e.g. Epic for Hospital A *and* Epic for Hospital B —
-each a separate **instance** with its own id, credentials, data point subscriptions, and
-patient identifier namespace.
+Olira connects to a growing pool of EHR and clinical-data providers — Epic, Healthie,
+Vivlio, and more (`GET /v1/integrations/catalog` lists what's available). Every provider
+follows the same connect → subscribe → sync → write-back pattern; the examples below use
+Epic. An organization may connect **multiple integrations of the same type** — e.g. Epic
+for Hospital A *and* Epic for Hospital B — each a separate **instance** with its own id,
+credentials, data point subscriptions, and patient identifier namespace.
+
+**Data point availability depends on your connected app.** For Epic, the data points you
+can subscribe to are determined by the Epic app registered for your health system (its
+approved scopes/tier) — `GET /v1/integrations/{id}/data-points/catalog` already reflects
+what your integration is entitled to. Other providers gate availability the same way
+through their own credentials.
 
 Integration management is available today as raw REST routes under `/v1/integrations`
 (`sdk:integrations` scope); typed Python wrappers are planned. The essentials:

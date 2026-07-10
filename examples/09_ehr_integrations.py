@@ -1,9 +1,14 @@
 """
 Olira SDK — EHR Integrations
 
-Everything integrations as one walkthrough:
-  A. Manage integrations via the raw /v1/integrations REST routes — browse the
-     catalog, connect an instance, watch the async connection probe, subscribe
+Olira connects to a growing pool of EHR and clinical-data providers — Epic,
+Healthie, Vivlio, and more (browse them with GET /v1/integrations/catalog).
+Every provider follows the same pattern shown here: connect → probe →
+subscribe data points → sync → write back. This walkthrough focuses on Epic;
+swap the integration_type and credential fields for any other provider.
+
+  A. Manage integrations via the /v1/integrations REST routes — browse the
+     catalog, connect an instance, watch the connection check, subscribe
      data points, trigger syncs, look up a patient's EHR-side id, rename.
   B. Write back into the EHR from the log APIs — write_back=True on log() and
      LogSpec/log_batch(), with write_back_integration_id targeting a specific
@@ -12,29 +17,36 @@ Everything integrations as one walkthrough:
 Typed Python wrappers for the management routes are planned; until then they
 are plain REST calls (this script uses httpx, already a dependency of the SDK).
 
-Multi-instance model: an org may connect SEVERAL integrations of the same type
-(e.g. Epic for Hospital A and Hospital B). Every management route keys on the
-integration's id — store it. Connecting the SAME provider instance twice
-returns 409; different instances of one type coexist. See SDK_DOCUMENTATION.md
-§ "EHR Integrations & Instances".
+Multiple instances of one provider: your organization can connect SEVERAL
+integrations of the same type (e.g. Epic for Hospital A and Hospital B).
+Every management route keys on the integration's id — store it. Connecting
+the SAME provider instance twice returns 409; different instances of one type
+coexist. See SDK_DOCUMENTATION.md § "EHR Integrations & Instances".
+
+Data point availability depends on YOUR connected app: for Epic, the data
+points you can subscribe to are determined by the Epic app registered for
+your health system (its approved scopes/tier) — the data-point catalog
+endpoint already reflects what your integration is entitled to. Other
+providers gate availability the same way through their own credentials.
 
 Write-back is a REQUEST, not a grant. The write fires only when:
-  1. the API key carries the sdk:integration-write scope, AND
-  2. an Olira admin has write-configured the integration for the log type.
+  1. your API key carries the sdk:integration-write scope, AND
+  2. Olira has write-configured the integration for the log type
+     (a per-health-system enablement — contact Olira to set it up).
 Otherwise it is a silent no-op — the log still ingests into Olira normally,
 and the API response is identical either way. Target selection without an
 explicit id: single write-configured integration → inferred; several → the
 patient's integration-linked identifiers decide; ambiguous → no write
-(server-side warning, never a guess).
+(never a guess).
 
 Notes:
-  - Connect returns status=pending; a TestConnectionWorkflow probes the
-    credentials asynchronously and records connection_status=valid|invalid.
-    Activation (pending → active) is an Olira-admin step — data point
+  - Connect returns status=pending; Olira verifies the credentials
+    asynchronously and records connection_status=valid|invalid. Activation
+    (pending → active) is completed by Olira during onboarding — data point
     subscription is rejected with 422 until then.
-  - Part A needs real provider credentials to get past the probe. Set
-    EPIC_CLIENT_ID / EPIC_TOKEN_ENDPOINT / EPIC_FHIR_BASE_URL in .env, or run
-    against a sandbox. Without them the script skips ahead to Part B.
+  - Part A needs real provider credentials to get past the connection check.
+    Set EPIC_CLIENT_ID / EPIC_TOKEN_ENDPOINT / EPIC_FHIR_BASE_URL in .env, or
+    run against a sandbox. Without them the script skips ahead to Part B.
 
 Requires: sdk:integrations (management) + sdk:event-log & sdk:integration-write
           (write-back) + api:manage-patients (patient setup)
@@ -129,16 +141,18 @@ else:
             + (f" — {doc.get('error_reason')}" if doc.get("error_reason") else "")
         )
 
-        # ── A5. Data points (needs Olira-admin activation first) ─────────────
+        # ── A5. Data points ───────────────────────────────────────────────────
+        # The catalog below reflects what YOUR connected Epic app is entitled
+        # to (its approved scopes/tier) — other orgs may see a different list.
         dp_catalog = api.get(f"/v1/integrations/{INTEGRATION_ID}/data-points/catalog").json()["data"]
-        print(f"\nData points available to subscribe: {[d['name'] for d in dp_catalog]}")
+        print(f"\nData points available to your Epic app: {[d['name'] for d in dp_catalog]}")
 
         sub = api.post(
             f"/v1/integrations/{INTEGRATION_ID}/data-points",
             json={"name": "Patients"},  # roster sync — subscribe this first, always
         )
         if sub.status_code == 422:
-            print(f"Subscribe rejected (integration not active yet): {sub.json()['detail']}")
+            print(f"Subscribe rejected (Olira has not activated the integration yet): {sub.json()['detail']}")
         else:
             sub.raise_for_status()
             dp = sub.json()["data"]
