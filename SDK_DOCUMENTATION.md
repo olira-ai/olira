@@ -9,7 +9,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://olira.ai/api-docs).
 
-**Package:** `olira` — **Version:** `1.4.0`
+**Package:** `olira` — **Version:** `1.5.0`
 
 ## Related docs
 
@@ -484,6 +484,14 @@ olira.update_patient(
 )
 ```
 
+> **Identifier namespaces are scoped per integration instance.** Identifiers created by an
+> EHR integration sync carry the specific integration's id and belong to that instance's
+> namespace; identifiers you supply through the SDK (MRNs, SSNs) live in their own
+> namespace. The two never collide — an SDK-supplied `("epic", "MRN-12345")` is not
+> rejected just because an Epic instance assigned the same value to another patient, and
+> duplicate checks apply only within each namespace. See
+> [EHR integrations & instances](#ehr-integrations--instances).
+
 ### Delete a patient
 
 #### `delete_patient`
@@ -879,19 +887,33 @@ For **bulk historical data** (e.g. months or years at once, or onboarding backfi
 #### `log`
 
 ```python
-log(*, log_type: OliraLogType, patient_id: str, payload: dict[str, Any] | None = None, trace: OliraTrace | None = None, timestamp: str | None = None, metadata: dict[str, Any] | None = None) -> None
+log(*, log_type: OliraLogType, patient_id: str, payload: dict[str, Any] | None = None, trace: OliraTrace | None = None, timestamp: str | None = None, metadata: dict[str, Any] | None = None, write_back: bool = False, write_back_integration_id: str | None = None) -> None
 ```
 
 Enqueue an event for background delivery. Module-level proxy to the singleton client.
 
-| Parameter    | Required | Type                       | Default |
-| ------------ | -------- | -------------------------- | ------- |
-| `log_type`   | Yes      | `OliraLogType`             | —       |
-| `patient_id` | Yes      | `str`                      | —       |
-| `payload`    | No       | `Optional[dict[str, Any]]` | `None`  |
-| `trace`      | No       | `Optional[OliraTrace]`     | `None`  |
-| `timestamp`  | No       | `Optional[str]`            | `None`  |
-| `metadata`   | No       | `Optional[dict[str, Any]]` | `None`  |
+| Parameter                   | Required | Type                       | Default |
+| --------------------------- | -------- | -------------------------- | ------- |
+| `log_type`                  | Yes      | `OliraLogType`             | —       |
+| `patient_id`                | Yes      | `str`                      | —       |
+| `payload`                   | No       | `Optional[dict[str, Any]]` | `None`  |
+| `trace`                     | No       | `Optional[OliraTrace]`     | `None`  |
+| `timestamp`                 | No       | `Optional[str]`            | `None`  |
+| `metadata`                  | No       | `Optional[dict[str, Any]]` | `None`  |
+| `write_back`                | No       | `bool`                     | `False` |
+| `write_back_integration_id` | No       | `Optional[str]`            | `None`  |
+
+`write_back=True` requests that this log also be **written back into the org's connected
+EHR** (e.g. a vitals reading pushed into Epic as an `Observation`). It is a request, not a
+grant: the write fires only when the API key carries the `sdk:integration-write` scope AND
+Olira has write-configured the integration for this `log_type` — otherwise it is a silent
+no-op and the log ingests normally either way.
+
+An organization may hold **several integrations of the same type** (e.g. Epic for
+Hospital A and Hospital B). With a single write-configured integration the target is
+inferred; otherwise the patient's integration-linked identifiers disambiguate, and
+`write_back_integration_id` (the integration's id from `GET /v1/integrations`) settles
+ties explicitly — see [EHR integrations & instances](#ehr-integrations--instances).
 
 Events are enqueued and flushed in the background. Call `olira.flush()` before
 process exit to ensure delivery.
@@ -1059,6 +1081,8 @@ Lightweight event specification for log_batch(). Not persisted internally.
 | `timestamp`       | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
 | `idempotency_key` | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
 | `metadata`        | No       | `Optional[dict[str, Any]]` | Arbitrary key/value context stored separately from the typed payload. Surfaced in the Olira Console event detail panel. (default: `None`) |
+| `write_back`      | No       | `bool`                     | Request write-back of this log into the org's connected EHR — see [`log`](#log). (default: `False`)                                       |
+| `write_back_integration_id` | No | `Optional[str]`         | Target integration instance for `write_back` when several are write-configured. (default: `None`)                                        |
 
 ### `BatchResult`
 
@@ -1079,6 +1103,44 @@ Per-event error from a batch response.
 | `index`   | Yes      | `int` | —           |
 | `code`    | Yes      | `str` | —           |
 | `message` | Yes      | `str` | —           |
+
+## EHR Integrations & Instances
+
+Olira can pull structured clinical data into the same patients you log against, via EHR
+integrations (Epic, Healthie, Vivlio, …). An organization may connect **multiple
+integrations of the same type** — e.g. Epic for Hospital A *and* Epic for Hospital B —
+each a separate **instance** with its own id, credentials, data point subscriptions, and
+patient identifier namespace.
+
+Integration management is available today as raw REST routes under `/v1/integrations`
+(`sdk:integrations` scope); typed Python wrappers are planned. The essentials:
+
+```bash
+# Connect an instance — repeat with another hospital's URLs for a second instance
+curl -X POST https://api.olira.ai/app-api/v1/integrations \
+  -H "Authorization: Bearer $OLIRA_API_KEY" -H "Content-Type: application/json" \
+  -d '{"integration_type": "epic", "display_name": "Epic — Hospital A",
+       "auth_mode": "m2m",
+       "credentials": {"type": "m2m_jwt", "client_id": "...",
+         "token_endpoint": "https://<org>.epic.com/.../oauth2/token",
+         "api_base_url": "https://<org>.epic.com/.../api/FHIR/R4"}}'
+```
+
+Key rules for SDK users:
+
+- **Store the integration `id`** the connect call returns — data points, syncs, external-id
+  lookups, and `write_back_integration_id` all key on it. Connecting the *same* provider
+  instance twice returns `409`; different instances of one type coexist.
+- **Patient identity is instance-scoped.** Each instance's roster sync creates its own
+  patients; the same human at two hospitals is two Olira patients (never merged
+  implicitly). Your SDK-created patients and identifiers are untouched by this — see
+  [External Identifiers](#external-identifiers).
+- **Chart lookup per instance:** `GET /v1/integrations/{id}/patients/{patient_id}` returns
+  the patient's EHR-side id *at that instance* (404 if the patient isn't known there).
+- **Write-back targets an instance:** the `write_back` flag on [`log`](#log) /
+  [`log_batch`](#log_batch) resolves its target integration automatically when
+  unambiguous; pass `write_back_integration_id` when your org has several
+  write-configured instances.
 
 ## Patient Token
 

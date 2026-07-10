@@ -101,6 +101,8 @@ def log(
     trace: OliraTrace | None = None,
     timestamp: str | None = None,
     metadata: dict[str, Any] | None = None,
+    write_back: bool = False,
+    write_back_integration_id: str | None = None,
 ) -> None:
     """Enqueue a log for background delivery. Module-level proxy to the singleton client."""
     _get_client().log(
@@ -110,6 +112,8 @@ def log(
         trace=trace,
         timestamp=timestamp,
         metadata=metadata,
+        write_back=write_back,
+        write_back_integration_id=write_back_integration_id,
     )
 
 

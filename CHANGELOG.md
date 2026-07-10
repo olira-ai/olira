@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-10
+
+### Added
+
+- **EHR write-back from the log APIs** — `log()`, `log_batch()`/`LogSpec` (sync, async,
+  and module-level) gain `write_back: bool` and `write_back_integration_id: str | None`.
+  `write_back=True` requests that the log also be written into the org's connected EHR
+  (a request, not a grant: honored only with the `sdk:integration-write` scope and
+  platform-side write configuration — silent no-op otherwise, the log ingests normally).
+  With several write-configured integrations of the same type (multi-instance, platform
+  2.43.0), `write_back_integration_id` names the target instance.
+
+### Documentation
+
+- New **"EHR Integrations & Instances"** section: multi-instance model (several
+  integrations per type, per-instance ids/identifier namespaces), raw
+  `/v1/integrations` usage until typed wrappers land, per-instance chart lookup, and
+  write-back targeting. `ExternalIdentifier` docs note that SDK-supplied identifiers
+  live in their own namespace and never collide with integration-owned ones.
+
 ## [1.4.0] - 2026-07-09
 
 ### Added

@@ -184,3 +184,44 @@ def test_log_pii_guard_raises():
     with pytest.raises(ValidationError, match="email"):
         client.log(log_type=OliraLogType.USER_LOGIN, patient_id="user@example.com")
     client.close()
+
+
+def test_log_batch_write_back_wire_fields():
+    """write_back / write_back_integration_id reach the wire payload per event."""
+    batches_sent: list[list[dict]] = []
+
+    class MockTransport:
+        def send_batch(self, events: list[dict]):
+            pass
+
+        def send_batch_direct(self, events: list[dict]) -> BatchResult:
+            batches_sent.append(events)
+            return BatchResult(accepted=len(events), failed=0)
+
+        def close(self):
+            pass
+
+    client = OliraClient(api_key="key", async_flush=False)
+    client._transport = MockTransport()  # type: ignore[assignment]
+    client._worker = None
+
+    client.log_batch(
+        [
+            LogSpec(
+                log_type=OliraLogType.VITALS_MEASUREMENT,
+                patient_id="p_1",
+                payload={"measurements": {"weight_kg": 70}},
+                write_back=True,
+                write_back_integration_id="665f0000000000000000000b",
+            ),
+            LogSpec(log_type=OliraLogType.USER_LOGIN, patient_id="p_2"),
+        ]
+    )
+
+    [batch] = batches_sent
+    assert batch[0]["write_back"] is True
+    assert batch[0]["write_back_integration_id"] == "665f0000000000000000000b"
+    # Default: flag off, no target — exclude_none drops the id, flag stays explicit.
+    assert batch[1]["write_back"] is False
+    assert "write_back_integration_id" not in batch[1]
+    client.close()
