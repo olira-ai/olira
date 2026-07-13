@@ -8,7 +8,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.5.0`
+**Package:** `olira` — **Version:** `1.6.0`
 
 ## Related docs
 
@@ -29,6 +29,7 @@ Each API key carries one or more scopes. Assign only what your integration needs
 | `sdk:patient-token`     | `get_patient_token()`                                                                                                                |
 | `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                              |
 | `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc.             |
+| `api:org-config`        | `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()` |
 | `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — EHR write-back requests (also requires platform-side write configuration)    |
 | `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [EHR Integrations & Instances](#ehr-integrations--instances) |
 | `mcp:patient-state`     | Query patient state via the MCP Patient State server                                                                                 |
@@ -870,6 +871,174 @@ for t in result.data:
 | `CohortTemplateAssignment`    | `id`, `summary_type`, `template_id`, `cohort_id`, `assigned_at`                                       |
 | `CohortTemplatesResult`       | `data: list[CohortTemplateAssignment]`                                                                |
 | `CohortDeleteResult`          | `deleted`, `cohort_id`                                                                                |
+
+---
+
+## Schemas
+
+All schema-management functions require an API key with `api:org-config` scope.
+
+Register your own event subtypes (e.g. `myorg_widget_reading`) and their translation into Olira's platform catalog, without going through Slack. Registering always lands as a **pending request** — Olira reviews and materializes the real schema + mapping before it can be activated, so a client (or their own agent) can submit and inspect requests while Olira retains authorship of the mapping logic. Versioning is presented as **one number per subtype**: every change moves the schema and the mapping together.
+
+---
+
+### `register_schema`
+
+```python
+registration = client.register_schema(
+    subtype="widget_ping",
+    description="Widget sensor ping events",
+    input_examples=[{"reading_value": 42, "unit": "lux"}],
+)
+# module-level: olira.register_schema(subtype=..., description=..., input_examples=..., schema=..., mapping=...)
+```
+
+Pass both `schema` and `mapping` for a "full_spec" submission (e.g. your own agent already authored them); pass neither/either for an "assisted" submission Olira will author from your `input_examples` + `description`. Always lands as a pending request — it never auto-activates.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `subtype` | `str` | Yes | New org-defined source event subtype, e.g. `rc_conversation_completed` (lowercase snake_case, 3–64 chars). |
+| `description` | `str` | No | What this source event represents. |
+| `input_examples` | `list[dict] \| None` | No | Sample raw payloads (capped at 20). |
+| `schema` | `dict \| None` | No | Full JSON Schema for the payload, if already authored. |
+| `mapping` | `dict \| None` | No | Full mapping spec (`source_root`/`targets`/`unmapped_fields_policy`), if already authored. |
+
+**Returns** `SchemaRegistrationResult` — `registration_id`, `subtype`, `target_version`, `submission_mode` (`"full_spec"` or `"assisted"`), `status` (always `"pending_review"`), `self_check`.
+
+---
+
+### `list_schemas`
+
+```python
+for summary in client.list_schemas():
+    print(summary.subtype, summary.status, summary.active_version)
+```
+
+**Returns** `list[SchemaSummary]` — each with `subtype`, `status` (`"pending"`, `"active"`, or `"deprecated"`), `active_version`, `latest_version`, `description`.
+
+---
+
+### `get_schema`
+
+```python
+detail = client.get_schema(subtype="widget_ping")
+for v in detail.versions:
+    print(v.version, v.status, v.source)
+```
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `subtype` | `str` | Yes | Org-native subtype to look up. |
+
+**Returns** `SchemaDetail` — `subtype`, `status`, `active_version`, `versions: list[SchemaVersion]`. Each `SchemaVersion` has `version`, `status`, `source` (`"registration"` if not yet materialized, else `"materialized"`), `payload_schema`, `mapping_summary`, `description`, `created_at`, `created_by`, `submission_mode`, `self_check`, `registration_id`.
+
+---
+
+### `check_schema`
+
+```python
+result = client.check_schema(
+    examples=[{"reading_value": 42, "unit": "lux"}],
+    schema={"type": "object", "required": ["reading_value"], "properties": {"reading_value": {"type": "number"}}},
+    mapping={"targets": [{"target_subtype": "heart_rate_data", "field_mappings": [{"target": "avg_bpm", "source": "reading_value"}]}]},
+)
+print(result.ok)
+```
+
+Dry-runs a schema/mapping over sample payloads — no writes. Runs the same org gate, pure mapping engine, and platform-catalog gate the live ingest route uses, so a green check genuinely predicts what logging would accept. Pass `subtype` (optionally with `version`) to check a stored or still-pending spec instead of an inline `schema`/`mapping`.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `examples` | `list[dict]` | Yes | Sample payloads to run through. |
+| `subtype` | `str \| None` | No | Load the active (or pinned `version`) schema/mapping for this subtype as the baseline. |
+| `version` | `int \| None` | No | Pin a specific version instead of the active one. |
+| `schema` | `dict \| None` | No | Inline schema, overriding or replacing the stored one. |
+| `mapping` | `dict \| None` | No | Inline mapping, overriding or replacing the stored one. |
+
+**Returns** `SchemaCheckResult` — `ok`, `results: list[SchemaCheckExampleResult]` (each with `input`, `ok`, `mapped_events`, `errors`), `error`.
+
+---
+
+### `edit_schema`
+
+```python
+edited = client.edit_schema(subtype="widget_ping", description="Updated description")
+print(edited.target_version)
+```
+
+Proposes a schema/mapping change. Always opens a new pending request targeting the next version — never mutates an active version in place. Editing an already-active subtype defaults any field you omit to what's currently active, so the reviewer sees a complete proposed spec even from a partial edit.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `subtype` | `str` | Yes | Subtype to propose a change for. |
+| `description` | `str \| None` | No | New description, if changing it. |
+| `input_examples` | `list[dict] \| None` | No | Replacement sample payloads. |
+| `schema` | `dict \| None` | No | New JSON Schema, if changing it. |
+| `mapping` | `dict \| None` | No | New mapping spec, if changing it. |
+
+**Returns** `SchemaRegistrationResult`.
+
+---
+
+### `deprecate_schema`
+
+```python
+result = client.deprecate_schema(subtype="widget_ping")
+print(result.status)  # "deprecated"
+```
+
+Deprecates a materialized version (default: the active one), or withdraws a still-pending request if nothing has been materialized yet. Never a hard delete.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `subtype` | `str` | Yes | Subtype to deprecate. |
+| `version` | `int \| None` | No | Specific version to archive. Defaults to the currently active version. |
+
+**Returns** `SchemaActionResult` — `subtype`, `version`, `status`.
+
+---
+
+### `activate_schema_version`
+
+```python
+result = client.activate_schema_version(subtype="widget_ping", version=1)
+print(result.status)  # "active"
+```
+
+Activates an already-materialized version, archiving whichever version was previously active. Re-runs `check_schema` against the type definition's `sample_payload` first and refuses to activate a version that fails it.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `subtype` | `str` | Yes | Subtype to activate a version for. |
+| `version` | `int` | Yes | Version to activate. Must already be materialized (schema and mapping both authored). |
+
+**Returns** `SchemaActionResult`.
+
+---
+
+### Schema response models
+
+| Model | Fields |
+| --- | --- |
+| `SchemaRegistrationResult` | `registration_id`, `subtype`, `target_version`, `submission_mode`, `status`, `self_check` |
+| `SchemaSummary` | `subtype`, `status`, `active_version`, `latest_version`, `description` |
+| `SchemaDetail` | `subtype`, `status`, `active_version`, `versions: list[SchemaVersion]` |
+| `SchemaVersion` | `version`, `status`, `source`, `payload_schema`, `mapping_summary`, `description`, `created_at`, `created_by`, `submission_mode`, `self_check`, `registration_id` |
+| `SchemaCheckResult` | `ok`, `results: list[SchemaCheckExampleResult]`, `error` |
+| `SchemaCheckExampleResult` | `input`, `ok`, `mapped_events`, `errors` |
+| `SchemaActionResult` | `subtype`, `version`, `status` |
 
 ---
 
