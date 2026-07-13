@@ -31,4 +31,4 @@ python 00_quickstart.py
 - `06_read_patient_state.py` and `07_patient_token.py` require an existing patient id — run `00_quickstart.py` or `02_event_logging.py` first, then pass the printed id or set `PATIENT_ID` in `.env`.
 - `08_cohort_management.py` includes template assignment steps that are skipped by default. Set `OLIRA_EXAMPLE_SUMMARY_TYPE` in `.env` (e.g. `symptom_snapshot`) to a summary type active in your org to run them.
 - Cleanup blocks at the end of each script delete demo patients. These are not part of a real integration — remove them when adapting the code.
-- Full API reference: [https://olira.ai/api-docs](https://olira.ai/api-docs) (Python SDK tab). Local copy: [`SDK_DOCUMENTATION.md`](../SDK_DOCUMENTATION.md).
+- Full API reference: [https://docs.olira.ai/reference/sdk](https://docs.olira.ai/reference/sdk). Local copy: [`SDK_DOCUMENTATION.md`](../SDK_DOCUMENTATION.md).

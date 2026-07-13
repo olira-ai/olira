@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://olira.ai/api-docs"
+Documentation = "https://docs.olira.ai"
 
 [tool.uv]
 # Public deps only: pin default index so `uv run` works when the shell inherits
