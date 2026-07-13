@@ -27,6 +27,11 @@ from .models import (
     PatientBatchResult,
     PatientListResult,
     PatientToken,
+    SchemaActionResult,
+    SchemaCheckResult,
+    SchemaDetail,
+    SchemaRegistrationResult,
+    SchemaSummary,
     StableDataResult,
     ViewBlockResult,
     ViewBlocksListResult,
@@ -282,6 +287,41 @@ class HttpTransport:
         raw = self._request("GET", f"/v1/cohorts/{cohort_id}/templates")
         return CohortTemplatesResult.model_validate(raw)
 
+    def register_schema(self, body: dict[str, Any]) -> SchemaRegistrationResult:
+        """Register an org schema (POST /v1/schemas). Requires api:org-config scope."""
+        raw = self._request("POST", "/v1/schemas", json=body)
+        return SchemaRegistrationResult.model_validate(raw)
+
+    def list_schemas(self) -> list[SchemaSummary]:
+        """List org schemas (GET /v1/schemas). Requires api:org-config scope."""
+        raw = self._request("GET", "/v1/schemas")
+        return [SchemaSummary.model_validate(item) for item in raw]
+
+    def get_schema(self, subtype: str) -> SchemaDetail:
+        """Get one org schema's version history (GET /v1/schemas/{subtype}). Requires api:org-config scope."""
+        raw = self._request("GET", f"/v1/schemas/{subtype}")
+        return SchemaDetail.model_validate(raw)
+
+    def check_schema(self, body: dict[str, Any]) -> SchemaCheckResult:
+        """Dry-run a schema/mapping (POST /v1/schemas/check). Requires api:org-config scope."""
+        raw = self._request("POST", "/v1/schemas/check", json=body)
+        return SchemaCheckResult.model_validate(raw)
+
+    def edit_schema(self, subtype: str, body: dict[str, Any]) -> SchemaRegistrationResult:
+        """Propose a schema/mapping change (PATCH /v1/schemas/{subtype}). Requires api:org-config scope."""
+        raw = self._request("PATCH", f"/v1/schemas/{subtype}", json=body)
+        return SchemaRegistrationResult.model_validate(raw)
+
+    def deprecate_schema(self, subtype: str, params: dict[str, Any]) -> SchemaActionResult:
+        """Deprecate a version, or withdraw a pending request (DELETE /v1/schemas/{subtype}). Requires api:org-config scope."""
+        raw = self._request("DELETE", f"/v1/schemas/{subtype}", params=params)
+        return SchemaActionResult.model_validate(raw)
+
+    def activate_schema_version(self, subtype: str, version: int) -> SchemaActionResult:
+        """Activate a materialized version (POST /v1/schemas/{subtype}/versions/{version}/activate). Requires api:org-config scope."""
+        raw = self._request("POST", f"/v1/schemas/{subtype}/versions/{version}/activate")
+        return SchemaActionResult.model_validate(raw)
+
     def create_patients_batch(self, patients: list[dict[str, Any]]) -> PatientBatchResult:
         """Batch-create patients (POST /v1/patients/batch). Requires api:manage-patients scope."""
         raw = self._request("POST", "/v1/patients/batch", json={"patients": patients})
@@ -506,6 +546,41 @@ class AsyncHttpTransport:
         """List templates assigned to a cohort (GET /v1/cohorts/{cohort_id}/templates). Requires api:manage-patients scope."""
         raw = await self._request("GET", f"/v1/cohorts/{cohort_id}/templates")
         return CohortTemplatesResult.model_validate(raw)
+
+    async def register_schema(self, body: dict[str, Any]) -> SchemaRegistrationResult:
+        """Register an org schema (POST /v1/schemas). Requires api:org-config scope."""
+        raw = await self._request("POST", "/v1/schemas", json=body)
+        return SchemaRegistrationResult.model_validate(raw)
+
+    async def list_schemas(self) -> list[SchemaSummary]:
+        """List org schemas (GET /v1/schemas). Requires api:org-config scope."""
+        raw = await self._request("GET", "/v1/schemas")
+        return [SchemaSummary.model_validate(item) for item in raw]
+
+    async def get_schema(self, subtype: str) -> SchemaDetail:
+        """Get one org schema's version history (GET /v1/schemas/{subtype}). Requires api:org-config scope."""
+        raw = await self._request("GET", f"/v1/schemas/{subtype}")
+        return SchemaDetail.model_validate(raw)
+
+    async def check_schema(self, body: dict[str, Any]) -> SchemaCheckResult:
+        """Dry-run a schema/mapping (POST /v1/schemas/check). Requires api:org-config scope."""
+        raw = await self._request("POST", "/v1/schemas/check", json=body)
+        return SchemaCheckResult.model_validate(raw)
+
+    async def edit_schema(self, subtype: str, body: dict[str, Any]) -> SchemaRegistrationResult:
+        """Propose a schema/mapping change (PATCH /v1/schemas/{subtype}). Requires api:org-config scope."""
+        raw = await self._request("PATCH", f"/v1/schemas/{subtype}", json=body)
+        return SchemaRegistrationResult.model_validate(raw)
+
+    async def deprecate_schema(self, subtype: str, params: dict[str, Any]) -> SchemaActionResult:
+        """Deprecate a version, or withdraw a pending request (DELETE /v1/schemas/{subtype}). Requires api:org-config scope."""
+        raw = await self._request("DELETE", f"/v1/schemas/{subtype}", params=params)
+        return SchemaActionResult.model_validate(raw)
+
+    async def activate_schema_version(self, subtype: str, version: int) -> SchemaActionResult:
+        """Activate a materialized version (POST /v1/schemas/{subtype}/versions/{version}/activate). Requires api:org-config scope."""
+        raw = await self._request("POST", f"/v1/schemas/{subtype}/versions/{version}/activate")
+        return SchemaActionResult.model_validate(raw)
 
     async def create_patients_batch(self, patients: list[dict[str, Any]]) -> PatientBatchResult:
         """Batch-create patients (POST /v1/patients/batch). Requires api:manage-patients scope."""
