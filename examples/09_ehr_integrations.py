@@ -100,9 +100,10 @@ for i in integrations:
 
 # ── A3. Connect an Epic instance (M2M — three non-secret values) ─────────────
 INTEGRATION_ID: str | None = None
-EPIC_CLIENT_ID = os.environ.get("EPIC_CLIENT_ID")
-if not EPIC_CLIENT_ID:
-    print("\nEPIC_CLIENT_ID not set — skipping connect/subscribe, jumping to write-back.")
+EPIC_ENV_VARS = ("EPIC_CLIENT_ID", "EPIC_TOKEN_ENDPOINT", "EPIC_FHIR_BASE_URL")
+missing = [name for name in EPIC_ENV_VARS if not os.environ.get(name)]
+if missing:
+    print(f"\n{', '.join(missing)} not set — skipping connect/subscribe, jumping to write-back.")
 else:
     resp = api.post(
         "/v1/integrations",
@@ -114,7 +115,7 @@ else:
             "auth_mode": "m2m",
             "credentials": {
                 "type": "m2m_jwt",
-                "client_id": EPIC_CLIENT_ID,
+                "client_id": os.environ["EPIC_CLIENT_ID"],
                 "token_endpoint": os.environ["EPIC_TOKEN_ENDPOINT"],
                 "api_base_url": os.environ["EPIC_FHIR_BASE_URL"],
             },
