@@ -9,7 +9,7 @@ VS Code dev container for the Olira Python SDK.
 3. **Reopen in Container** (Command Palette → Dev Containers: Reopen in Container).
 4. After the container builds: `bash scripts/install-dev.sh` (PyPI only)
 
-API reference: [https://olira.ai/api-docs](https://olira.ai/api-docs) (Python SDK tab).
+API reference: [https://docs.olira.ai/reference/sdk](https://docs.olira.ai/reference/sdk).
 
 ## Commands
 

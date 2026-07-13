@@ -185,6 +185,16 @@ class LogSpec:
     timestamp: str | None = None
     idempotency_key: str | None = None
     metadata: dict[str, Any] | None = None
+    #: Request write-back of this log into the org's connected EHR. A request,
+    #: not a grant: silently ignored unless the API key carries
+    #: ``sdk:integration-write`` AND the integration passes the platform write
+    #: gate. The log ingests normally either way.
+    write_back: bool = False
+    #: Target integration instance for ``write_back`` when the org holds several
+    #: write-configured integrations (e.g. two Epic hospitals). Optional — with a
+    #: single configured integration it is inferred; otherwise the patient's
+    #: integration-linked identifiers disambiguate, and this field settles ties.
+    write_back_integration_id: str | None = None
 
 
 class BatchError(BaseModel):
@@ -215,6 +225,8 @@ class _LogWire(BaseModel):
     metadata: dict[str, Any] | None = None
     context: dict[str, str] = Field(default_factory=dict)
     trace: OliraTrace | None = None
+    write_back: bool = False
+    write_back_integration_id: str | None = None
 
     @field_validator("patient_id")
     @classmethod

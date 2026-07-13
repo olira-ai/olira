@@ -136,6 +136,8 @@ class OliraClient:
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
         metadata: dict[str, Any] | None = None,
+        write_back: bool = False,
+        write_back_integration_id: str | None = None,
     ) -> None:
         event = _LogWire(
             log_type=str(log_type),
@@ -145,6 +147,8 @@ class OliraClient:
             context=self._context,
             trace=trace,
             timestamp=timestamp,
+            write_back=write_back,
+            write_back_integration_id=write_back_integration_id,
         )
         self._enqueue(event)
 
@@ -157,9 +161,27 @@ class OliraClient:
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
         metadata: dict[str, Any] | None = None,
+        write_back: bool = False,
+        write_back_integration_id: str | None = None,
     ) -> None:
-        """Enqueue a log for background delivery. Returns immediately."""
-        self._emit(log_type, patient_id, payload or {}, trace=trace, timestamp=timestamp, metadata=metadata)
+        """Enqueue a log for background delivery. Returns immediately.
+
+        ``write_back=True`` additionally requests that the log be written back
+        into the org's connected EHR (requires the ``sdk:integration-write``
+        scope and platform-side write configuration; silently ignored
+        otherwise). With several write-configured integrations of the same
+        type, ``write_back_integration_id`` names the target instance.
+        """
+        self._emit(
+            log_type,
+            patient_id,
+            payload or {},
+            trace=trace,
+            timestamp=timestamp,
+            metadata=metadata,
+            write_back=write_back,
+            write_back_integration_id=write_back_integration_id,
+        )
 
     def log_fhir(self, *, patient_id: str, resource: dict[str, Any]) -> BatchResult:
         """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
@@ -196,6 +218,8 @@ class OliraClient:
                 context=self._context,
                 trace=spec.trace,
                 timestamp=spec.timestamp,
+                write_back=spec.write_back,
+                write_back_integration_id=spec.write_back_integration_id,
                 **({"idempotency_key": spec.idempotency_key} if spec.idempotency_key else {}),
             )
             wire_events.append(event.model_dump(mode="json", exclude_none=True))
@@ -781,6 +805,8 @@ class AsyncOliraClient:
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
         metadata: dict[str, Any] | None = None,
+        write_back: bool = False,
+        write_back_integration_id: str | None = None,
     ) -> None:
         event = _LogWire(
             log_type=str(log_type),
@@ -790,6 +816,8 @@ class AsyncOliraClient:
             context=self._context,
             trace=trace,
             timestamp=timestamp,
+            write_back=write_back,
+            write_back_integration_id=write_back_integration_id,
         )
         try:
             self._queue.put_nowait(event)
@@ -805,9 +833,27 @@ class AsyncOliraClient:
         trace: OliraTrace | None = None,
         timestamp: str | None = None,
         metadata: dict[str, Any] | None = None,
+        write_back: bool = False,
+        write_back_integration_id: str | None = None,
     ) -> None:
-        """Enqueue a log for background delivery."""
-        self._emit(log_type, patient_id, payload or {}, trace=trace, timestamp=timestamp, metadata=metadata)
+        """Enqueue a log for background delivery.
+
+        ``write_back=True`` additionally requests that the log be written back
+        into the org's connected EHR (requires the ``sdk:integration-write``
+        scope and platform-side write configuration; silently ignored
+        otherwise). With several write-configured integrations of the same
+        type, ``write_back_integration_id`` names the target instance.
+        """
+        self._emit(
+            log_type,
+            patient_id,
+            payload or {},
+            trace=trace,
+            timestamp=timestamp,
+            metadata=metadata,
+            write_back=write_back,
+            write_back_integration_id=write_back_integration_id,
+        )
 
     async def log_fhir(self, *, patient_id: str, resource: dict[str, Any]) -> BatchResult:
         """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
@@ -849,6 +895,8 @@ class AsyncOliraClient:
                 context=self._context,
                 trace=spec.trace,
                 timestamp=spec.timestamp,
+                write_back=spec.write_back,
+                write_back_integration_id=spec.write_back_integration_id,
                 **({"idempotency_key": spec.idempotency_key} if spec.idempotency_key else {}),
             )
             wire_events.append(event.model_dump(mode="json", exclude_none=True))

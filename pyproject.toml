@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "olira"
-version = "1.4.0"
+version = "1.5.0"
 description = "Olira Python SDK — event ingestion client for the Olira platform"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://olira.ai/api-docs"
+Documentation = "https://docs.olira.ai"
 
 [tool.uv]
 # Public deps only: pin default index so `uv run` works when the shell inherits

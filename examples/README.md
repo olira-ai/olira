@@ -23,6 +23,7 @@ python 00_quickstart.py
 | `06_read_patient_state.py` | Read compiled patient state: stable data, event modules, views, logs, events, memories | `sdk:state-read` |
 | `07_patient_token.py` | Mint a patient-scoped JWT, forward to MCP as Bearer, `PatientSession` refresh helper | `sdk:patient-token` |
 | `08_cohort_management.py` | Full cohort lifecycle: create, list, get, update, enrol patients, assign/unassign templates, delete | `api:manage-patients` |
+| `09_ehr_integrations.py` | EHR integrations end-to-end: management via raw REST (catalog, connect an instance, probe polling, data points + sync-now, per-instance patient lookup, rename) and write-back from `log()`/`log_batch()` (`write_back`, `write_back_integration_id` for multi-instance orgs) | `sdk:integrations`, `sdk:event-log`, `sdk:integration-write`, `api:manage-patients` |
 
 ## Notes
 
@@ -30,4 +31,4 @@ python 00_quickstart.py
 - `06_read_patient_state.py` and `07_patient_token.py` require an existing patient id — run `00_quickstart.py` or `02_event_logging.py` first, then pass the printed id or set `PATIENT_ID` in `.env`.
 - `08_cohort_management.py` includes template assignment steps that are skipped by default. Set `OLIRA_EXAMPLE_SUMMARY_TYPE` in `.env` (e.g. `symptom_snapshot`) to a summary type active in your org to run them.
 - Cleanup blocks at the end of each script delete demo patients. These are not part of a real integration — remove them when adapting the code.
-- Full API reference: [https://olira.ai/api-docs](https://olira.ai/api-docs) (Python SDK tab). Local copy: [`SDK_DOCUMENTATION.md`](../SDK_DOCUMENTATION.md).
+- Full API reference: [https://docs.olira.ai/reference/sdk](https://docs.olira.ai/reference/sdk). Local copy: [`SDK_DOCUMENTATION.md`](../SDK_DOCUMENTATION.md).

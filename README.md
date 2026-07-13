@@ -10,7 +10,7 @@ pip install olira
 
 ## Documentation
 
-Full API reference: [https://olira.ai/api-docs](https://olira.ai/api-docs) (Python SDK tab).
+Full API reference: [https://docs.olira.ai/reference/sdk](https://docs.olira.ai/reference/sdk).
 
 Local copy: [SDK_DOCUMENTATION.md](SDK_DOCUMENTATION.md).
 
@@ -29,7 +29,7 @@ All SDK methods authenticate with an **Olira API key** (`olira_prod_...`). Creat
 | `sdk:state-read`          | Read Patient State (modules, views, logs, memories)    |
 | `mcp:patient-state`       | Query Patient State via the MCP Patient State server   |
 
-See [API key scopes](https://olira.ai/api-docs) for the full list.
+See [API key scopes](https://docs.olira.ai/cli/scopes) for the full list.
 
 Pass the key to `OliraClient` or to `olira.init()`:
 
@@ -201,7 +201,7 @@ print(f"Patients: {job.patients_processed}  Logs: {job.logs_processed}")
 olira.confirm_ingestion_job(job_id=job.job_id)
 ```
 
-See the [Backfilling historical data](https://olira.ai/api-docs) guide for the full walkthrough including inline payloads, validation, cancellation, and error recovery.
+See the [Backfilling historical data](https://docs.olira.ai/send-data/historical-backfill) guide for the full walkthrough including inline payloads, validation, cancellation, and error recovery.
 
 ---
 
@@ -209,7 +209,7 @@ See the [Backfilling historical data](https://olira.ai/api-docs) guide for the f
 
 Mint a short-lived JWT scoped to a single patient. Requires the `sdk:patient-token` scope.
 
-Use this when a patient device needs to communicate with the [Olira MCP Patient State server](https://olira.ai/api-docs) — pass the token as a Bearer header. The token expires after 15 minutes and is locked to the specified patient.
+Use this when a patient device needs to communicate with the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server) — pass the token as a Bearer header. The token expires after 15 minutes and is locked to the specified patient.
 
 ```python
 from olira import OliraClient

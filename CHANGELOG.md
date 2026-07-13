@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-10
+
+### Added
+
+- **EHR write-back from the log APIs** — `log()`, `log_batch()`/`LogSpec` (sync, async,
+  and module-level) gain `write_back: bool` and `write_back_integration_id: str | None`.
+  `write_back=True` requests that the log also be written into the org's connected EHR
+  (a request, not a grant: honored only with the `sdk:integration-write` scope and
+  platform-side write configuration — silent no-op otherwise, the log ingests normally).
+  With several write-configured integrations of the same type (multi-instance, platform
+  2.43.0), `write_back_integration_id` names the target instance.
+
+### Documentation
+
+- New **"EHR Integrations & Instances"** section: multi-instance model (several
+  integrations per type, per-instance ids/identifier namespaces), raw
+  `/v1/integrations` usage until typed wrappers land, per-instance chart lookup, and
+  write-back targeting. `ExternalIdentifier` docs note that SDK-supplied identifiers
+  live in their own namespace and never collide with integration-owned ones.
+
+- Added new API docs reference
+
 ## [1.4.0] - 2026-07-09
 
 ### Added
@@ -86,7 +108,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Event-state module `emotional_state` renamed to `behavioral_state`. New module types `alerts_and_tasks` (event-state) and `treatment_phase` (stable) are now available via `get_event_state_module` / `get_stable_data`.
-
 
 ## [1.0.8] - 2026-05-27
 
@@ -176,7 +197,7 @@ First public release of the Olira Python SDK (`pip install olira`).
 
 - **Event logging** (`sdk:event-log`): `OliraClient.log()`, `log_batch()`, background queue with `flush()`, and module-level `olira.init()` / `olira.log()` / `olira.flush()`.
 - **Patient management** (`api:manage-patients`): create, read, update, delete, list, and batch-create patients; `ExternalIdentifier` for linking to EMR or partner IDs.
-- **Patient token** (`sdk:patient-token`): `get_patient_token()` for short-lived JWTs used with the [Olira MCP Patient State server](https://olira.ai/api-docs).
+- **Patient token** (`sdk:patient-token`): `get_patient_token()` for short-lived JWTs used with the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 - **Patient state read** (`sdk:state-read`): stable modules, event state modules, views, logs, events, and memories — REST-backed access to compiled patient state from Python.
 - **Historical data ingestion** (`sdk:historical-ingest`): JSONL file or inline record upload, two-phase confirm flow, job polling, and local pre-flight validation (`validate_ingestion_file`, `validate_ingestion_records`).
 - **Async client**: `AsyncOliraClient` with the same surface as `OliraClient`.
@@ -185,5 +206,5 @@ First public release of the Olira Python SDK (`pip install olira`).
 
 ### Documentation
 
-- API reference: [https://olira.ai/api-docs](https://olira.ai/api-docs) (Python SDK tab)
+- API reference: [https://docs.olira.ai/reference/sdk](https://docs.olira.ai/reference/sdk)
 - Local reference: `SDK_DOCUMENTATION.md`
