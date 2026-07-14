@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-07-13
+
+### Added
+
+- **Org schema/mapping management** — `register_schema()`, `list_schemas()`,
+  `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, and
+  `activate_schema_version()` (sync, async, and module-level), backed by a new
+  `api:org-config` scope. Lets orgs register and manage custom event subtypes and
+  their payload schema/mapping — `register_schema`/`edit_schema` support both
+  "full_spec" (bring your own schema + mapping) and "assisted" (Olira authors them
+  from `input_examples` + `description`) submission modes, `check_schema` dry-runs a
+  schema/mapping over sample payloads with no writes, and `activate_schema_version`
+  re-validates against the type's `sample_payload` before archiving the previously
+  active version.
+
 ## [1.5.0] - 2026-07-10
 
 ### Added
