@@ -9,6 +9,8 @@ import httpx
 
 from .exceptions import AuthError, NetworkError, RateLimitError, ServerError, ValidationError
 from .models import (
+    Project,
+    ProjectListResult,
     BatchResult,
     Cohort,
     CohortDeleteResult,
@@ -93,15 +95,21 @@ class HttpTransport:
         api_key: str,
         timeout: float = 5.0,
         max_retries: int = 3,
+        project: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout
         self._max_retries = max_retries
+        headers = {"Authorization": f"Bearer {api_key}"}
+        if project:
+            # Selects the project (workspace) every request operates in; omitted =
+            # the key's own project (locked keys) or the org's default project.
+            headers["X-Olira-Project"] = project
         self._client = httpx.Client(
             base_url=self._base_url,
             timeout=timeout,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=headers,
         )
 
     def close(self) -> None:
@@ -241,6 +249,21 @@ class HttpTransport:
         """List cohorts (GET /v1/cohorts). Requires api:manage-patients scope."""
         raw = self._request("GET", "/v1/cohorts")
         return CohortListResult.model_validate(raw)
+
+    def create_project(self, body: dict[str, Any]) -> Project:
+        """Create a project (POST /v1/projects). Requires api:manage-projects scope + org-wide key."""
+        raw = self._request("POST", "/v1/projects", json=body)
+        return Project.model_validate(raw)
+
+    def list_projects(self) -> ProjectListResult:
+        """List projects (GET /v1/projects). Requires api:manage-projects scope + org-wide key."""
+        raw = self._request("GET", "/v1/projects")
+        return ProjectListResult.model_validate(raw)
+
+    def get_project(self, project: str) -> Project:
+        """Get a project by id or slug (GET /v1/projects/{id_or_slug})."""
+        raw = self._request("GET", f"/v1/projects/{project}")
+        return Project.model_validate(raw)
 
     def get_cohort(self, cohort_id: str) -> Cohort:
         """Get a cohort by id (GET /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""
@@ -410,15 +433,21 @@ class AsyncHttpTransport:
         api_key: str,
         timeout: float = 5.0,
         max_retries: int = 3,
+        project: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout
         self._max_retries = max_retries
+        headers = {"Authorization": f"Bearer {api_key}"}
+        if project:
+            # Selects the project (workspace) every request operates in; omitted =
+            # the key's own project (locked keys) or the org's default project.
+            headers["X-Olira-Project"] = project
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
             timeout=timeout,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=headers,
         )
 
     async def aclose(self) -> None:
@@ -466,6 +495,21 @@ class AsyncHttpTransport:
         """List cohorts (GET /v1/cohorts). Requires api:manage-patients scope."""
         raw = await self._request("GET", "/v1/cohorts")
         return CohortListResult.model_validate(raw)
+
+    async def create_project(self, body: dict[str, Any]) -> Project:
+        """Create a project (POST /v1/projects). Requires api:manage-projects scope + org-wide key."""
+        raw = await self._request("POST", "/v1/projects", json=body)
+        return Project.model_validate(raw)
+
+    async def list_projects(self) -> ProjectListResult:
+        """List projects (GET /v1/projects). Requires api:manage-projects scope + org-wide key."""
+        raw = await self._request("GET", "/v1/projects")
+        return ProjectListResult.model_validate(raw)
+
+    async def get_project(self, project: str) -> Project:
+        """Get a project by id or slug (GET /v1/projects/{id_or_slug})."""
+        raw = await self._request("GET", f"/v1/projects/{project}")
+        return Project.model_validate(raw)
 
     async def get_cohort(self, cohort_id: str) -> Cohort:
         """Get a cohort by id (GET /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""

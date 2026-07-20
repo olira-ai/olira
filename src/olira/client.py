@@ -13,6 +13,8 @@ from .http import AsyncHttpTransport, HttpTransport
 from .ingestion_confirm import confirm_ingestion_job_resilient, confirm_ingestion_job_resilient_async
 from .log_query import AsyncLogQuery, LogQuery
 from .models import (
+    Project,
+    ProjectListResult,
     BatchResult,
     Cohort,
     CohortDeleteResult,
@@ -64,13 +66,17 @@ DEFAULT_BASE_URL = "https://app-api.prod.olira.ai/app-api"
 def _build_context(
     environment: OliraEnv,
     service_name: str | None,
+    project: str | None = None,
 ) -> dict[str, str]:
-    return {
+    ctx = {
         "environment": environment.value,
         "service": service_name or "",
         "sdk_version": _sdk_version,
         "sdk_language": "python",
     }
+    if project:
+        ctx["project"] = project
+    return ctx
 
 
 class OliraClient:
@@ -85,6 +91,7 @@ class OliraClient:
         api_key: str,
         environment: OliraEnv = OliraEnv.PRODUCTION,
         service_name: str | None = None,
+        project: str | None = None,
         base_url: str = DEFAULT_BASE_URL,
         batch_size: int = 50,
         flush_interval: float = 1.5,
@@ -97,15 +104,17 @@ class OliraClient:
         self._api_key = api_key
         self._environment = environment
         self._service_name = service_name
+        self._project = project
         self._base_url = base_url
         self._async_flush = async_flush
-        self._context = _build_context(environment, service_name)
+        self._context = _build_context(environment, service_name, project)
 
         self._transport = HttpTransport(
             base_url=base_url,
             api_key=api_key,
             timeout=timeout,
             max_retries=max_retries,
+            project=project,
         )
 
         self._worker: BackgroundWorker | None = None
@@ -346,6 +355,30 @@ class OliraClient:
         if description is not None:
             body["description"] = description
         return self._transport.create_cohort(body)
+
+    def create_project(
+        self, *, name: str, description: str | None = None, environment: str | None = None
+    ) -> Project:
+        """Create a project (isolated workspace). Requires api:manage-projects scope and an org-wide key.
+
+        New projects start empty: fresh configuration, no patients or data carried
+        over. Pass the returned slug (or id) to ``init(project=...)`` /
+        ``OliraClient(project=...)`` to operate in it.
+        """
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        if environment is not None:
+            body["environment"] = environment
+        return self._transport.create_project(body)
+
+    def list_projects(self) -> ProjectListResult:
+        """List the organisation's projects. Requires api:manage-projects scope and an org-wide key."""
+        return self._transport.list_projects()
+
+    def get_project(self, *, project: str) -> Project:
+        """Get one project by id or slug. Requires api:manage-projects scope and an org-wide key."""
+        return self._transport.get_project(project)
 
     def list_cohorts(self) -> CohortListResult:
         """List all cohorts in the organisation. Requires api:manage-patients scope."""
@@ -729,6 +762,7 @@ class AsyncOliraClient:
         api_key: str,
         environment: OliraEnv = OliraEnv.PRODUCTION,
         service_name: str | None = None,
+        project: str | None = None,
         base_url: str = DEFAULT_BASE_URL,
         batch_size: int = 50,
         flush_interval: float = 1.5,
@@ -739,13 +773,14 @@ class AsyncOliraClient:
         self._api_key = api_key
         self._environment = environment
         self._service_name = service_name
+        self._project = project
         self._base_url = base_url
         self._batch_size = batch_size
         self._flush_interval = flush_interval
         self._max_queue_size = max_queue_size
         self._timeout = timeout
         self._max_retries = max_retries
-        self._context = _build_context(environment, service_name)
+        self._context = _build_context(environment, service_name, project)
         self._transport: AsyncHttpTransport | None = None
         self._queue: asyncio.Queue[_LogWire | None] = asyncio.Queue(maxsize=max_queue_size)
         self._pending: list[_LogWire] = []
@@ -759,6 +794,7 @@ class AsyncOliraClient:
             api_key=self._api_key,
             timeout=self._timeout,
             max_retries=self._max_retries,
+            project=self._project,
         )
         self._worker_task = asyncio.create_task(self._run_worker())
         return self
@@ -1044,6 +1080,30 @@ class AsyncOliraClient:
         if description is not None:
             body["description"] = description
         return await t.create_cohort(body)
+
+    async def create_project(
+        self, *, name: str, description: str | None = None, environment: str | None = None
+    ) -> Project:
+        """Create a project (isolated workspace). Requires api:manage-projects scope and an org-wide key.
+
+        New projects start empty: fresh configuration, no patients or data carried
+        over. Pass the returned slug (or id) to ``init(project=...)`` /
+        ``OliraClient(project=...)`` to operate in it.
+        """
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        if environment is not None:
+            body["environment"] = environment
+        return await self._require_transport("create_project").create_project(body)
+
+    async def list_projects(self) -> ProjectListResult:
+        """List the organisation's projects. Requires api:manage-projects scope and an org-wide key."""
+        return await self._require_transport("list_projects").list_projects()
+
+    async def get_project(self, *, project: str) -> Project:
+        """Get one project by id or slug. Requires api:manage-projects scope and an org-wide key."""
+        return await self._require_transport("get_project").get_project(project)
 
     async def list_cohorts(self) -> CohortListResult:
         """List all cohorts in the organisation. Requires api:manage-patients scope."""

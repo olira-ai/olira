@@ -754,3 +754,23 @@ class CohortDeleteResult(BaseModel):
 
     deleted: bool
     cohort_id: str
+
+
+class Project(BaseModel):
+    """An isolated workspace within your organisation (see Olira docs: projects)."""
+
+    id: str
+    name: str
+    slug: str
+    description: str | None = None
+    environment: str | None = None
+    status: str = "active"
+    is_default: bool = False
+    created_at: str | None = None
+    deprecated_at: str | None = None
+
+
+class ProjectListResult(BaseModel):
+    """Result of list_projects()."""
+
+    data: list[Project] = Field(default_factory=list)

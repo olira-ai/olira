@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-07-20
+
+### Added
+
+- **Projects — select the workspace your client operates in** (see the platform's
+  `docs/projects.md`). Projects are isolated workspaces within an organization
+  (separate patients, logs, and configuration).
+  - `project` keyword on `OliraClient`, `AsyncOliraClient`, and module-level `init()`
+    (also settable via the `OLIRA_PROJECT` environment variable) — selects a project
+    by id or slug, sent as the `X-Olira-Project` header on every request. Included in
+    the stamped log context alongside `environment`/`service`.
+  - New `create_project()`, `list_projects()`, `get_project()` on both clients and as
+    module-level functions — requires an API key with the `api:manage-projects` scope.
+  - New `Project` / `ProjectListResult` models.
+  - Fully backward compatible: omitting `project` uses a project-locked key's own
+    project, or the organization's default project otherwise — existing integrations
+    are unaffected.
+
 ## [1.5.0] - 2026-07-10
 
 ### Added
