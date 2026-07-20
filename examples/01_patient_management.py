@@ -30,6 +30,10 @@ client = OliraClient(
     base_url=BASE_URL,
     environment=OliraEnv.DEVELOPMENT if "localhost" in BASE_URL else OliraEnv.PRODUCTION,
     async_flush=False,  # this example doesn't use log() — disable the background queue thread
+    # project="dev-sandbox",  # ← isolate every patient op to a project (workspace).
+    #   Omit for the org's default project. Patients created here are invisible to
+    #   other projects, and list_patients() returns only this project's patients.
+    #   See examples/10_project_management.py and SDK_DOCUMENTATION.md#projects.
 )
 
 created_ids: list[str] = []

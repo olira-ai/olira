@@ -27,6 +27,7 @@ Each API key carries one or more scopes. Assign only what your integration needs
 | ----------------------- | ----------------------------------------------------------------- |
 | `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                              |
 | `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc. |
+| `api:manage-projects`   | `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`, `rename_project()`, `deprecate_project()`, `restore_project()`, `delete_project()` — **requires an org-wide key** (a project-locked key is confined to its own workspace and gets 403). |
 | `sdk:patient-token`     | `get_patient_token()`                                             |
 | `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods           |
 | `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc. |
@@ -102,6 +103,23 @@ client = OliraClient(api_key="YOUR_OLIRA_API_KEY")
 Production requests go to `https://app-api.prod.olira.ai/app-api` by default (`DEFAULT_BASE_URL`).
 `OliraClient`, `AsyncOliraClient`, and `init()` all use that value when `base_url` is omitted.
 
+#### Selecting a project (workspace)
+
+A **project** is an isolated workspace within your organization (its own patients, logs, state, views, cohorts, and configuration — see [Projects](#projects)). Select which project every data call operates in by passing `project` (id or slug) at init:
+
+```python
+import olira
+
+# Module-level — or set OLIRA_PROJECT in the environment
+olira.init(api_key="YOUR_KEY", project="dev-sandbox")
+
+# Or with the client class
+from olira import OliraClient
+client = OliraClient(api_key="YOUR_KEY", project="dev-sandbox")
+```
+
+Resolution order for every request: the value passed here **>** the `OLIRA_PROJECT` env var **>** the key's own project (for project-locked keys) **>** the org's default project. Under the hood the SDK sends an `X-Olira-Project` header; a **project-locked** key that names a *different* project is rejected (403). Omit `project` entirely and everything lands in the org's default project — exactly the pre-projects behavior, so existing integrations keep working unchanged.
+
 ### `init()` — module-level initialisation
 
 #### `init`
@@ -117,6 +135,7 @@ Initialize the SDK. API key can be passed or set via `OLIRA_API_KEY` env var.
 | `api_key`        | No       | `Optional[str]` | `None`                                    | API key; falls back to `OLIRA_API_KEY` env var.                                                                                                                                                      |
 | `environment`    | No       | `OliraEnv`      | `OliraEnv.PRODUCTION`                     | `DEVELOPMENT` tags events for non-production systems; use `PRODUCTION` for live data.                                                                                                                |
 | `service_name`   | No       | `Optional[str]` | `None`                                    | Optional label attached to every event's `context` for observability (e.g. `"my-service"`).                                                                                                          |
+| `project`        | No       | `Optional[str]` | `None`                                    | Project (workspace) id or slug every call operates in; falls back to the `OLIRA_PROJECT` env var. Omit for the org's default project. See [Selecting a project](#selecting-a-project-workspace).      |
 | `base_url`       | No       | `str`           | `'https://app-api.prod.olira.ai/app-api'` | Override for local dev or staging.                                                                                                                                                                   |
 | `batch_size`     | No       | `int`           | `50`                                      | Max events per `/v1/logs/batch` request sent by the background worker.                                                                                                                               |
 | `flush_interval` | No       | `float`         | `1.5`                                     | Seconds between automatic background flushes.                                                                                                                                                        |
@@ -308,6 +327,8 @@ new integrations should use the canonical name listed alongside each one.
 ## Patients
 
 All patient functions require an API key with `api:manage-patients` scope.
+
+> **Project scoping:** patients belong to a single project, stamped at creation from the client's selected workspace. Point the client at a project with `OliraClient(project=...)` / `olira.init(project=...)` and `create_patient()` lands there, while `list_patients()` returns only that project's patients. Omit `project` for the org's default project. A patient created in one project is invisible to others. See [Projects](#projects) and [Selecting a project](#selecting-a-project-workspace).
 
 ### Create a patient
 
@@ -670,9 +691,193 @@ and expires after `expires_in` seconds (default 15 minutes).
 | `expires_in`   | Yes      | `int`       | —                       |
 | `scopes`       | Yes      | `list[str]` | —                       |
 
+## Projects
+
+All project functions require an API key with the **`api:manage-projects`** scope **and an org-wide key** (a project-locked key is confined to its own workspace and gets 403 on these routes).
+
+A **project** is a self-contained, isolated workspace within your organisation — its own patients, event logs, patient state, views, cohorts, and platform configuration. Every organisation has exactly one **default** project; data written without a selected project lands there. Everything you can do with projects in the Olira Console is available here. To operate *inside* a project (create patients, send logs, read state), select it at init via [`project=`](#selecting-a-project-workspace) rather than through these management calls.
+
+The lifecycle mirrors the Console exactly: **create** (or **duplicate**) → active → **rename** / **deprecate** (soft-delete, reversible) → **restore**, and finally **permanent delete** (only from the deprecated state, irreversible).
+
+See the full runnable walkthrough in [`examples/10_project_management.py`](examples/10_project_management.py).
+
+---
+
+### `create_project`
+
+```python
+project = client.create_project(name="Dev Sandbox", description="testing", environment="dev")
+# module-level: olira.create_project(name=..., description=..., environment=...)
+```
+
+Creates a new **empty** project — fresh configuration, no patients or data carried over.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `str` | Yes | Display name. Must be unique per org (1–100 chars); the slug is generated from it. |
+| `description` | `str \| None` | No | Optional free-text description. |
+| `environment` | `str \| None` | No | Optional intent tag: `"dev"`, `"staging"`, or `"prod"`. |
+
+**Returns** `Project`.
+
+---
+
+### `list_projects`
+
+```python
+result = client.list_projects()
+for p in result.data:
+    print(p.slug, p.status, p.is_default)
+```
+
+**Returns** `ProjectListResult` — `data: list[Project]` (active first, default first).
+
+---
+
+### `get_project`
+
+```python
+project = client.get_project(project="dev-sandbox")  # id or slug
+```
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | `str` | Yes | Project id or slug. |
+
+**Returns** `Project`.
+
+---
+
+### `duplicate_project`
+
+```python
+prod = client.duplicate_project(project="dev-sandbox", name="Prod", environment="prod")
+```
+
+Creates a new project seeded from an existing one's **configuration only** — platform config (event types, connections), population-view pipeline templates, and cohort *definitions* (with empty rosters). Patients, event logs, patient state, and view results are **never** copied; the duplicate starts empty. This is the dev→prod handoff: validate a setup in a dev project, then duplicate it into production rather than rebuilding by hand.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | `str` | Yes | Source project id or slug to copy configuration from. |
+| `name` | `str` | Yes | Name for the new project. Must be unique per org. |
+| `description` | `str \| None` | No | Optional description for the new project. |
+| `environment` | `str \| None` | No | Optional intent tag for the new project. |
+
+**Returns** `Project` (the new project).
+
+---
+
+### `rename_project`
+
+```python
+project = client.rename_project(project="dev-sandbox", name="Dev Sandbox 2")
+```
+
+Rename a project or update its description / environment tag. `project` is the id or slug; only supplied fields change.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | `str` | Yes | Project id or slug. |
+| `name` | `str \| None` | No | New display name (unique per org). |
+| `description` | `str \| None` | No | New description. |
+| `environment` | `str \| None` | No | New environment tag. |
+
+**Returns** `Project`.
+
+---
+
+### `deprecate_project`
+
+```python
+project = client.deprecate_project(project="dev-sandbox")
+print(project.status)  # "deprecated"
+```
+
+Soft-delete: moves the project to the deprecated list. Its data becomes unreachable through normal reads but is fully retained — **reversible** via `restore_project`.
+
+**Guards:** the default project and the org's *last active* project cannot be deprecated (400).
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | `str` | Yes | Project id or slug. |
+
+**Returns** `Project`.
+
+---
+
+### `restore_project`
+
+```python
+project = client.restore_project(project="dev-sandbox")
+print(project.status)  # "active"
+```
+
+Reactivate a deprecated project, fully intact.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | `str` | Yes | Project id or slug. |
+
+**Returns** `Project`.
+
+---
+
+### `delete_project`
+
+```python
+client.deprecate_project(project="dev-sandbox")  # must be deprecated first
+client.delete_project(project="dev-sandbox")     # permanent, no recovery
+```
+
+Permanently delete a **deprecated** project and its scoped configuration (cohorts, view templates, pipelines, config). **Irreversible.**
+
+**Guards:** the project must already be deprecated, and deletion is **blocked (409) while it still has patients** — delete or export them first. The default project can never be deleted.
+
+**Parameters**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | `str` | Yes | Project id or slug. |
+
+**Returns** `None`.
+
+---
+
+### `Project`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | `str` | Olira-assigned project id. |
+| `name` | `str` | Display name. |
+| `slug` | `str` | URL-friendly identifier, unique per org. Usable anywhere an id is accepted. |
+| `description` | `str \| None` | Free-text description. |
+| `environment` | `str \| None` | Intent tag: `dev` / `staging` / `prod`. |
+| `status` | `str` | `active` or `deprecated`. |
+| `is_default` | `bool` | Whether this is the org's default project. |
+| `created_at` | `datetime` | Creation timestamp. |
+| `deprecated_at` | `datetime \| None` | When it was deprecated, if applicable. |
+
+`ProjectListResult` — `data: list[Project]`.
+
+---
+
 ## Cohorts
 
 All cohort functions require an API key with `api:manage-patients` scope.
+
+> **Project scoping:** cohorts live *inside* a project. Select the workspace at init (`OliraClient(project=...)` / `olira.init(project=...)`); every cohort call then reads and writes within that project. Omit `project` for the org's default project. See [Projects](#projects).
 
 Cohorts are named patient groups scoped to your organisation. Use them to assign summary types to a defined set of patients without touching individual records. Template assignments cascade to patients when they are added to a cohort, and to all existing cohort members when a template is assigned.
 
@@ -877,6 +1082,8 @@ for t in result.data:
 ## Logs
 
 All log functions require `sdk:event-log` scope.
+
+> **Project scoping:** logs inherit their patient's project automatically — you never pass a project when logging. Just target a patient that lives in the workspace you want (select it at init with `OliraClient(project=...)` / `olira.init(project=...)`), and the log is denormalised into that same project. Reads (`get_logs()`, `logs()`, `population_logs()`) are likewise confined to the selected project. See [Projects](#projects).
 
 Use `log()` and `log_batch()` for **ongoing operational traffic**—applications, integrations, and moderate batch sizes where each submission should update patient state through Olira's immediate graph-update path.
 

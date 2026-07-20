@@ -526,6 +526,51 @@ def get_project(*, project: str) -> Project:
     return _get_client().get_project(project=project)
 
 
+def duplicate_project(
+    *,
+    project: str,
+    name: str,
+    description: str | None = None,
+    environment: str | None = None,
+) -> Project:
+    """Duplicate a project's configuration into a new one. Module-level proxy.
+
+    Copies config (platform config, pipelines, cohort definitions) — never
+    patients, logs, or state. Requires api:manage-projects scope + org-wide key.
+    """
+    return _get_client().duplicate_project(
+        project=project, name=name, description=description, environment=environment
+    )
+
+
+def rename_project(
+    *,
+    project: str,
+    name: str | None = None,
+    description: str | None = None,
+    environment: str | None = None,
+) -> Project:
+    """Rename a project or update its description/environment tag. Module-level proxy."""
+    return _get_client().rename_project(
+        project=project, name=name, description=description, environment=environment
+    )
+
+
+def deprecate_project(*, project: str) -> Project:
+    """Soft-delete a project (deprecated list; data retained). Module-level proxy."""
+    return _get_client().deprecate_project(project=project)
+
+
+def restore_project(*, project: str) -> Project:
+    """Reactivate a deprecated project, fully intact. Module-level proxy."""
+    return _get_client().restore_project(project=project)
+
+
+def delete_project(*, project: str) -> None:
+    """Permanently delete a deprecated project (no recovery). Module-level proxy."""
+    _get_client().delete_project(project=project)
+
+
 def create_cohort(*, name: str, description: str | None = None) -> Cohort:
     """Create a named patient cohort. Module-level proxy to the singleton client.
 

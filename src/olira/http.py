@@ -265,6 +265,30 @@ class HttpTransport:
         raw = self._request("GET", f"/v1/projects/{project}")
         return Project.model_validate(raw)
 
+    def duplicate_project(self, project: str, body: dict[str, Any]) -> Project:
+        """Duplicate a project's config into a new one (POST /v1/projects/{id}/duplicate)."""
+        raw = self._request("POST", f"/v1/projects/{project}/duplicate", json=body)
+        return Project.model_validate(raw)
+
+    def update_project(self, project: str, body: dict[str, Any]) -> Project:
+        """Rename/retag a project (PATCH /v1/projects/{id})."""
+        raw = self._request("PATCH", f"/v1/projects/{project}", json=body)
+        return Project.model_validate(raw)
+
+    def deprecate_project(self, project: str) -> Project:
+        """Soft-delete a project (POST /v1/projects/{id}/deprecate)."""
+        raw = self._request("POST", f"/v1/projects/{project}/deprecate")
+        return Project.model_validate(raw)
+
+    def restore_project(self, project: str) -> Project:
+        """Reactivate a deprecated project (POST /v1/projects/{id}/restore)."""
+        raw = self._request("POST", f"/v1/projects/{project}/restore")
+        return Project.model_validate(raw)
+
+    def delete_project(self, project: str) -> None:
+        """Permanently delete a deprecated project (DELETE /v1/projects/{id}). No recovery."""
+        self._request("DELETE", f"/v1/projects/{project}")
+
     def get_cohort(self, cohort_id: str) -> Cohort:
         """Get a cohort by id (GET /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""
         raw = self._request("GET", f"/v1/cohorts/{cohort_id}")
@@ -510,6 +534,30 @@ class AsyncHttpTransport:
         """Get a project by id or slug (GET /v1/projects/{id_or_slug})."""
         raw = await self._request("GET", f"/v1/projects/{project}")
         return Project.model_validate(raw)
+
+    async def duplicate_project(self, project: str, body: dict[str, Any]) -> Project:
+        """Duplicate a project's config into a new one (POST /v1/projects/{id}/duplicate)."""
+        raw = await self._request("POST", f"/v1/projects/{project}/duplicate", json=body)
+        return Project.model_validate(raw)
+
+    async def update_project(self, project: str, body: dict[str, Any]) -> Project:
+        """Rename/retag a project (PATCH /v1/projects/{id})."""
+        raw = await self._request("PATCH", f"/v1/projects/{project}", json=body)
+        return Project.model_validate(raw)
+
+    async def deprecate_project(self, project: str) -> Project:
+        """Soft-delete a project (POST /v1/projects/{id}/deprecate)."""
+        raw = await self._request("POST", f"/v1/projects/{project}/deprecate")
+        return Project.model_validate(raw)
+
+    async def restore_project(self, project: str) -> Project:
+        """Reactivate a deprecated project (POST /v1/projects/{id}/restore)."""
+        raw = await self._request("POST", f"/v1/projects/{project}/restore")
+        return Project.model_validate(raw)
+
+    async def delete_project(self, project: str) -> None:
+        """Permanently delete a deprecated project (DELETE /v1/projects/{id}). No recovery."""
+        await self._request("DELETE", f"/v1/projects/{project}")
 
     async def get_cohort(self, cohort_id: str) -> Cohort:
         """Get a cohort by id (GET /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""

@@ -380,6 +380,72 @@ class OliraClient:
         """Get one project by id or slug. Requires api:manage-projects scope and an org-wide key."""
         return self._transport.get_project(project)
 
+    def duplicate_project(
+        self,
+        *,
+        project: str,
+        name: str,
+        description: str | None = None,
+        environment: str | None = None,
+    ) -> Project:
+        """Duplicate an existing project's configuration into a new one.
+
+        Copies platform config, pipeline templates, and cohort definitions —
+        never patients, logs, or state. ``project`` is the source id or slug.
+        Requires api:manage-projects scope and an org-wide key.
+        """
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        if environment is not None:
+            body["environment"] = environment
+        return self._transport.duplicate_project(project, body)
+
+    def rename_project(
+        self,
+        *,
+        project: str,
+        name: str | None = None,
+        description: str | None = None,
+        environment: str | None = None,
+    ) -> Project:
+        """Rename a project or update its description/environment tag.
+
+        ``project`` is the id or slug. Requires api:manage-projects scope and an
+        org-wide key.
+        """
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        if environment is not None:
+            body["environment"] = environment
+        return self._transport.update_project(project, body)
+
+    def deprecate_project(self, *, project: str) -> Project:
+        """Soft-delete a project (moves it to the deprecated list; data retained).
+
+        Cannot deprecate the default project or the org's last active project.
+        Requires api:manage-projects scope and an org-wide key.
+        """
+        return self._transport.deprecate_project(project)
+
+    def restore_project(self, *, project: str) -> Project:
+        """Reactivate a deprecated project, fully intact.
+
+        Requires api:manage-projects scope and an org-wide key.
+        """
+        return self._transport.restore_project(project)
+
+    def delete_project(self, *, project: str) -> None:
+        """Permanently delete a *deprecated* project and its config. No recovery.
+
+        Blocked while the project still has patients (delete them first). Requires
+        api:manage-projects scope and an org-wide key.
+        """
+        self._transport.delete_project(project)
+
     def list_cohorts(self) -> CohortListResult:
         """List all cohorts in the organisation. Requires api:manage-patients scope."""
         return self._transport.list_cohorts()
@@ -1104,6 +1170,72 @@ class AsyncOliraClient:
     async def get_project(self, *, project: str) -> Project:
         """Get one project by id or slug. Requires api:manage-projects scope and an org-wide key."""
         return await self._require_transport("get_project").get_project(project)
+
+    async def duplicate_project(
+        self,
+        *,
+        project: str,
+        name: str,
+        description: str | None = None,
+        environment: str | None = None,
+    ) -> Project:
+        """Duplicate an existing project's configuration into a new one.
+
+        Copies platform config, pipeline templates, and cohort definitions —
+        never patients, logs, or state. ``project`` is the source id or slug.
+        Requires api:manage-projects scope and an org-wide key.
+        """
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        if environment is not None:
+            body["environment"] = environment
+        return await self._require_transport("duplicate_project").duplicate_project(project, body)
+
+    async def rename_project(
+        self,
+        *,
+        project: str,
+        name: str | None = None,
+        description: str | None = None,
+        environment: str | None = None,
+    ) -> Project:
+        """Rename a project or update its description/environment tag.
+
+        ``project`` is the id or slug. Requires api:manage-projects scope and an
+        org-wide key.
+        """
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        if environment is not None:
+            body["environment"] = environment
+        return await self._require_transport("rename_project").update_project(project, body)
+
+    async def deprecate_project(self, *, project: str) -> Project:
+        """Soft-delete a project (moves it to the deprecated list; data retained).
+
+        Cannot deprecate the default project or the org's last active project.
+        Requires api:manage-projects scope and an org-wide key.
+        """
+        return await self._require_transport("deprecate_project").deprecate_project(project)
+
+    async def restore_project(self, *, project: str) -> Project:
+        """Reactivate a deprecated project, fully intact.
+
+        Requires api:manage-projects scope and an org-wide key.
+        """
+        return await self._require_transport("restore_project").restore_project(project)
+
+    async def delete_project(self, *, project: str) -> None:
+        """Permanently delete a *deprecated* project and its config. No recovery.
+
+        Blocked while the project still has patients (delete them first). Requires
+        api:manage-projects scope and an org-wide key.
+        """
+        await self._require_transport("delete_project").delete_project(project)
 
     async def list_cohorts(self) -> CohortListResult:
         """List all cohorts in the organisation. Requires api:manage-patients scope."""

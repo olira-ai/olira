@@ -28,6 +28,8 @@ olira.init(
     api_key=os.environ["OLIRA_API_KEY"],
     base_url=BASE_URL,
     environment=OliraEnv.DEVELOPMENT if "localhost" in BASE_URL else OliraEnv.PRODUCTION,
+    # project="dev-sandbox",  # ← optional: isolate to a project (workspace); or set
+    #   OLIRA_PROJECT. Omit for the org's default project. See 10_project_management.py.
 )
 
 # 1. Create a patient
