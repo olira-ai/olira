@@ -80,17 +80,28 @@ def _sync_client() -> tuple[OliraClient, RecordingTransport]:
 
 def test_create_project_delegates():
     client, t = _sync_client()
-    p = client.create_project(name="Dev Sandbox", description="d", environment="dev")
+    p = client.create_project(name="Dev Sandbox", slug="dev-sandbox", description="d", environment="dev")
     assert p.slug == "dev-sandbox"
-    assert t.calls[-1] == ("create", {"name": "Dev Sandbox", "description": "d", "environment": "dev"})
+    assert t.calls[-1] == (
+        "create",
+        {"name": "Dev Sandbox", "slug": "dev-sandbox", "description": "d", "environment": "dev"},
+    )
+    client.close()
+
+
+def test_create_project_omits_slug_when_not_given():
+    client, t = _sync_client()
+    client.create_project(name="Dev Sandbox")
+    # slug key absent so the server derives it from the name
+    assert t.calls[-1] == ("create", {"name": "Dev Sandbox"})
     client.close()
 
 
 def test_duplicate_project_delegates():
     client, t = _sync_client()
-    p = client.duplicate_project(project="dev-sandbox", name="Prod", environment="prod")
+    p = client.duplicate_project(project="dev-sandbox", name="Prod", slug="prod", environment="prod")
     assert p.slug == "prod"
-    assert t.calls[-1] == ("duplicate", "dev-sandbox", {"name": "Prod", "environment": "prod"})
+    assert t.calls[-1] == ("duplicate", "dev-sandbox", {"name": "Prod", "slug": "prod", "environment": "prod"})
     client.close()
 
 

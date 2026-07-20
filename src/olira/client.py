@@ -357,15 +357,23 @@ class OliraClient:
         return self._transport.create_cohort(body)
 
     def create_project(
-        self, *, name: str, description: str | None = None, environment: str | None = None
+        self,
+        *,
+        name: str,
+        slug: str | None = None,
+        description: str | None = None,
+        environment: str | None = None,
     ) -> Project:
         """Create a project (isolated workspace). Requires api:manage-projects scope and an org-wide key.
 
         New projects start empty: fresh configuration, no patients or data carried
-        over. Pass the returned slug (or id) to ``init(project=...)`` /
-        ``OliraClient(project=...)`` to operate in it.
+        over. ``slug`` is the handle you pass to ``init(project=...)`` /
+        ``OliraClient(project=...)`` to operate in it — optional and normalized
+        server-side (derived from ``name`` when omitted).
         """
         body: dict[str, Any] = {"name": name}
+        if slug is not None:
+            body["slug"] = slug
         if description is not None:
             body["description"] = description
         if environment is not None:
@@ -385,16 +393,22 @@ class OliraClient:
         *,
         project: str,
         name: str,
+        slug: str | None = None,
         description: str | None = None,
         environment: str | None = None,
     ) -> Project:
         """Duplicate an existing project's configuration into a new one.
 
         Copies platform config, pipeline templates, and cohort definitions —
-        never patients, logs, or state. ``project`` is the source id or slug.
-        Requires api:manage-projects scope and an org-wide key.
+        never patients, logs, or state. ``project`` is the source id or slug;
+        ``slug`` is the new project's handle (optional, normalized server-side;
+        derived from ``name`` when omitted — pass a distinct one to avoid a
+        collision with the source). Requires api:manage-projects scope and an
+        org-wide key.
         """
         body: dict[str, Any] = {"name": name}
+        if slug is not None:
+            body["slug"] = slug
         if description is not None:
             body["description"] = description
         if environment is not None:
@@ -1148,15 +1162,23 @@ class AsyncOliraClient:
         return await t.create_cohort(body)
 
     async def create_project(
-        self, *, name: str, description: str | None = None, environment: str | None = None
+        self,
+        *,
+        name: str,
+        slug: str | None = None,
+        description: str | None = None,
+        environment: str | None = None,
     ) -> Project:
         """Create a project (isolated workspace). Requires api:manage-projects scope and an org-wide key.
 
         New projects start empty: fresh configuration, no patients or data carried
-        over. Pass the returned slug (or id) to ``init(project=...)`` /
-        ``OliraClient(project=...)`` to operate in it.
+        over. ``slug`` is the handle you pass to ``init(project=...)`` /
+        ``OliraClient(project=...)`` to operate in it — optional and normalized
+        server-side (derived from ``name`` when omitted).
         """
         body: dict[str, Any] = {"name": name}
+        if slug is not None:
+            body["slug"] = slug
         if description is not None:
             body["description"] = description
         if environment is not None:
@@ -1176,16 +1198,22 @@ class AsyncOliraClient:
         *,
         project: str,
         name: str,
+        slug: str | None = None,
         description: str | None = None,
         environment: str | None = None,
     ) -> Project:
         """Duplicate an existing project's configuration into a new one.
 
         Copies platform config, pipeline templates, and cohort definitions —
-        never patients, logs, or state. ``project`` is the source id or slug.
-        Requires api:manage-projects scope and an org-wide key.
+        never patients, logs, or state. ``project`` is the source id or slug;
+        ``slug`` is the new project's handle (optional, normalized server-side;
+        derived from ``name`` when omitted — pass a distinct one to avoid a
+        collision with the source). Requires api:manage-projects scope and an
+        org-wide key.
         """
         body: dict[str, Any] = {"name": name}
+        if slug is not None:
+            body["slug"] = slug
         if description is not None:
             body["description"] = description
         if environment is not None:

@@ -506,14 +506,20 @@ def population_logs(patient_ids: list[str] | None = None) -> LogQuery:
 
 
 def create_project(
-    *, name: str, description: str | None = None, environment: str | None = None
+    *,
+    name: str,
+    slug: str | None = None,
+    description: str | None = None,
+    environment: str | None = None,
 ) -> Project:
     """Create a project (isolated workspace). Module-level proxy to the singleton client.
 
     Requires api:manage-projects scope and an org-wide key. New projects start empty;
-    pass the returned slug to ``init(project=...)`` to operate in it.
+    pass the ``slug`` (the handle for ``init(project=...)``) or let it derive from ``name``.
     """
-    return _get_client().create_project(name=name, description=description, environment=environment)
+    return _get_client().create_project(
+        name=name, slug=slug, description=description, environment=environment
+    )
 
 
 def list_projects() -> ProjectListResult:
@@ -530,16 +536,19 @@ def duplicate_project(
     *,
     project: str,
     name: str,
+    slug: str | None = None,
     description: str | None = None,
     environment: str | None = None,
 ) -> Project:
     """Duplicate a project's configuration into a new one. Module-level proxy.
 
     Copies config (platform config, pipelines, cohort definitions) — never
-    patients, logs, or state. Requires api:manage-projects scope + org-wide key.
+    patients, logs, or state. ``slug`` is the new project's handle (pass a
+    distinct one; derived from ``name`` when omitted). Requires
+    api:manage-projects scope + org-wide key.
     """
     return _get_client().duplicate_project(
-        project=project, name=name, description=description, environment=environment
+        project=project, name=name, slug=slug, description=description, environment=environment
     )
 
 

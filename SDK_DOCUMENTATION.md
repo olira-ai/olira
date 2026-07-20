@@ -706,8 +706,8 @@ See the full runnable walkthrough in [`examples/10_project_management.py`](examp
 ### `create_project`
 
 ```python
-project = client.create_project(name="Dev Sandbox", description="testing", environment="dev")
-# module-level: olira.create_project(name=..., description=..., environment=...)
+project = client.create_project(name="Dev Sandbox", slug="dev-sandbox", environment="dev")
+# module-level: olira.create_project(name=..., slug=..., description=..., environment=...)
 ```
 
 Creates a new **empty** project — fresh configuration, no patients or data carried over.
@@ -716,7 +716,8 @@ Creates a new **empty** project — fresh configuration, no patients or data car
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | `str` | Yes | Display name. Must be unique per org (1–100 chars); the slug is generated from it. |
+| `name` | `str` | Yes | Display name. Must be unique per org (1–100 chars). |
+| `slug` | `str \| None` | No | The handle you later pass to `init(project=...)` / `X-Olira-Project`. Unique per org, normalized server-side (lowercased, non-alphanumerics → hyphens); **derived from `name` when omitted**. |
 | `description` | `str \| None` | No | Optional free-text description. |
 | `environment` | `str \| None` | No | Optional intent tag: `"dev"`, `"staging"`, or `"prod"`. |
 
@@ -755,7 +756,7 @@ project = client.get_project(project="dev-sandbox")  # id or slug
 ### `duplicate_project`
 
 ```python
-prod = client.duplicate_project(project="dev-sandbox", name="Prod", environment="prod")
+prod = client.duplicate_project(project="dev-sandbox", name="Prod", slug="prod", environment="prod")
 ```
 
 Creates a new project seeded from an existing one's **configuration only** — platform config (event types, connections), population-view pipeline templates, and cohort *definitions* (with empty rosters). Patients, event logs, patient state, and view results are **never** copied; the duplicate starts empty. This is the dev→prod handoff: validate a setup in a dev project, then duplicate it into production rather than rebuilding by hand.
@@ -766,6 +767,7 @@ Creates a new project seeded from an existing one's **configuration only** — p
 | --- | --- | --- | --- |
 | `project` | `str` | Yes | Source project id or slug to copy configuration from. |
 | `name` | `str` | Yes | Name for the new project. Must be unique per org. |
+| `slug` | `str \| None` | No | The new project's handle for `init(project=...)`. Unique per org, normalized server-side; derived from `name` when omitted — pass a distinct one so it doesn't collide with the source. |
 | `description` | `str \| None` | No | Optional description for the new project. |
 | `environment` | `str \| None` | No | Optional intent tag for the new project. |
 

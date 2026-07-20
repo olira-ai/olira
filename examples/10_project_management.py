@@ -59,11 +59,12 @@ for p in projects.data:
 print("\n── 2. Create project ───────────────────────────────────────────────────")
 dev = client.create_project(
     name=f"Dev Sandbox {RUN}",
+    slug=f"dev-sandbox-{RUN}",  # the handle for init(project=...); omit to derive from name
     description="Created by 10_project_management.py",
     environment="dev",  # optional intent tag: dev | staging | prod
 )
 print(f"  id          = {dev.id}")
-print(f"  slug        = {dev.slug}")
+print(f"  slug        = {dev.slug}   ← pass this to init(project=...)")
 print(f"  environment = {dev.environment}")
 
 # ── 3. Operate inside a project ───────────────────────────────────────────────
@@ -89,6 +90,7 @@ print("\n── 4. Duplicate project (config only) ─────────�
 prod = client.duplicate_project(
     project=dev.slug,
     name=f"Prod {RUN}",
+    slug=f"prod-{RUN}",  # pick a distinct handle; don't rely on the "<source> copy" default
     environment="prod",
 )
 print(f"  duplicated {dev.slug!r} → {prod.slug!r} (env={prod.environment})")
