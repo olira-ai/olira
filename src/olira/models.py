@@ -775,6 +775,7 @@ class ProjectListResult(BaseModel):
 
     data: list[Project] = Field(default_factory=list)
 
+
 # ---------------------------------------------------------------------------
 # Org schema/mapping management (api:org-config scope)
 # ---------------------------------------------------------------------------

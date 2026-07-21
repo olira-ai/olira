@@ -13,8 +13,6 @@ from .client import DEFAULT_BASE_URL, OliraClient, OliraEnv
 from .exceptions import OliraError
 from .log_query import LogQuery
 from .models import (
-    Project,
-    ProjectListResult,
     BatchResult,
     Cohort,
     CohortDeleteResult,
@@ -39,6 +37,8 @@ from .models import (
     PatientBatchResult,
     PatientListResult,
     PatientToken,
+    Project,
+    ProjectListResult,
     SchemaActionResult,
     SchemaCheckResult,
     SchemaDetail,
@@ -522,9 +522,7 @@ def create_project(
     Requires api:manage-projects scope and an org-wide key. New projects start empty;
     pass the ``slug`` (the handle for ``init(project=...)``) or let it derive from ``name``.
     """
-    return _get_client().create_project(
-        name=name, slug=slug, description=description, environment=environment
-    )
+    return _get_client().create_project(name=name, slug=slug, description=description, environment=environment)
 
 
 def list_projects() -> ProjectListResult:
@@ -565,9 +563,7 @@ def rename_project(
     environment: str | None = None,
 ) -> Project:
     """Rename a project or update its description/environment tag. Module-level proxy."""
-    return _get_client().rename_project(
-        project=project, name=name, description=description, environment=environment
-    )
+    return _get_client().rename_project(project=project, name=name, description=description, environment=environment)
 
 
 def deprecate_project(*, project: str) -> Project:

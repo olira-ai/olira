@@ -9,8 +9,6 @@ import httpx
 
 from .exceptions import AuthError, NetworkError, RateLimitError, ServerError, ValidationError
 from .models import (
-    Project,
-    ProjectListResult,
     BatchResult,
     Cohort,
     CohortDeleteResult,
@@ -29,6 +27,8 @@ from .models import (
     PatientBatchResult,
     PatientListResult,
     PatientToken,
+    Project,
+    ProjectListResult,
     SchemaActionResult,
     SchemaCheckResult,
     SchemaDetail,

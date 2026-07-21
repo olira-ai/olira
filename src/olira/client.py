@@ -13,8 +13,6 @@ from .http import AsyncHttpTransport, HttpTransport
 from .ingestion_confirm import confirm_ingestion_job_resilient, confirm_ingestion_job_resilient_async
 from .log_query import AsyncLogQuery, LogQuery
 from .models import (
-    Project,
-    ProjectListResult,
     BatchResult,
     Cohort,
     CohortDeleteResult,
@@ -39,6 +37,8 @@ from .models import (
     PatientBatchResult,
     PatientListResult,
     PatientToken,
+    Project,
+    ProjectListResult,
     SchemaActionResult,
     SchemaCheckResult,
     SchemaDetail,

@@ -125,9 +125,7 @@ def test_deprecate_restore_delete_delegate():
 
 def test_project_selected_at_init_sets_context():
     """`project=` flows into the per-request context used for the header/log context."""
-    client = OliraClient(
-        api_key="key", environment=OliraEnv.DEVELOPMENT, project="dev-sandbox", async_flush=False
-    )
+    client = OliraClient(api_key="key", environment=OliraEnv.DEVELOPMENT, project="dev-sandbox", async_flush=False)
     assert client._project == "dev-sandbox"
     assert client._context.get("project") == "dev-sandbox"
     client.close()
