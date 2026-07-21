@@ -125,7 +125,7 @@ Resolution order for every request: the value passed here **>** the `OLIRA_PROJE
 #### `init`
 
 ```python
-init(api_key: str | None = None, *, environment: OliraEnv = OliraEnv.PRODUCTION, service_name: str | None = None, base_url: str = 'https://app-api.prod.olira.ai/app-api', batch_size: int = 50, flush_interval: float = 1.5, max_queue_size: int = 10000, timeout: float = 5.0, max_retries: int = 3, on_error: str = 'drop', async_flush: bool = True) -> None
+init(api_key: str | None = None, *, environment: OliraEnv = OliraEnv.PRODUCTION, service_name: str | None = None, project: str | None = None, base_url: str = 'https://app-api.prod.olira.ai/app-api', batch_size: int = 50, flush_interval: float = 1.5, max_queue_size: int = 10000, timeout: float = 5.0, max_retries: int = 3, on_error: str = 'drop', async_flush: bool = True) -> None
 ```
 
 Initialize the SDK. API key can be passed or set via `OLIRA_API_KEY` env var.
