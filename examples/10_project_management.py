@@ -95,7 +95,7 @@ prod = client.duplicate_project(
 )
 print(f"  duplicated {dev.slug!r} → {prod.slug!r} (env={prod.environment})")
 prod_detail = client.get_project(project=prod.slug)
-print(f"  duplicate patient_count = {getattr(prod_detail, 'patient_count', 'n/a')}  (0 — data is never copied)")
+print(f"  duplicate status = {prod_detail.status}  (config only — patients/logs/state are never copied)")
 
 # ── 5. Rename / retag ─────────────────────────────────────────────────────────
 print("\n── 5. Rename / retag project ───────────────────────────────────────────")
