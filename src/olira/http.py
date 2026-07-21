@@ -141,11 +141,15 @@ class HttpTransport:
         path: str,
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
+        retryable: bool = True,
     ) -> Any:
+        # retryable=False for non-idempotent calls (e.g. project create/duplicate):
+        # replaying a POST whose response was lost could create a duplicate resource.
+        max_retries = self._max_retries if retryable else 0
         last_exception: Exception | None = None
         retry_after_seconds: int = 0
 
-        for attempt in range(self._max_retries + 1):
+        for attempt in range(max_retries + 1):
             if retry_after_seconds > 0:
                 time.sleep(retry_after_seconds)
             retry_after_seconds = 0
@@ -154,12 +158,12 @@ class HttpTransport:
                 response = self._client.request(method, path, json=json, params=params)
             except (httpx.ConnectError, httpx.TimeoutException, httpx.ReadError) as e:
                 last_exception = NetworkError(str(e))
-                if attempt < self._max_retries:
+                if attempt < max_retries:
                     delay = min(2**attempt + (time.time() % 1), 60)
                     logger.debug(
                         "Request failed (attempt %s/%s), retry in %.1fs: %s",
                         attempt + 1,
-                        self._max_retries + 1,
+                        max_retries + 1,
                         delay,
                         _redact_key(self._api_key),
                     )
@@ -184,7 +188,7 @@ class HttpTransport:
 
             if status == 429:
                 retry_after_seconds = _parse_retry_after(response)
-                if attempt == self._max_retries:
+                if attempt == max_retries:
                     raise RateLimitError(
                         "Rate limited; retry after backoff",
                         retry_after=retry_after_seconds,
@@ -197,14 +201,14 @@ class HttpTransport:
                 continue
 
             if _should_retry(status):
-                if attempt == self._max_retries:
+                if attempt == max_retries:
                     raise ServerError(f"Server error (HTTP {status}) after retries")
                 delay = min(2**attempt + (time.time() % 1), 60)
                 logger.debug(
                     "Server error %s (attempt %s/%s), retry in %.1fs",
                     status,
                     attempt + 1,
-                    self._max_retries + 1,
+                    max_retries + 1,
                     delay,
                 )
                 time.sleep(delay)
@@ -257,7 +261,7 @@ class HttpTransport:
 
     def create_project(self, body: dict[str, Any]) -> Project:
         """Create a project (POST /v1/projects). Requires api:manage-projects scope + org-wide key."""
-        raw = self._request("POST", "/v1/projects", json=body)
+        raw = self._request("POST", "/v1/projects", json=body, retryable=False)
         return Project.model_validate(raw)
 
     def list_projects(self) -> ProjectListResult:
@@ -272,7 +276,7 @@ class HttpTransport:
 
     def duplicate_project(self, project: str, body: dict[str, Any]) -> Project:
         """Duplicate a project's config into a new one (POST /v1/projects/{id}/duplicate)."""
-        raw = self._request("POST", f"/v1/projects/{project}/duplicate", json=body)
+        raw = self._request("POST", f"/v1/projects/{project}/duplicate", json=body, retryable=False)
         return Project.model_validate(raw)
 
     def update_project(self, project: str, body: dict[str, Any]) -> Project:
@@ -562,7 +566,7 @@ class AsyncHttpTransport:
 
     async def create_project(self, body: dict[str, Any]) -> Project:
         """Create a project (POST /v1/projects). Requires api:manage-projects scope + org-wide key."""
-        raw = await self._request("POST", "/v1/projects", json=body)
+        raw = await self._request("POST", "/v1/projects", json=body, retryable=False)
         return Project.model_validate(raw)
 
     async def list_projects(self) -> ProjectListResult:
@@ -577,7 +581,7 @@ class AsyncHttpTransport:
 
     async def duplicate_project(self, project: str, body: dict[str, Any]) -> Project:
         """Duplicate a project's config into a new one (POST /v1/projects/{id}/duplicate)."""
-        raw = await self._request("POST", f"/v1/projects/{project}/duplicate", json=body)
+        raw = await self._request("POST", f"/v1/projects/{project}/duplicate", json=body, retryable=False)
         return Project.model_validate(raw)
 
     async def update_project(self, project: str, body: dict[str, Any]) -> Project:
@@ -789,11 +793,15 @@ class AsyncHttpTransport:
         path: str,
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
+        retryable: bool = True,
     ) -> Any:
+        # retryable=False for non-idempotent calls (e.g. project create/duplicate):
+        # replaying a POST whose response was lost could create a duplicate resource.
+        max_retries = self._max_retries if retryable else 0
         last_exception: Exception | None = None
         retry_after_seconds: int = 0
 
-        for attempt in range(self._max_retries + 1):
+        for attempt in range(max_retries + 1):
             if retry_after_seconds > 0:
                 await asyncio.sleep(retry_after_seconds)
             retry_after_seconds = 0
@@ -802,12 +810,12 @@ class AsyncHttpTransport:
                 response = await self._client.request(method, path, json=json, params=params)
             except (httpx.ConnectError, httpx.TimeoutException, httpx.ReadError) as e:
                 last_exception = NetworkError(str(e))
-                if attempt < self._max_retries:
+                if attempt < max_retries:
                     delay = min(2**attempt + (time.time() % 1), 60)
                     logger.debug(
                         "Request failed (attempt %s/%s), retry in %.1fs: %s",
                         attempt + 1,
-                        self._max_retries + 1,
+                        max_retries + 1,
                         delay,
                         _redact_key(self._api_key),
                     )
@@ -832,7 +840,7 @@ class AsyncHttpTransport:
 
             if status == 429:
                 retry_after_seconds = _parse_retry_after(response)
-                if attempt == self._max_retries:
+                if attempt == max_retries:
                     raise RateLimitError(
                         "Rate limited; retry after backoff",
                         retry_after=retry_after_seconds,
@@ -845,7 +853,7 @@ class AsyncHttpTransport:
                 continue
 
             if _should_retry(status):
-                if attempt == self._max_retries:
+                if attempt == max_retries:
                     raise ServerError(f"Server error (HTTP {status}) after retries")
                 delay = min(2**attempt + (time.time() % 1), 60)
                 await asyncio.sleep(delay)
