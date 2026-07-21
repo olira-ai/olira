@@ -1,39 +1,38 @@
 > **Maintained by:** Olira Engineering  
-> **Published at:** [https://olira.ai/api-docs](https://olira.ai/api-docs) → Python SDK tab  
-> **Status:** **BETA** — SDK APIs and this reference may change between releases.
+> **Published at:** [https://docs.olira.ai/reference/sdk](https://docs.olira.ai/reference/sdk)
 
 # Olira Python SDK — API Reference
 
 The Olira Python SDK provides a typed client for logging health events,
 managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
-[Olira MCP Patient State server](https://olira.ai/api-docs).
+[Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.5.0`
+**Package:** `olira` — **Version:** `1.7.0`
 
 ## Related docs
 
-| Doc                                                                             | What it covers                                               | Why you need it                                                                                                                                                             |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Authentication** ([api-docs](https://olira.ai/api-docs) → Authentication tab) | API keys, patient tokens, **scopes**, auth errors            | Choose scopes when creating keys; mint patient tokens for device-facing calls                                                                                               |
-| **MCP Patient State** ([api-docs](https://olira.ai/api-docs) → MCP tab)         | Tools for querying patient health state from AI agents       | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
-| **CLI** ([api-docs](https://olira.ai/api-docs) → CLI tab)                       | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server                                                                             |
+| Doc                                                               | What it covers                                               | Why you need it                                                                                                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Authentication** ([docs](https://docs.olira.ai/authentication)) | API keys, patient tokens, **scopes**, auth errors            | Choose scopes when creating keys; mint patient tokens for device-facing calls                                                                                               |
+| **MCP Patient State** ([docs](https://docs.olira.ai/mcp-server))  | Tools for querying patient health state from AI agents       | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
+| **CLI** ([docs](https://docs.olira.ai/cli))                       | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server                                                                             |
 
 ## Scopes
 
 Each API key carries one or more scopes. Assign only what your integration needs.
 
-| Scope                   | What it unlocks                                                   |
-| ----------------------- | ----------------------------------------------------------------- |
-| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                              |
-| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc. |
+| Scope                   | What it unlocks                                                                                                                                                                                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                                                                                                                                                                                                                                   |
+| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc.                                                                                                                                                        |
 | `api:manage-projects`   | `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`, `rename_project()`, `deprecate_project()`, `restore_project()`, `delete_project()` — **requires an org-wide key** (a project-locked key is confined to its own workspace and gets 403). |
-| `sdk:patient-token`     | `get_patient_token()`                                             |
-| `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods           |
-| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc. |
-| `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — EHR write-back requests (also requires platform-side write configuration) |
-| `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [EHR Integrations & Instances](#ehr-integrations--instances) |
-| `mcp:patient-state`     | Query patient state via the MCP Patient State server              |
+| `sdk:patient-token`     | `get_patient_token()`                                                                                                                                                                                                                                                  |
+| `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                                                                                                                                                                |
+| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc.                                                                                                                                               |
+| `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — EHR write-back requests (also requires platform-side write configuration)                                                                                                                                      |
+| `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [EHR Integrations & Instances](#ehr-integrations--instances)                                                                                                                                   |
+| `mcp:patient-state`     | Query patient state via the MCP Patient State server                                                                                                                                                                                                                   |
 
 ## Getting Started
 
@@ -118,7 +117,7 @@ from olira import OliraClient
 client = OliraClient(api_key="YOUR_KEY", project="dev-sandbox")
 ```
 
-Resolution order for every request: the value passed here **>** the `OLIRA_PROJECT` env var **>** the key's own project (for project-locked keys) **>** the org's default project. Under the hood the SDK sends an `X-Olira-Project` header; a **project-locked** key that names a *different* project is rejected (403). Omit `project` entirely and everything lands in the org's default project — exactly the pre-projects behavior, so existing integrations keep working unchanged.
+Resolution order for every request: the value passed here **>** the `OLIRA_PROJECT` env var **>** the key's own project (for project-locked keys) **>** the org's default project. Under the hood the SDK sends an `X-Olira-Project` header; a **project-locked** key that names a _different_ project is rejected (403). Omit `project` entirely and everything lands in the org's default project — exactly the pre-projects behavior, so existing integrations keep working unchanged.
 
 ### `init()` — module-level initialisation
 
@@ -135,7 +134,7 @@ Initialize the SDK. API key can be passed or set via `OLIRA_API_KEY` env var.
 | `api_key`        | No       | `Optional[str]` | `None`                                    | API key; falls back to `OLIRA_API_KEY` env var.                                                                                                                                                      |
 | `environment`    | No       | `OliraEnv`      | `OliraEnv.PRODUCTION`                     | `DEVELOPMENT` tags events for non-production systems; use `PRODUCTION` for live data.                                                                                                                |
 | `service_name`   | No       | `Optional[str]` | `None`                                    | Optional label attached to every event's `context` for observability (e.g. `"my-service"`).                                                                                                          |
-| `project`        | No       | `Optional[str]` | `None`                                    | Project (workspace) id or slug every call operates in; falls back to the `OLIRA_PROJECT` env var. Omit for the org's default project. See [Selecting a project](#selecting-a-project-workspace).      |
+| `project`        | No       | `Optional[str]` | `None`                                    | Project (workspace) id or slug every call operates in; falls back to the `OLIRA_PROJECT` env var. Omit for the org's default project. See [Selecting a project](#selecting-a-project-workspace).     |
 | `base_url`       | No       | `str`           | `'https://app-api.prod.olira.ai/app-api'` | Override for local dev or staging.                                                                                                                                                                   |
 | `batch_size`     | No       | `int`           | `50`                                      | Max events per `/v1/logs/batch` request sent by the background worker.                                                                                                                               |
 | `flush_interval` | No       | `float`         | `1.5`                                     | Seconds between automatic background flushes.                                                                                                                                                        |
@@ -695,7 +694,7 @@ and expires after `expires_in` seconds (default 15 minutes).
 
 All project functions require an API key with the **`api:manage-projects`** scope **and an org-wide key** (a project-locked key is confined to its own workspace and gets 403 on these routes).
 
-A **project** is a self-contained, isolated workspace within your organisation — its own patients, event logs, patient state, views, cohorts, and platform configuration. Every organisation has exactly one **default** project; data written without a selected project lands there. Everything you can do with projects in the Olira Console is available here. To operate *inside* a project (create patients, send logs, read state), select it at init via [`project=`](#selecting-a-project-workspace) rather than through these management calls.
+A **project** is a self-contained, isolated workspace within your organisation — its own patients, event logs, patient state, views, cohorts, and platform configuration. Every organisation has exactly one **default** project; data written without a selected project lands there. Everything you can do with projects in the Olira Console is available here. To operate _inside_ a project (create patients, send logs, read state), select it at init via [`project=`](#selecting-a-project-workspace) rather than through these management calls.
 
 The lifecycle mirrors the Console exactly: **create** (or **duplicate**) → active → **rename** / **deprecate** (soft-delete, reversible) → **restore**, and finally **permanent delete** (only from the deprecated state, irreversible).
 
@@ -714,12 +713,12 @@ Creates a new **empty** project — fresh configuration, no patients or data car
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `str` | Yes | Display name. Must be unique per org (1–100 chars). |
-| `slug` | `str \| None` | No | The handle you later pass to `init(project=...)` / `X-Olira-Project`. Unique per org, normalized server-side (lowercased, non-alphanumerics → hyphens); **derived from `name` when omitted**. |
-| `description` | `str \| None` | No | Optional free-text description. |
-| `environment` | `str \| None` | No | Optional intent tag: `"dev"`, `"staging"`, or `"prod"`. |
+| Name          | Type          | Required | Description                                                                                                                                                                                   |
+| ------------- | ------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | `str`         | Yes      | Display name. Must be unique per org (1–100 chars).                                                                                                                                           |
+| `slug`        | `str \| None` | No       | The handle you later pass to `init(project=...)` / `X-Olira-Project`. Unique per org, normalized server-side (lowercased, non-alphanumerics → hyphens); **derived from `name` when omitted**. |
+| `description` | `str \| None` | No       | Optional free-text description.                                                                                                                                                               |
+| `environment` | `str \| None` | No       | Optional intent tag: `"dev"`, `"staging"`, or `"prod"`.                                                                                                                                       |
 
 **Returns** `Project`.
 
@@ -745,9 +744,9 @@ project = client.get_project(project="dev-sandbox")  # id or slug
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `project` | `str` | Yes | Project id or slug. |
+| Name      | Type  | Required | Description         |
+| --------- | ----- | -------- | ------------------- |
+| `project` | `str` | Yes      | Project id or slug. |
 
 **Returns** `Project`.
 
@@ -759,17 +758,17 @@ project = client.get_project(project="dev-sandbox")  # id or slug
 prod = client.duplicate_project(project="dev-sandbox", name="Prod", slug="prod", environment="prod")
 ```
 
-Creates a new project seeded from an existing one's **configuration only** — platform config (event types, connections), population-view pipeline templates, and cohort *definitions* (with empty rosters). Patients, event logs, patient state, and view results are **never** copied; the duplicate starts empty. This is the dev→prod handoff: validate a setup in a dev project, then duplicate it into production rather than rebuilding by hand.
+Creates a new project seeded from an existing one's **configuration only** — platform config (event types, connections), population-view pipeline templates, and cohort _definitions_ (with empty rosters). Patients, event logs, patient state, and view results are **never** copied; the duplicate starts empty. This is the dev→prod handoff: validate a setup in a dev project, then duplicate it into production rather than rebuilding by hand.
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `project` | `str` | Yes | Source project id or slug to copy configuration from. |
-| `name` | `str` | Yes | Name for the new project. Must be unique per org. |
-| `slug` | `str \| None` | No | The new project's handle for `init(project=...)`. Unique per org, normalized server-side; derived from `name` when omitted — pass a distinct one so it doesn't collide with the source. |
-| `description` | `str \| None` | No | Optional description for the new project. |
-| `environment` | `str \| None` | No | Optional intent tag for the new project. |
+| Name          | Type          | Required | Description                                                                                                                                                                             |
+| ------------- | ------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project`     | `str`         | Yes      | Source project id or slug to copy configuration from.                                                                                                                                   |
+| `name`        | `str`         | Yes      | Name for the new project. Must be unique per org.                                                                                                                                       |
+| `slug`        | `str \| None` | No       | The new project's handle for `init(project=...)`. Unique per org, normalized server-side; derived from `name` when omitted — pass a distinct one so it doesn't collide with the source. |
+| `description` | `str \| None` | No       | Optional description for the new project.                                                                                                                                               |
+| `environment` | `str \| None` | No       | Optional intent tag for the new project.                                                                                                                                                |
 
 **Returns** `Project` (the new project).
 
@@ -785,12 +784,12 @@ Rename a project or update its description / environment tag. `project` is the i
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `project` | `str` | Yes | Project id or slug. |
-| `name` | `str \| None` | No | New display name (unique per org). |
-| `description` | `str \| None` | No | New description. |
-| `environment` | `str \| None` | No | New environment tag. |
+| Name          | Type          | Required | Description                        |
+| ------------- | ------------- | -------- | ---------------------------------- |
+| `project`     | `str`         | Yes      | Project id or slug.                |
+| `name`        | `str \| None` | No       | New display name (unique per org). |
+| `description` | `str \| None` | No       | New description.                   |
+| `environment` | `str \| None` | No       | New environment tag.               |
 
 **Returns** `Project`.
 
@@ -805,13 +804,13 @@ print(project.status)  # "deprecated"
 
 Soft-delete: moves the project to the deprecated list. Its data becomes unreachable through normal reads but is fully retained — **reversible** via `restore_project`.
 
-**Guards:** the default project and the org's *last active* project cannot be deprecated (400).
+**Guards:** the default project and the org's _last active_ project cannot be deprecated (400).
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `project` | `str` | Yes | Project id or slug. |
+| Name      | Type  | Required | Description         |
+| --------- | ----- | -------- | ------------------- |
+| `project` | `str` | Yes      | Project id or slug. |
 
 **Returns** `Project`.
 
@@ -828,9 +827,9 @@ Reactivate a deprecated project, fully intact.
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `project` | `str` | Yes | Project id or slug. |
+| Name      | Type  | Required | Description         |
+| --------- | ----- | -------- | ------------------- |
+| `project` | `str` | Yes      | Project id or slug. |
 
 **Returns** `Project`.
 
@@ -849,9 +848,9 @@ Permanently delete a **deprecated** project and its scoped configuration (cohort
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `project` | `str` | Yes | Project id or slug. |
+| Name      | Type  | Required | Description         |
+| --------- | ----- | -------- | ------------------- |
+| `project` | `str` | Yes      | Project id or slug. |
 
 **Returns** `None`.
 
@@ -859,17 +858,17 @@ Permanently delete a **deprecated** project and its scoped configuration (cohort
 
 ### `Project`
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `id` | `str` | Olira-assigned project id. |
-| `name` | `str` | Display name. |
-| `slug` | `str` | URL-friendly identifier, unique per org. Usable anywhere an id is accepted. |
-| `description` | `str \| None` | Free-text description. |
-| `environment` | `str \| None` | Intent tag: `dev` / `staging` / `prod`. |
-| `status` | `str` | `active` or `deprecated`. |
-| `is_default` | `bool` | Whether this is the org's default project. |
-| `created_at` | `datetime` | Creation timestamp. |
-| `deprecated_at` | `datetime \| None` | When it was deprecated, if applicable. |
+| Field           | Type               | Description                                                                 |
+| --------------- | ------------------ | --------------------------------------------------------------------------- |
+| `id`            | `str`              | Olira-assigned project id.                                                  |
+| `name`          | `str`              | Display name.                                                               |
+| `slug`          | `str`              | URL-friendly identifier, unique per org. Usable anywhere an id is accepted. |
+| `description`   | `str \| None`      | Free-text description.                                                      |
+| `environment`   | `str \| None`      | Intent tag: `dev` / `staging` / `prod`.                                     |
+| `status`        | `str`              | `active` or `deprecated`.                                                   |
+| `is_default`    | `bool`             | Whether this is the org's default project.                                  |
+| `created_at`    | `datetime`         | Creation timestamp.                                                         |
+| `deprecated_at` | `datetime \| None` | When it was deprecated, if applicable.                                      |
 
 `ProjectListResult` — `data: list[Project]`.
 
@@ -879,7 +878,7 @@ Permanently delete a **deprecated** project and its scoped configuration (cohort
 
 All cohort functions require an API key with `api:manage-patients` scope.
 
-> **Project scoping:** cohorts live *inside* a project. Select the workspace at init (`OliraClient(project=...)` / `olira.init(project=...)`); every cohort call then reads and writes within that project. Omit `project` for the org's default project. See [Projects](#projects).
+> **Project scoping:** cohorts live _inside_ a project. Select the workspace at init (`OliraClient(project=...)` / `olira.init(project=...)`); every cohort call then reads and writes within that project. Omit `project` for the org's default project. See [Projects](#projects).
 
 Cohorts are named patient groups scoped to your organisation. Use them to assign summary types to a defined set of patients without touching individual records. Template assignments cascade to patients when they are added to a cohort, and to all existing cohort members when a template is assigned.
 
@@ -894,10 +893,10 @@ cohort = client.create_cohort(name="High-Risk Patients", description="Weekly rev
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | `str` | Yes | Display name. Must be unique per organisation (1–200 chars). |
-| `description` | `str \| None` | No | Optional free-text description. |
+| Name          | Type          | Required | Description                                                  |
+| ------------- | ------------- | -------- | ------------------------------------------------------------ |
+| `name`        | `str`         | Yes      | Display name. Must be unique per organisation (1–200 chars). |
+| `description` | `str \| None` | No       | Optional free-text description.                              |
 
 **Returns** `Cohort` — `id`, `name`, `description`, `patient_ids`, `created_at`, `updated_at`.
 
@@ -926,9 +925,9 @@ print(cohort.patient_ids)
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+| Name        | Type  | Required | Description               |
+| ----------- | ----- | -------- | ------------------------- |
+| `cohort_id` | `str` | Yes      | Olira-assigned cohort id. |
 
 **Returns** `Cohort` including the full `patient_ids` list.
 
@@ -942,11 +941,11 @@ cohort = client.update_cohort(cohort_id="...", description="New description")
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
-| `name` | `str \| None` | No | New display name. Must be unique per org. |
-| `description` | `str \| None` | No | New description. |
+| Name          | Type          | Required | Description                               |
+| ------------- | ------------- | -------- | ----------------------------------------- |
+| `cohort_id`   | `str`         | Yes      | Olira-assigned cohort id.                 |
+| `name`        | `str \| None` | No       | New display name. Must be unique per org. |
+| `description` | `str \| None` | No       | New description.                          |
 
 Only supplied fields are changed. **Returns** `Cohort`.
 
@@ -963,9 +962,9 @@ Permanently deletes the cohort and all its template assignments. Patient records
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+| Name        | Type  | Required | Description               |
+| ----------- | ----- | -------- | ------------------------- |
+| `cohort_id` | `str` | Yes      | Olira-assigned cohort id. |
 
 **Returns** `CohortDeleteResult` — `deleted: bool`, `cohort_id: str`.
 
@@ -982,10 +981,10 @@ Idempotent — patients already in the cohort are silently skipped. Max 500 per 
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
-| `patient_ids` | `list[str]` | Yes | Olira patient ids to enrol (max 500). |
+| Name          | Type        | Required | Description                           |
+| ------------- | ----------- | -------- | ------------------------------------- |
+| `cohort_id`   | `str`       | Yes      | Olira-assigned cohort id.             |
+| `patient_ids` | `list[str]` | Yes      | Olira patient ids to enrol (max 500). |
 
 **Returns** `CohortPatientMutationResult` — `cohort_id`, `patient_count`.
 
@@ -1002,10 +1001,10 @@ Max 500 per call. Patient records are not affected.
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
-| `patient_ids` | `list[str]` | Yes | Olira patient ids to remove (max 500). |
+| Name          | Type        | Required | Description                            |
+| ------------- | ----------- | -------- | -------------------------------------- |
+| `cohort_id`   | `str`       | Yes      | Olira-assigned cohort id.              |
+| `patient_ids` | `list[str]` | Yes      | Olira patient ids to remove (max 500). |
 
 **Returns** `CohortPatientMutationResult`.
 
@@ -1022,10 +1021,10 @@ Assigns a summary type to the cohort. Snapshot documents for existing cohort pat
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
-| `summary_type` | `str` | Yes | Summary type slug (e.g. `symptom_overview`). |
+| Name           | Type  | Required | Description                                  |
+| -------------- | ----- | -------- | -------------------------------------------- |
+| `cohort_id`    | `str` | Yes      | Olira-assigned cohort id.                    |
+| `summary_type` | `str` | Yes      | Summary type slug (e.g. `symptom_overview`). |
 
 **Returns** `CohortTemplateAssignment` — `id`, `summary_type`, `template_id`, `cohort_id`, `assigned_at`.
 
@@ -1040,10 +1039,10 @@ print(result["deleted"])  # True
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
-| `summary_type` | `str` | Yes | Summary type slug to remove. |
+| Name           | Type  | Required | Description                  |
+| -------------- | ----- | -------- | ---------------------------- |
+| `cohort_id`    | `str` | Yes      | Olira-assigned cohort id.    |
+| `summary_type` | `str` | Yes      | Summary type slug to remove. |
 
 **Returns** `dict` — `{"deleted": True}`.
 
@@ -1059,9 +1058,9 @@ for t in result.data:
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `cohort_id` | `str` | Yes | Olira-assigned cohort id. |
+| Name        | Type  | Required | Description               |
+| ----------- | ----- | -------- | ------------------------- |
+| `cohort_id` | `str` | Yes      | Olira-assigned cohort id. |
 
 **Returns** `CohortTemplatesResult` — `data: list[CohortTemplateAssignment]`.
 
@@ -1069,15 +1068,183 @@ for t in result.data:
 
 ### Cohort response models
 
-| Model | Fields |
-| --- | --- |
-| `Cohort` | `id`, `name`, `description`, `patient_ids`, `created_at`, `updated_at` |
-| `CohortListItem` | `id`, `name`, `description`, `patient_count`, `template_assignment_count`, `created_at`, `updated_at` |
-| `CohortListResult` | `data: list[CohortListItem]` |
-| `CohortPatientMutationResult` | `cohort_id`, `patient_count` |
-| `CohortTemplateAssignment` | `id`, `summary_type`, `template_id`, `cohort_id`, `assigned_at` |
-| `CohortTemplatesResult` | `data: list[CohortTemplateAssignment]` |
-| `CohortDeleteResult` | `deleted`, `cohort_id` |
+| Model                         | Fields                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `Cohort`                      | `id`, `name`, `description`, `patient_ids`, `created_at`, `updated_at`                                |
+| `CohortListItem`              | `id`, `name`, `description`, `patient_count`, `template_assignment_count`, `created_at`, `updated_at` |
+| `CohortListResult`            | `data: list[CohortListItem]`                                                                          |
+| `CohortPatientMutationResult` | `cohort_id`, `patient_count`                                                                          |
+| `CohortTemplateAssignment`    | `id`, `summary_type`, `template_id`, `cohort_id`, `assigned_at`                                       |
+| `CohortTemplatesResult`       | `data: list[CohortTemplateAssignment]`                                                                |
+| `CohortDeleteResult`          | `deleted`, `cohort_id`                                                                                |
+
+---
+
+## Schemas
+
+All schema-management functions require an API key with `api:org-config` scope.
+
+Register your own event subtypes (e.g. `myorg_widget_reading`) and their translation into Olira's platform catalog, without going through Slack. Registering always lands as a **pending request** — Olira reviews and materializes the real schema + mapping before it can be activated, so a client (or their own agent) can submit and inspect requests while Olira retains authorship of the mapping logic. Versioning is presented as **one number per subtype**: every change moves the schema and the mapping together.
+
+---
+
+### `register_schema`
+
+```python
+registration = client.register_schema(
+    subtype="widget_ping",
+    description="Widget sensor ping events",
+    input_examples=[{"reading_value": 42, "unit": "lux"}],
+)
+# module-level: olira.register_schema(subtype=..., description=..., input_examples=..., schema=..., mapping=...)
+```
+
+Pass both `schema` and `mapping` for a "full_spec" submission (e.g. your own agent already authored them); pass neither/either for an "assisted" submission Olira will author from your `input_examples` + `description`. Always lands as a pending request — it never auto-activates.
+
+**Parameters**
+
+| Name             | Type                 | Required | Description                                                                                                |
+| ---------------- | -------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `subtype`        | `str`                | Yes      | New org-defined source event subtype, e.g. `rc_conversation_completed` (lowercase snake_case, 3–64 chars). |
+| `description`    | `str`                | No       | What this source event represents.                                                                         |
+| `input_examples` | `list[dict] \| None` | No       | Sample raw payloads (capped at 20).                                                                        |
+| `schema`         | `dict \| None`       | No       | Full JSON Schema for the payload, if already authored.                                                     |
+| `mapping`        | `dict \| None`       | No       | Full mapping spec (`source_root`/`targets`/`unmapped_fields_policy`), if already authored.                 |
+
+**Returns** `SchemaRegistrationResult` — `registration_id`, `subtype`, `target_version`, `submission_mode` (`"full_spec"` or `"assisted"`), `status` (always `"pending_review"`), `self_check`.
+
+---
+
+### `list_schemas`
+
+```python
+for summary in client.list_schemas():
+    print(summary.subtype, summary.status, summary.active_version)
+```
+
+**Returns** `list[SchemaSummary]` — each with `subtype`, `status` (`"pending"`, `"active"`, or `"deprecated"`), `active_version`, `latest_version`, `description`.
+
+---
+
+### `get_schema`
+
+```python
+detail = client.get_schema(subtype="widget_ping")
+for v in detail.versions:
+    print(v.version, v.status, v.source)
+```
+
+**Parameters**
+
+| Name      | Type  | Required | Description                    |
+| --------- | ----- | -------- | ------------------------------ |
+| `subtype` | `str` | Yes      | Org-native subtype to look up. |
+
+**Returns** `SchemaDetail` — `subtype`, `status`, `active_version`, `versions: list[SchemaVersion]`. Each `SchemaVersion` has `version`, `status`, `source` (`"registration"` if not yet materialized, else `"materialized"`), `payload_schema`, `mapping_summary`, `description`, `created_at`, `created_by`, `submission_mode`, `self_check`, `registration_id`.
+
+---
+
+### `check_schema`
+
+```python
+result = client.check_schema(
+    examples=[{"reading_value": 42, "unit": "lux"}],
+    schema={"type": "object", "required": ["reading_value"], "properties": {"reading_value": {"type": "number"}}},
+    mapping={"targets": [{"target_subtype": "heart_rate_data", "field_mappings": [{"target": "avg_bpm", "source": "reading_value"}]}]},
+)
+print(result.ok)
+```
+
+Dry-runs a schema/mapping over sample payloads — no writes. Runs the same org gate, pure mapping engine, and platform-catalog gate the live ingest route uses, so a green check genuinely predicts what logging would accept. Pass `subtype` (optionally with `version`) to check a stored or still-pending spec instead of an inline `schema`/`mapping`.
+
+**Parameters**
+
+| Name       | Type           | Required | Description                                                                            |
+| ---------- | -------------- | -------- | -------------------------------------------------------------------------------------- |
+| `examples` | `list[dict]`   | Yes      | Sample payloads to run through.                                                        |
+| `subtype`  | `str \| None`  | No       | Load the active (or pinned `version`) schema/mapping for this subtype as the baseline. |
+| `version`  | `int \| None`  | No       | Pin a specific version instead of the active one.                                      |
+| `schema`   | `dict \| None` | No       | Inline schema, overriding or replacing the stored one.                                 |
+| `mapping`  | `dict \| None` | No       | Inline mapping, overriding or replacing the stored one.                                |
+
+**Returns** `SchemaCheckResult` — `ok`, `results: list[SchemaCheckExampleResult]` (each with `input`, `ok`, `mapped_events`, `errors`), `error`.
+
+---
+
+### `edit_schema`
+
+```python
+edited = client.edit_schema(subtype="widget_ping", description="Updated description")
+print(edited.target_version)
+```
+
+Proposes a schema/mapping change. Always opens a new pending request targeting the next version — never mutates an active version in place. Editing an already-active subtype defaults any field you omit to what's currently active, so the reviewer sees a complete proposed spec even from a partial edit.
+
+**Parameters**
+
+| Name             | Type                 | Required | Description                       |
+| ---------------- | -------------------- | -------- | --------------------------------- |
+| `subtype`        | `str`                | Yes      | Subtype to propose a change for.  |
+| `description`    | `str \| None`        | No       | New description, if changing it.  |
+| `input_examples` | `list[dict] \| None` | No       | Replacement sample payloads.      |
+| `schema`         | `dict \| None`       | No       | New JSON Schema, if changing it.  |
+| `mapping`        | `dict \| None`       | No       | New mapping spec, if changing it. |
+
+**Returns** `SchemaRegistrationResult`.
+
+---
+
+### `deprecate_schema`
+
+```python
+result = client.deprecate_schema(subtype="widget_ping")
+print(result.status)  # "deprecated"
+```
+
+Deprecates a materialized version (default: the active one), or withdraws a still-pending request if nothing has been materialized yet. Never a hard delete.
+
+**Parameters**
+
+| Name      | Type          | Required | Description                                                            |
+| --------- | ------------- | -------- | ---------------------------------------------------------------------- |
+| `subtype` | `str`         | Yes      | Subtype to deprecate.                                                  |
+| `version` | `int \| None` | No       | Specific version to archive. Defaults to the currently active version. |
+
+**Returns** `SchemaActionResult` — `subtype`, `version`, `status`.
+
+---
+
+### `activate_schema_version`
+
+```python
+result = client.activate_schema_version(subtype="widget_ping", version=1)
+print(result.status)  # "active"
+```
+
+Activates an already-materialized version, archiving whichever version was previously active. Re-runs `check_schema` against the type definition's `sample_payload` first and refuses to activate a version that fails it.
+
+**Parameters**
+
+| Name      | Type  | Required | Description                                                                           |
+| --------- | ----- | -------- | ------------------------------------------------------------------------------------- |
+| `subtype` | `str` | Yes      | Subtype to activate a version for.                                                    |
+| `version` | `int` | Yes      | Version to activate. Must already be materialized (schema and mapping both authored). |
+
+**Returns** `SchemaActionResult`.
+
+---
+
+### Schema response models
+
+| Model                      | Fields                                                                                                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SchemaRegistrationResult` | `registration_id`, `subtype`, `target_version`, `submission_mode`, `status`, `self_check`                                                                         |
+| `SchemaSummary`            | `subtype`, `status`, `active_version`, `latest_version`, `description`                                                                                            |
+| `SchemaDetail`             | `subtype`, `status`, `active_version`, `versions: list[SchemaVersion]`                                                                                            |
+| `SchemaVersion`            | `version`, `status`, `source`, `payload_schema`, `mapping_summary`, `description`, `created_at`, `created_by`, `submission_mode`, `self_check`, `registration_id` |
+| `SchemaCheckResult`        | `ok`, `results: list[SchemaCheckExampleResult]`, `error`                                                                                                          |
+| `SchemaCheckExampleResult` | `input`, `ok`, `mapped_events`, `errors`                                                                                                                          |
+| `SchemaActionResult`       | `subtype`, `version`, `status`                                                                                                                                    |
 
 ---
 
@@ -1283,17 +1450,17 @@ except ValidationError as e:
 
 Lightweight event specification for log_batch(). Not persisted internally.
 
-| Field             | Required | Type                       | Description                                                                                                                               |
-| ----------------- | -------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `log_type`        | Yes      | `OliraLogType`             | —                                                                                                                                         |
-| `patient_id`      | Yes      | `str`                      | —                                                                                                                                         |
-| `payload`         | No       | `Optional[dict[str, Any]]` | — (default: `None`)                                                                                                                       |
-| `trace`           | No       | `Optional[OliraTrace]`     | — (default: `None`)                                                                                                                       |
-| `timestamp`       | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
-| `idempotency_key` | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
-| `metadata`        | No       | `Optional[dict[str, Any]]` | Arbitrary key/value context stored separately from the typed payload. Surfaced in the Olira Console event detail panel. (default: `None`) |
-| `write_back`      | No       | `bool`                     | Request write-back of this log into the org's connected EHR — see [`log`](#log). (default: `False`)                                       |
-| `write_back_integration_id` | No | `Optional[str]`         | Target integration instance for `write_back` when several are write-configured. (default: `None`)                                        |
+| Field                       | Required | Type                       | Description                                                                                                                               |
+| --------------------------- | -------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `log_type`                  | Yes      | `OliraLogType`             | —                                                                                                                                         |
+| `patient_id`                | Yes      | `str`                      | —                                                                                                                                         |
+| `payload`                   | No       | `Optional[dict[str, Any]]` | — (default: `None`)                                                                                                                       |
+| `trace`                     | No       | `Optional[OliraTrace]`     | — (default: `None`)                                                                                                                       |
+| `timestamp`                 | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
+| `idempotency_key`           | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
+| `metadata`                  | No       | `Optional[dict[str, Any]]` | Arbitrary key/value context stored separately from the typed payload. Surfaced in the Olira Console event detail panel. (default: `None`) |
+| `write_back`                | No       | `bool`                     | Request write-back of this log into the org's connected EHR — see [`log`](#log). (default: `False`)                                       |
+| `write_back_integration_id` | No       | `Optional[str]`            | Target integration instance for `write_back` when several are write-configured. (default: `None`)                                         |
 
 ### `BatchResult`
 
@@ -1321,7 +1488,7 @@ Olira connects to a growing pool of EHR and clinical-data providers — Epic, He
 Vivlio, and more (`GET /v1/integrations/catalog` lists what's available). Every provider
 follows the same connect → subscribe → sync → write-back pattern; the examples below use
 Epic. An organization may connect **multiple integrations of the same type** — e.g. Epic
-for Hospital A *and* Epic for Hospital B — each a separate **instance** with its own id,
+for Hospital A _and_ Epic for Hospital B — each a separate **instance** with its own id,
 credentials, data point subscriptions, and patient identifier namespace.
 
 **Data point availability depends on your connected app.** For Epic, the data points you
@@ -1347,14 +1514,14 @@ curl -X POST https://api.olira.ai/app-api/v1/integrations \
 Key rules for SDK users:
 
 - **Store the integration `id`** the connect call returns — data points, syncs, external-id
-  lookups, and `write_back_integration_id` all key on it. Connecting the *same* provider
+  lookups, and `write_back_integration_id` all key on it. Connecting the _same_ provider
   instance twice returns `409`; different instances of one type coexist.
 - **Patient identity is instance-scoped.** Each instance's roster sync creates its own
   patients; the same human at two hospitals is two Olira patients (never merged
   implicitly). Your SDK-created patients and identifiers are untouched by this — see
   [External Identifiers](#external-identifiers).
 - **Chart lookup per instance:** `GET /v1/integrations/{id}/patients/{patient_id}` returns
-  the patient's EHR-side id *at that instance* (404 if the patient isn't known there).
+  the patient's EHR-side id _at that instance_ (404 if the patient isn't known there).
 - **Write-back targets an instance:** the `write_back` flag on [`log`](#log) /
   [`log_batch`](#log_batch) resolves its target integration automatically when
   unambiguous; pass `write_back_integration_id` when your org has several
@@ -1362,7 +1529,7 @@ Key rules for SDK users:
 
 ## Patient Token
 
-Patient tokens are short-lived JWTs scoped to a single patient. They are the bridge between your server-side API key and patient-facing or agent-facing calls to the [Olira MCP Patient State server](https://olira.ai/api-docs).
+Patient tokens are short-lived JWTs scoped to a single patient. They are the bridge between your server-side API key and patient-facing or agent-facing calls to the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
 **When to use:**
 
@@ -1447,7 +1614,7 @@ class PatientSession:
 
 ## Patient State — Read
 
-The state-read methods give Python backends direct access to the same compiled patient state that the [MCP Patient State server](https://olira.ai/api-docs) exposes to AI agents — without going through JSON-RPC. They are a REST-backed mirror of the MCP tools, returning raw structured data rather than agent-formatted text.
+The state-read methods give Python backends direct access to the same compiled patient state that the [MCP Patient State server](https://docs.olira.ai/mcp-server) exposes to AI agents — without going through JSON-RPC. They are a REST-backed mirror of the MCP tools, returning raw structured data rather than agent-formatted text.
 
 All state-read functions require an API key with the `sdk:state-read` scope.
 
@@ -1462,7 +1629,7 @@ All state-read functions require an API key with the `sdk:state-read` scope.
 | `get_view_block`           | `get_view_block`                      |
 | `get_view_recent_events`   | `get_view_recent_events`              |
 | `get_logs`                 | `get_logs`                            |
-| `logs` / `population_logs` | *(no MCP equivalent — SDK only)*      |
+| `logs` / `population_logs` | _(no MCP equivalent — SDK only)_      |
 | `get_events`               | `get_events`                          |
 | `read_memories`            | `read_memories` (list-all mode)       |
 
@@ -1884,42 +2051,42 @@ Returns a builder scoped to one patient. Chain methods then call a terminal.
 
 **Builder methods (all return `self` for chaining):**
 
-| Category | Method | Description |
-| --- | --- | --- |
-| **Filters** | `.eq(field, value)` | Exact match |
-| | `.neq(field, value)` | Not equal |
-| | `.gt / .gte / .lt / .lte` | Numeric / datetime comparisons |
-| | `.in_(field, values)` | Field value in list |
-| | `.nin(field, values)` | Field value not in list |
-| | `.like(field, pattern)` | Case-sensitive SQL-style pattern (`%`) |
-| | `.ilike(field, pattern)` | Case-insensitive pattern |
-| | `.is_(field, value)` | Null / boolean match |
-| | `.exists(field, present=True)` | Field presence check |
-| | `.contains(field, value)` | Array / string contains |
-| | `.or_(*conditions)` | OR group — pass `F(field).op(value)` expressions |
-| | `.and_(*conditions)` | AND group |
-| **Projection** | `.select(*paths, **aliases)` | Include only named paths; `alias=path` kwargs rename fields |
-| | `.select_array(path, *, where, element, first, alias)` | Array sub-field expansion |
-| **Ordering** | `.order(field, desc=False)` | Sort |
-| **Pagination** | `.limit(n)` | Max rows |
-| | `.offset(n)` | Skip rows |
-| | `.range(start, end)` | Inclusive slice (sets offset + limit) |
-| **Aggregation** | `.group_by(*fields)` | Group by field(s) |
-| | `.count_agg(alias)` | Count per group |
-| | `.sum / .avg / .min / .max(field, alias)` | Numeric aggregations |
-| | `.agg(op, field, alias=)` | Generic aggregation |
+| Category        | Method                                                 | Description                                                 |
+| --------------- | ------------------------------------------------------ | ----------------------------------------------------------- |
+| **Filters**     | `.eq(field, value)`                                    | Exact match                                                 |
+|                 | `.neq(field, value)`                                   | Not equal                                                   |
+|                 | `.gt / .gte / .lt / .lte`                              | Numeric / datetime comparisons                              |
+|                 | `.in_(field, values)`                                  | Field value in list                                         |
+|                 | `.nin(field, values)`                                  | Field value not in list                                     |
+|                 | `.like(field, pattern)`                                | Case-sensitive SQL-style pattern (`%`)                      |
+|                 | `.ilike(field, pattern)`                               | Case-insensitive pattern                                    |
+|                 | `.is_(field, value)`                                   | Null / boolean match                                        |
+|                 | `.exists(field, present=True)`                         | Field presence check                                        |
+|                 | `.contains(field, value)`                              | Array / string contains                                     |
+|                 | `.or_(*conditions)`                                    | OR group — pass `F(field).op(value)` expressions            |
+|                 | `.and_(*conditions)`                                   | AND group                                                   |
+| **Projection**  | `.select(*paths, **aliases)`                           | Include only named paths; `alias=path` kwargs rename fields |
+|                 | `.select_array(path, *, where, element, first, alias)` | Array sub-field expansion                                   |
+| **Ordering**    | `.order(field, desc=False)`                            | Sort                                                        |
+| **Pagination**  | `.limit(n)`                                            | Max rows                                                    |
+|                 | `.offset(n)`                                           | Skip rows                                                   |
+|                 | `.range(start, end)`                                   | Inclusive slice (sets offset + limit)                       |
+| **Aggregation** | `.group_by(*fields)`                                   | Group by field(s)                                           |
+|                 | `.count_agg(alias)`                                    | Count per group                                             |
+|                 | `.sum / .avg / .min / .max(field, alias)`              | Numeric aggregations                                        |
+|                 | `.agg(op, field, alias=)`                              | Generic aggregation                                         |
 
 **Allowed field roots:** `type`, `timestamp`, `trace`, `payload`. Any other root (e.g. `id`) returns HTTP 422 → `ValidationError`.
 
 **Terminals:**
 
-| Terminal | Returns | Behaviour |
-| --- | --- | --- |
-| `.execute()` | `LogQueryResult` | All matching rows |
-| `.count()` | `int` | Count only; sets `count:true` in the body, no rows returned |
-| `.single()` | `dict` | Exactly one row; `ValidationError` if 0 or > 1 |
-| `.maybe_single()` | `dict \| None` | Zero or one row; `ValidationError` if > 1 |
-| `.as_logs()` | `list[LogEntry]` | Execute and parse rows into typed `LogEntry`; only valid when no `.select()` was used |
+| Terminal          | Returns          | Behaviour                                                                             |
+| ----------------- | ---------------- | ------------------------------------------------------------------------------------- |
+| `.execute()`      | `LogQueryResult` | All matching rows                                                                     |
+| `.count()`        | `int`            | Count only; sets `count:true` in the body, no rows returned                           |
+| `.single()`       | `dict`           | Exactly one row; `ValidationError` if 0 or > 1                                        |
+| `.maybe_single()` | `dict \| None`   | Zero or one row; `ValidationError` if > 1                                             |
+| `.as_logs()`      | `list[LogEntry]` | Execute and parse rows into typed `LogEntry`; only valid when no `.select()` was used |
 
 **Examples:**
 
@@ -1997,9 +2164,9 @@ client.population_logs(patient_ids: list[str] | None = None) -> LogQuery
 
 Returns a builder scoped to the whole organisation (`patient_ids=None`) or an explicit cohort. Posts to `POST /v1/state/logs/query`. All builder and terminal methods are identical to `logs()`.
 
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `patient_ids` | `list[str] \| None` | `None` | Cohort. `None` = whole org. Pass `[]` only if you intend an empty set. |
+| Parameter     | Type                | Default | Description                                                            |
+| ------------- | ------------------- | ------- | ---------------------------------------------------------------------- |
+| `patient_ids` | `list[str] \| None` | `None`  | Cohort. `None` = whole org. Pass `[]` only if you intend an empty set. |
 
 **Examples:**
 
@@ -2245,12 +2412,12 @@ for m in memories.results:
 
 Result of `LogQuery.execute()`. Iterable, indexable, and supports `len()`.
 
-| Field             | Type              | Description |
-| ----------------- | ----------------- | ----------- |
-| `count`           | `int`             | Total rows matched (or just the count when `count:true`). |
-| `rows`            | `list[dict]`      | Projected / raw log dicts. Empty when `.count()` terminal is used. |
-| `patient_id`      | `str \| None`     | Echo of the queried patient id. |
-| `organization_id` | `str \| None`     | Set on `population_logs()` queries. |
+| Field             | Type          | Description                                                        |
+| ----------------- | ------------- | ------------------------------------------------------------------ |
+| `count`           | `int`         | Total rows matched (or just the count when `count:true`).          |
+| `rows`            | `list[dict]`  | Projected / raw log dicts. Empty when `.count()` terminal is used. |
+| `patient_id`      | `str \| None` | Echo of the queried patient id.                                    |
+| `organization_id` | `str \| None` | Set on `population_logs()` queries.                                |
 
 `.as_logs() -> list[LogEntry]` — validates `rows` into typed `LogEntry` objects. Only valid when no `.select()` was used (projection makes the dict shape arbitrary).
 
@@ -2827,13 +2994,13 @@ IngestRecord.log(spec: IngestLogSpec) -> IngestRecord
 
 #### `IngestLogSpec`
 
-| Field             | Type                 | Required | Description                                       |
-| ----------------- | -------------------- | -------- | ------------------------------------------------- |
-| `event_type`      | `str`                | Yes      | Platform event type (e.g. `"symptom_report"`)     |
-| `patient_id`      | `str`                | Yes      | Olira patient UUID or `external_identifier` value |
-| `timestamp`       | `str`                | Yes      | ISO 8601 datetime                                 |
-| `payload`         | `dict`               | No       | Event-specific payload                            |
-| `idempotency_key` | `str`                | No       | Prevents duplicate insertion on retry             |
+| Field             | Type                 | Required | Description                                        |
+| ----------------- | -------------------- | -------- | -------------------------------------------------- |
+| `event_type`      | `str`                | Yes      | Platform event type (e.g. `"symptom_report"`)      |
+| `patient_id`      | `str`                | Yes      | Olira patient UUID or `external_identifier` value  |
+| `timestamp`       | `str`                | Yes      | ISO 8601 datetime                                  |
+| `payload`         | `dict`               | No       | Event-specific payload                             |
+| `idempotency_key` | `str`                | No       | Prevents duplicate insertion on retry              |
 | `trace`           | `OliraTrace \| None` | No       | Optional provenance; both fields required when set |
 
 #### `IngestionJobListResult`

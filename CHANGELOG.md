@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.6.0] - 2026-07-20
+## [1.7.0] - 2026-07-20
 
 ### Added
 
@@ -22,6 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fully backward compatible: omitting `project` uses a project-locked key's own
     project, or the organization's default project otherwise — existing integrations
     are unaffected.
+
+## [1.6.0] - 2026-07-13
+
+### Added
+
+- **Org schema/mapping management** — `register_schema()`, `list_schemas()`,
+  `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, and
+  `activate_schema_version()` (sync, async, and module-level), backed by a new
+  `api:org-config` scope. Lets orgs register and manage custom event subtypes and
+  their payload schema/mapping — `register_schema`/`edit_schema` support both
+  "full_spec" (bring your own schema + mapping) and "assisted" (Olira authors them
+  from `input_examples` + `description`) submission modes, `check_schema` dry-runs a
+  schema/mapping over sample payloads with no writes, and `activate_schema_version`
+  re-validates against the type's `sample_payload` before archiving the previously
+  active version.
 
 ## [1.5.0] - 2026-07-10
 
@@ -42,6 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/v1/integrations` usage until typed wrappers land, per-instance chart lookup, and
   write-back targeting. `ExternalIdentifier` docs note that SDK-supplied identifiers
   live in their own namespace and never collide with integration-owned ones.
+
+# <<<<<<< HEAD
+
+- Added new API docs reference
+
+> > > > > > > main
 
 ## [1.4.0] - 2026-07-09
 
@@ -124,7 +145,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Event-state module `emotional_state` renamed to `behavioral_state`. New module types `alerts_and_tasks` (event-state) and `treatment_phase` (stable) are now available via `get_event_state_module` / `get_stable_data`.
-
 
 ## [1.0.8] - 2026-05-27
 
@@ -214,7 +234,7 @@ First public release of the Olira Python SDK (`pip install olira`).
 
 - **Event logging** (`sdk:event-log`): `OliraClient.log()`, `log_batch()`, background queue with `flush()`, and module-level `olira.init()` / `olira.log()` / `olira.flush()`.
 - **Patient management** (`api:manage-patients`): create, read, update, delete, list, and batch-create patients; `ExternalIdentifier` for linking to EMR or partner IDs.
-- **Patient token** (`sdk:patient-token`): `get_patient_token()` for short-lived JWTs used with the [Olira MCP Patient State server](https://olira.ai/api-docs).
+- **Patient token** (`sdk:patient-token`): `get_patient_token()` for short-lived JWTs used with the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 - **Patient state read** (`sdk:state-read`): stable modules, event state modules, views, logs, events, and memories — REST-backed access to compiled patient state from Python.
 - **Historical data ingestion** (`sdk:historical-ingest`): JSONL file or inline record upload, two-phase confirm flow, job polling, and local pre-flight validation (`validate_ingestion_file`, `validate_ingestion_records`).
 - **Async client**: `AsyncOliraClient` with the same surface as `OliraClient`.
@@ -223,5 +243,5 @@ First public release of the Olira Python SDK (`pip install olira`).
 
 ### Documentation
 
-- API reference: [https://olira.ai/api-docs](https://olira.ai/api-docs) (Python SDK tab)
+- API reference: [https://docs.olira.ai/reference/sdk](https://docs.olira.ai/reference/sdk)
 - Local reference: `SDK_DOCUMENTATION.md`

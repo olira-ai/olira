@@ -39,6 +39,11 @@ from .models import (
     PatientBatchResult,
     PatientListResult,
     PatientToken,
+    SchemaActionResult,
+    SchemaCheckResult,
+    SchemaDetail,
+    SchemaRegistrationResult,
+    SchemaSummary,
     StableDataResult,
     ViewBlockResult,
     ViewBlocksListResult,
@@ -667,3 +672,102 @@ def list_cohort_templates(*, cohort_id: str) -> CohortTemplatesResult:
     Requires an API key with the api:manage-patients scope.
     """
     return _get_client().list_cohort_templates(cohort_id=cohort_id)
+
+
+# ---------------------------------------------------------------------------
+# Org schema/mapping management proxies (api:org-config scope)
+# ---------------------------------------------------------------------------
+
+
+def register_schema(
+    *,
+    subtype: str,
+    description: str = "",
+    input_examples: list[dict[str, Any]] | None = None,
+    schema: dict[str, Any] | None = None,
+    mapping: dict[str, Any] | None = None,
+) -> SchemaRegistrationResult:
+    """Register a new org-native event subtype. Module-level proxy to the singleton client.
+
+    Requires an API key with the api:org-config scope. Always lands as a pending
+    request — Olira still reviews and materializes it before it can be activated.
+    """
+    return _get_client().register_schema(
+        subtype=subtype,
+        description=description,
+        input_examples=input_examples,
+        schema=schema,
+        mapping=mapping,
+    )
+
+
+def list_schemas() -> list[SchemaSummary]:
+    """List every org-native subtype you've registered. Module-level proxy.
+
+    Requires an API key with the api:org-config scope.
+    """
+    return _get_client().list_schemas()
+
+
+def get_schema(*, subtype: str) -> SchemaDetail:
+    """Get a subtype's full version history. Module-level proxy.
+
+    Requires an API key with the api:org-config scope.
+    """
+    return _get_client().get_schema(subtype=subtype)
+
+
+def check_schema(
+    *,
+    examples: list[dict[str, Any]],
+    subtype: str | None = None,
+    version: int | None = None,
+    schema: dict[str, Any] | None = None,
+    mapping: dict[str, Any] | None = None,
+) -> SchemaCheckResult:
+    """Dry-run a schema/mapping over sample payloads — no writes. Module-level proxy.
+
+    Requires an API key with the api:org-config scope.
+    """
+    return _get_client().check_schema(
+        examples=examples, subtype=subtype, version=version, schema=schema, mapping=mapping
+    )
+
+
+def edit_schema(
+    *,
+    subtype: str,
+    description: str | None = None,
+    input_examples: list[dict[str, Any]] | None = None,
+    schema: dict[str, Any] | None = None,
+    mapping: dict[str, Any] | None = None,
+) -> SchemaRegistrationResult:
+    """Propose a schema/mapping change for a subtype you've already registered. Module-level proxy.
+
+    Requires an API key with the api:org-config scope. Always opens a new pending
+    request rather than mutating an active version in place.
+    """
+    return _get_client().edit_schema(
+        subtype=subtype,
+        description=description,
+        input_examples=input_examples,
+        schema=schema,
+        mapping=mapping,
+    )
+
+
+def deprecate_schema(*, subtype: str, version: int | None = None) -> SchemaActionResult:
+    """Deprecate a materialized version, or withdraw a still-pending request. Module-level proxy.
+
+    Requires an API key with the api:org-config scope. Never a hard delete.
+    """
+    return _get_client().deprecate_schema(subtype=subtype, version=version)
+
+
+def activate_schema_version(*, subtype: str, version: int) -> SchemaActionResult:
+    """Activate an already-materialized version. Module-level proxy.
+
+    Requires an API key with the api:org-config scope. Archives whichever version
+    was previously active.
+    """
+    return _get_client().activate_schema_version(subtype=subtype, version=version)

@@ -774,3 +774,78 @@ class ProjectListResult(BaseModel):
     """Result of list_projects()."""
 
     data: list[Project] = Field(default_factory=list)
+
+# ---------------------------------------------------------------------------
+# Org schema/mapping management (api:org-config scope)
+# ---------------------------------------------------------------------------
+
+
+class SchemaCheckExampleResult(BaseModel):
+    """One example's dry-run outcome within a SchemaCheckResult."""
+
+    input: dict[str, Any]
+    ok: bool
+    mapped_events: list[dict[str, Any]] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class SchemaCheckResult(BaseModel):
+    """Result of check_schema()."""
+
+    ok: bool
+    results: list[SchemaCheckExampleResult] = Field(default_factory=list)
+    error: str | None = None
+
+
+class SchemaVersion(BaseModel):
+    """One version entry within a SchemaDetail, returned by get_schema()."""
+
+    version: int
+    status: str
+    source: str
+    payload_schema: dict[str, Any] | None = None
+    mapping_summary: dict[str, Any] | None = None
+    description: str = ""
+    created_at: str | None = None
+    created_by: str | None = None
+    submission_mode: str | None = None
+    self_check: dict[str, Any] | None = None
+    registration_id: str | None = None
+
+
+class SchemaDetail(BaseModel):
+    """Result of get_schema()."""
+
+    subtype: str
+    status: str
+    active_version: int | None = None
+    versions: list[SchemaVersion] = Field(default_factory=list)
+
+
+class SchemaSummary(BaseModel):
+    """One entry returned by list_schemas()."""
+
+    subtype: str
+    status: str
+    active_version: int | None = None
+    latest_version: int
+    description: str = ""
+
+
+class SchemaRegistrationResult(BaseModel):
+    """Result of register_schema() and edit_schema()."""
+
+    registration_id: str
+    subtype: str
+    target_version: int
+    submission_mode: str
+    status: str
+    self_check: dict[str, Any] | None = None
+
+
+class SchemaActionResult(BaseModel):
+    """Result of deprecate_schema() and activate_schema_version()."""
+
+    subtype: str
+    version: int
+    status: str

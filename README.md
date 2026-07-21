@@ -1,6 +1,6 @@
 # Olira Python SDK
 
-Log ingestion, patient management, cohort management, historical backfill, and patient state client for the Olira platform.
+Log ingestion, patient management, cohort management, org schema management, historical backfill, and patient state client for the Olira platform.
 
 ## Install
 
@@ -10,7 +10,7 @@ pip install olira
 
 ## Documentation
 
-Full API reference: [https://olira.ai/api-docs](https://olira.ai/api-docs) (Python SDK tab).
+Full API reference: [https://docs.olira.ai/reference/sdk](https://docs.olira.ai/reference/sdk).
 
 Local copy: [SDK_DOCUMENTATION.md](SDK_DOCUMENTATION.md).
 
@@ -27,9 +27,10 @@ All SDK methods authenticate with an **Olira API key** (`olira_prod_...`). Creat
 | `sdk:patient-token`       | Mint short-lived patient-scoped JWTs                   |
 | `sdk:historical-ingest`   | Create and manage historical data ingestion jobs       |
 | `sdk:state-read`          | Read Patient State (modules, views, logs, memories)    |
+| `api:org-config`          | Register, view, check, edit, deprecate, and activate org-native event schemas/mappings |
 | `mcp:patient-state`       | Query Patient State via the MCP Patient State server   |
 
-See [API key scopes](https://olira.ai/api-docs) for the full list.
+See [API key scopes](https://docs.olira.ai/cli/scopes) for the full list.
 
 Pass the key to `OliraClient` or to `olira.init()`:
 
@@ -108,6 +109,57 @@ client.unassign_cohort_template(cohort_id=cohort_id, summary_type="symptom_overv
 
 # Delete (cascades template assignments; patient records are unaffected)
 client.delete_cohort(cohort_id=cohort_id)
+client.close()
+```
+
+---
+
+## Org Schema Management
+
+Register your own event subtypes (e.g. `myorg_widget_reading`) and their mapping into Olira's platform catalog, self-service. Requires the `api:org-config` scope.
+
+Registering always lands as a **pending request** — Olira reviews and materializes the actual schema + mapping before it can be activated. This lets a client (or their own agent) submit requests and inspect/activate results without going through Slack, while Olira retains authorship of the mapping logic.
+
+```python
+from olira import OliraClient
+
+client = OliraClient(api_key="olira_prod_...")
+
+# Register a new subtype — examples + description only ("assisted": Olira authors the schema/mapping)
+registration = client.register_schema(
+    subtype="widget_ping",
+    description="Widget sensor ping events",
+    input_examples=[{"reading_value": 42, "unit": "lux"}],
+)
+print(registration.status)  # "pending_review"
+
+# Check status any time
+detail = client.get_schema(subtype="widget_ping")
+print(detail.status)  # "pending" until Olira materializes + activates a version
+
+# Dry-run a candidate schema+mapping before registering it at all — no writes
+result = client.check_schema(
+    examples=[{"reading_value": 42, "unit": "lux"}],
+    schema={"type": "object", "required": ["reading_value"], "properties": {"reading_value": {"type": "number"}}},
+    mapping={"targets": [{"target_subtype": "heart_rate_data", "field_mappings": [{"target": "avg_bpm", "source": "reading_value"}]}]},
+)
+print(result.ok)
+
+# Once Olira has activated a version, log against it like any other event type
+client.log_batch([LogSpec(log_type="widget_ping", patient_id=patient_id, payload={"reading_value": 42, "unit": "lux"})])
+
+# Propose a change — always opens a new pending version, never mutates the active one
+client.edit_schema(subtype="widget_ping", description="Updated description")
+
+# List everything you've registered
+for summary in client.list_schemas():
+    print(summary.subtype, summary.status, summary.active_version)
+
+# Roll back to (or promote) an already-materialized version
+client.activate_schema_version(subtype="widget_ping", version=1)
+
+# Deprecate a version (or withdraw a still-pending request) — never a hard delete
+client.deprecate_schema(subtype="widget_ping")
 client.close()
 ```
 
@@ -201,7 +253,7 @@ print(f"Patients: {job.patients_processed}  Logs: {job.logs_processed}")
 olira.confirm_ingestion_job(job_id=job.job_id)
 ```
 
-See the [Backfilling historical data](https://olira.ai/api-docs) guide for the full walkthrough including inline payloads, validation, cancellation, and error recovery.
+See the [Backfilling historical data](https://docs.olira.ai/send-data/historical-backfill) guide for the full walkthrough including inline payloads, validation, cancellation, and error recovery.
 
 ---
 
@@ -209,7 +261,7 @@ See the [Backfilling historical data](https://olira.ai/api-docs) guide for the f
 
 Mint a short-lived JWT scoped to a single patient. Requires the `sdk:patient-token` scope.
 
-Use this when a patient device needs to communicate with the [Olira MCP Patient State server](https://olira.ai/api-docs) — pass the token as a Bearer header. The token expires after 15 minutes and is locked to the specified patient.
+Use this when a patient device needs to communicate with the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server) — pass the token as a Bearer header. The token expires after 15 minutes and is locked to the specified patient.
 
 ```python
 from olira import OliraClient
@@ -310,6 +362,7 @@ Runnable scripts under `examples/`:
 | `06_read_patient_state.py` | Stable data, event modules, views, logs, memories |
 | `07_patient_token.py` | Mint token, MCP Bearer forwarding, `PatientSession` refresh helper |
 | `08_cohort_management.py` | Create cohorts, enrol patients, assign templates, full lifecycle |
+| `09_org_schema_management.py` | Register, check, edit, list, view, and deprecate an org-native schema/mapping request |
 
 `06_read_patient_state.py` and `07_patient_token.py` require a patient with existing data — run `00_quickstart.py` or `02_event_logging.py` first and use the printed patient id. See [`examples/README.md`](examples/README.md) for setup instructions (`cp .env.example .env`, `uv sync`).
 

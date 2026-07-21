@@ -39,6 +39,11 @@ from .models import (
     PatientBatchResult,
     PatientListResult,
     PatientToken,
+    SchemaActionResult,
+    SchemaCheckResult,
+    SchemaDetail,
+    SchemaRegistrationResult,
+    SchemaSummary,
     StableDataResult,
     UpdatePatientRequest,
     ViewBlockResult,
@@ -518,6 +523,116 @@ class OliraClient:
     def list_cohort_templates(self, *, cohort_id: str) -> CohortTemplatesResult:
         """List all template assignments for a cohort. Requires api:manage-patients scope."""
         return self._transport.list_cohort_templates(cohort_id)
+
+    # ------------------------------------------------------------------
+    # Org schema/mapping management (api:org-config scope)
+    # ------------------------------------------------------------------
+
+    def register_schema(
+        self,
+        *,
+        subtype: str,
+        description: str = "",
+        input_examples: list[dict[str, Any]] | None = None,
+        schema: dict[str, Any] | None = None,
+        mapping: dict[str, Any] | None = None,
+    ) -> SchemaRegistrationResult:
+        """Register a new org-native event subtype. Requires api:org-config scope.
+
+        Pass both ``schema`` and ``mapping`` for a "full_spec" submission (e.g. your own
+        agent already authored them); pass neither/either for an "assisted" submission
+        Olira will author from your ``input_examples`` + ``description``. Always lands
+        as a pending request — Olira still reviews and materializes it before it can be
+        activated (see :meth:`activate_schema_version`).
+        """
+        body: dict[str, Any] = {"subtype": subtype, "description": description}
+        if input_examples is not None:
+            body["input_examples"] = input_examples
+        if schema is not None:
+            body["payload_schema"] = schema
+        if mapping is not None:
+            body["mapping"] = mapping
+        return self._transport.register_schema(body)
+
+    def list_schemas(self) -> list[SchemaSummary]:
+        """List every org-native subtype you've registered, with its aggregate status.
+
+        Requires api:org-config scope.
+        """
+        return self._transport.list_schemas()
+
+    def get_schema(self, *, subtype: str) -> SchemaDetail:
+        """Get a subtype's full version history. Requires api:org-config scope."""
+        return self._transport.get_schema(subtype)
+
+    def check_schema(
+        self,
+        *,
+        examples: list[dict[str, Any]],
+        subtype: str | None = None,
+        version: int | None = None,
+        schema: dict[str, Any] | None = None,
+        mapping: dict[str, Any] | None = None,
+    ) -> SchemaCheckResult:
+        """Dry-run a schema/mapping over sample payloads — no writes. Requires api:org-config scope.
+
+        Pass ``subtype`` (optionally with ``version``) to check a stored or still-pending
+        spec, or pass ``schema``/``mapping`` inline to check a candidate before registering
+        it at all. Either inline value overrides the stored one for that field.
+        """
+        body: dict[str, Any] = {"examples": examples}
+        if subtype is not None:
+            body["subtype"] = subtype
+        if version is not None:
+            body["version"] = version
+        if schema is not None:
+            body["payload_schema"] = schema
+        if mapping is not None:
+            body["mapping"] = mapping
+        return self._transport.check_schema(body)
+
+    def edit_schema(
+        self,
+        *,
+        subtype: str,
+        description: str | None = None,
+        input_examples: list[dict[str, Any]] | None = None,
+        schema: dict[str, Any] | None = None,
+        mapping: dict[str, Any] | None = None,
+    ) -> SchemaRegistrationResult:
+        """Propose a schema/mapping change for a subtype you've already registered.
+
+        Requires api:org-config scope. Always opens a new pending request (never mutates
+        an active version in place). Editing an already-active subtype defaults any
+        field you omit to what's currently active, so the reviewer sees a complete
+        proposed spec even from a partial edit.
+        """
+        body: dict[str, Any] = {}
+        if description is not None:
+            body["description"] = description
+        if input_examples is not None:
+            body["input_examples"] = input_examples
+        if schema is not None:
+            body["payload_schema"] = schema
+        if mapping is not None:
+            body["mapping"] = mapping
+        return self._transport.edit_schema(subtype, body)
+
+    def deprecate_schema(self, *, subtype: str, version: int | None = None) -> SchemaActionResult:
+        """Deprecate a materialized version (default: the active one), or withdraw a
+        still-pending request. Requires api:org-config scope. Never a hard delete.
+        """
+        params: dict[str, Any] = {}
+        if version is not None:
+            params["version"] = version
+        return self._transport.deprecate_schema(subtype, params)
+
+    def activate_schema_version(self, *, subtype: str, version: int) -> SchemaActionResult:
+        """Activate an already-materialized version. Requires api:org-config scope.
+
+        Archives whichever version was previously active.
+        """
+        return self._transport.activate_schema_version(subtype, version)
 
     def get_patient_token(self, *, patient_id: str) -> PatientToken:
         """Mint a short-lived patient-scoped JWT. Requires sdk:patient-token scope.
@@ -1321,6 +1436,116 @@ class AsyncOliraClient:
     async def list_cohort_templates(self, *, cohort_id: str) -> CohortTemplatesResult:
         """List all template assignments for a cohort. Requires api:manage-patients scope."""
         return await self._require_transport("list_cohort_templates").list_cohort_templates(cohort_id)
+
+    # ------------------------------------------------------------------
+    # Org schema/mapping management (api:org-config scope)
+    # ------------------------------------------------------------------
+
+    async def register_schema(
+        self,
+        *,
+        subtype: str,
+        description: str = "",
+        input_examples: list[dict[str, Any]] | None = None,
+        schema: dict[str, Any] | None = None,
+        mapping: dict[str, Any] | None = None,
+    ) -> SchemaRegistrationResult:
+        """Register a new org-native event subtype. Requires api:org-config scope.
+
+        Pass both ``schema`` and ``mapping`` for a "full_spec" submission (e.g. your own
+        agent already authored them); pass neither/either for an "assisted" submission
+        Olira will author from your ``input_examples`` + ``description``. Always lands
+        as a pending request — Olira still reviews and materializes it before it can be
+        activated (see :meth:`activate_schema_version`).
+        """
+        body: dict[str, Any] = {"subtype": subtype, "description": description}
+        if input_examples is not None:
+            body["input_examples"] = input_examples
+        if schema is not None:
+            body["payload_schema"] = schema
+        if mapping is not None:
+            body["mapping"] = mapping
+        return await self._require_transport("register_schema").register_schema(body)
+
+    async def list_schemas(self) -> list[SchemaSummary]:
+        """List every org-native subtype you've registered, with its aggregate status.
+
+        Requires api:org-config scope.
+        """
+        return await self._require_transport("list_schemas").list_schemas()
+
+    async def get_schema(self, *, subtype: str) -> SchemaDetail:
+        """Get a subtype's full version history. Requires api:org-config scope."""
+        return await self._require_transport("get_schema").get_schema(subtype)
+
+    async def check_schema(
+        self,
+        *,
+        examples: list[dict[str, Any]],
+        subtype: str | None = None,
+        version: int | None = None,
+        schema: dict[str, Any] | None = None,
+        mapping: dict[str, Any] | None = None,
+    ) -> SchemaCheckResult:
+        """Dry-run a schema/mapping over sample payloads — no writes. Requires api:org-config scope.
+
+        Pass ``subtype`` (optionally with ``version``) to check a stored or still-pending
+        spec, or pass ``schema``/``mapping`` inline to check a candidate before registering
+        it at all. Either inline value overrides the stored one for that field.
+        """
+        body: dict[str, Any] = {"examples": examples}
+        if subtype is not None:
+            body["subtype"] = subtype
+        if version is not None:
+            body["version"] = version
+        if schema is not None:
+            body["payload_schema"] = schema
+        if mapping is not None:
+            body["mapping"] = mapping
+        return await self._require_transport("check_schema").check_schema(body)
+
+    async def edit_schema(
+        self,
+        *,
+        subtype: str,
+        description: str | None = None,
+        input_examples: list[dict[str, Any]] | None = None,
+        schema: dict[str, Any] | None = None,
+        mapping: dict[str, Any] | None = None,
+    ) -> SchemaRegistrationResult:
+        """Propose a schema/mapping change for a subtype you've already registered.
+
+        Requires api:org-config scope. Always opens a new pending request (never mutates
+        an active version in place). Editing an already-active subtype defaults any
+        field you omit to what's currently active, so the reviewer sees a complete
+        proposed spec even from a partial edit.
+        """
+        body: dict[str, Any] = {}
+        if description is not None:
+            body["description"] = description
+        if input_examples is not None:
+            body["input_examples"] = input_examples
+        if schema is not None:
+            body["payload_schema"] = schema
+        if mapping is not None:
+            body["mapping"] = mapping
+        return await self._require_transport("edit_schema").edit_schema(subtype, body)
+
+    async def deprecate_schema(self, *, subtype: str, version: int | None = None) -> SchemaActionResult:
+        """Deprecate a materialized version (default: the active one), or withdraw a
+        still-pending request. Requires api:org-config scope. Never a hard delete.
+        """
+        params: dict[str, Any] = {}
+        if version is not None:
+            params["version"] = version
+        return await self._require_transport("deprecate_schema").deprecate_schema(subtype, params)
+
+    async def activate_schema_version(self, *, subtype: str, version: int) -> SchemaActionResult:
+        """Activate an already-materialized version. Requires api:org-config scope.
+
+        Archives whichever version was previously active.
+        """
+        return await self._require_transport("activate_schema_version").activate_schema_version(subtype, version)
 
     async def get_patient_token(self, *, patient_id: str) -> PatientToken:
         """Mint a short-lived patient-scoped JWT. Requires sdk:patient-token scope."""
