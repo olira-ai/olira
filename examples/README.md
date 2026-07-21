@@ -38,7 +38,7 @@ olira.init(api_key=API_KEY, project="dev-sandbox")   # or set OLIRA_PROJECT
 client = OliraClient(api_key=API_KEY, project="dev-sandbox")
 ```
 
-Omit `project` and everything uses the org's **default** project (the pre-projects behavior). To manage the projects themselves (create/duplicate/rename/deprecate/restore/delete), see `10_project_management.py` — those calls need an org-wide key with `api:manage-projects`.
+Omit `project` and a project-locked key uses its own project, while an org-wide key uses the org's **default** project (the pre-projects behavior). To manage the projects themselves (create/duplicate/rename/deprecate/restore/delete), see `10_project_management.py` — those calls need an org-wide key with `api:manage-projects`.
 
 ## Notes
 

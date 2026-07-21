@@ -27,6 +27,7 @@ Each API key carries one or more scopes. Assign only what your integration needs
 | `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                                                                                                                                                                                                                                   |
 | `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc.                                                                                                                                                        |
 | `api:manage-projects`   | `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`, `rename_project()`, `deprecate_project()`, `restore_project()`, `delete_project()` — **requires an org-wide key** (a project-locked key is confined to its own workspace and gets 403). |
+| `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                               |
 | `sdk:patient-token`     | `get_patient_token()`                                                                                                                                                                                                                                                  |
 | `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                                                                                                                                                                |
 | `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc.                                                                                                                                               |
@@ -117,7 +118,7 @@ from olira import OliraClient
 client = OliraClient(api_key="YOUR_KEY", project="dev-sandbox")
 ```
 
-Resolution order for every request: the value passed here **>** the `OLIRA_PROJECT` env var **>** the key's own project (for project-locked keys) **>** the org's default project. Under the hood the SDK sends an `X-Olira-Project` header; a **project-locked** key that names a _different_ project is rejected (403). Omit `project` entirely and everything lands in the org's default project — exactly the pre-projects behavior, so existing integrations keep working unchanged.
+Resolution order for every request: the value passed here **>** the `OLIRA_PROJECT` env var **>** the key's own project (for project-locked keys) **>** the org's default project. Under the hood the SDK sends an `X-Olira-Project` header; a **project-locked** key that names a _different_ project is rejected (403). Omit `project` entirely and a project-locked key keeps using its own project, while an otherwise-unscoped (org-wide) key falls back to the org's default project — exactly the pre-projects behavior, so existing integrations keep working unchanged.
 
 ### `init()` — module-level initialisation
 
@@ -327,7 +328,7 @@ new integrations should use the canonical name listed alongside each one.
 
 All patient functions require an API key with `api:manage-patients` scope.
 
-> **Project scoping:** patients belong to a single project, stamped at creation from the client's selected workspace. Point the client at a project with `OliraClient(project=...)` / `olira.init(project=...)` and `create_patient()` lands there, while `list_patients()` returns only that project's patients. Omit `project` for the org's default project. A patient created in one project is invisible to others. See [Projects](#projects) and [Selecting a project](#selecting-a-project-workspace).
+> **Project scoping:** patients belong to a single project, stamped at creation from the client's selected workspace. Point the client at a project with `OliraClient(project=...)` / `olira.init(project=...)` and `create_patient()` lands there, while `list_patients()` returns only that project's patients. Omit `project` and a project-locked key uses its own project; an org-wide key uses the org's default project. A patient created in one project is invisible to others. See [Projects](#projects) and [Selecting a project](#selecting-a-project-workspace).
 
 ### Create a patient
 
@@ -694,7 +695,7 @@ and expires after `expires_in` seconds (default 15 minutes).
 
 All project functions require an API key with the **`api:manage-projects`** scope **and an org-wide key** (a project-locked key is confined to its own workspace and gets 403 on these routes).
 
-A **project** is a self-contained, isolated workspace within your organisation — its own patients, event logs, patient state, views, cohorts, and platform configuration. Every organisation has exactly one **default** project; data written without a selected project lands there. Everything you can do with projects in the Olira Console is available here. To operate _inside_ a project (create patients, send logs, read state), select it at init via [`project=`](#selecting-a-project-workspace) rather than through these management calls.
+A **project** is a self-contained, isolated workspace within your organisation — its own patients, event logs, patient state, views, cohorts, and platform configuration. Every organisation has exactly one **default** project; data written without a selected project lands there when using an org-wide key (a project-locked key with no selection writes to its own project instead). Everything you can do with projects in the Olira Console is available here. To operate _inside_ a project (create patients, send logs, read state), select it at init via [`project=`](#selecting-a-project-workspace) rather than through these management calls.
 
 The lifecycle mirrors the Console exactly: **create** (or **duplicate**) → active → **rename** / **deprecate** (soft-delete, reversible) → **restore**, and finally **permanent delete** (only from the deprecated state, irreversible).
 
@@ -867,8 +868,8 @@ Permanently delete a **deprecated** project and its scoped configuration (cohort
 | `environment`   | `str \| None`      | Intent tag: `dev` / `staging` / `prod`.                                     |
 | `status`        | `str`              | `active` or `deprecated`.                                                   |
 | `is_default`    | `bool`             | Whether this is the org's default project.                                  |
-| `created_at`    | `datetime`         | Creation timestamp.                                                         |
-| `deprecated_at` | `datetime \| None` | When it was deprecated, if applicable.                                      |
+| `created_at`    | `str \| None`      | Creation timestamp (ISO 8601 string).                                       |
+| `deprecated_at` | `str \| None`      | When it was deprecated (ISO 8601 string), if applicable.                    |
 
 `ProjectListResult` — `data: list[Project]`.
 
@@ -878,7 +879,7 @@ Permanently delete a **deprecated** project and its scoped configuration (cohort
 
 All cohort functions require an API key with `api:manage-patients` scope.
 
-> **Project scoping:** cohorts live _inside_ a project. Select the workspace at init (`OliraClient(project=...)` / `olira.init(project=...)`); every cohort call then reads and writes within that project. Omit `project` for the org's default project. See [Projects](#projects).
+> **Project scoping:** cohorts live _inside_ a project. Select the workspace at init (`OliraClient(project=...)` / `olira.init(project=...)`); every cohort call then reads and writes within that project. Omit `project` and a project-locked key uses its own project; an org-wide key uses the org's default project. See [Projects](#projects).
 
 Cohorts are named patient groups scoped to your organisation. Use them to assign summary types to a defined set of patients without touching individual records. Template assignments cascade to patients when they are added to a cohort, and to all existing cohort members when a template is assigned.
 

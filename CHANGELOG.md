@@ -16,8 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     (also settable via the `OLIRA_PROJECT` environment variable) — selects a project
     by id or slug, sent as the `X-Olira-Project` header on every request. Included in
     the stamped log context alongside `environment`/`service`.
-  - New `create_project()`, `list_projects()`, `get_project()` on both clients and as
-    module-level functions — requires an API key with the `api:manage-projects` scope.
+  - New `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`,
+    `rename_project()`, `deprecate_project()`, `restore_project()`, and `delete_project()`
+    on both clients and as module-level functions — requires an **org-wide** API key with
+    the `api:manage-projects` scope (project-locked keys get 403 on these routes).
   - New `Project` / `ProjectListResult` models.
   - Fully backward compatible: omitting `project` uses a project-locked key's own
     project, or the organization's default project otherwise — existing integrations
@@ -58,11 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   write-back targeting. `ExternalIdentifier` docs note that SDK-supplied identifiers
   live in their own namespace and never collide with integration-owned ones.
 
-# <<<<<<< HEAD
-
 - Added new API docs reference
-
-> > > > > > > main
 
 ## [1.4.0] - 2026-07-09
 
