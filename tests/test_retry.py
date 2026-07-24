@@ -3,7 +3,7 @@
 import httpx
 import pytest
 
-from olira.exceptions import AuthError, RateLimitError
+from olira.exceptions import AuthError, RateLimitError, ServerError
 from olira.http import HttpTransport
 
 
@@ -49,4 +49,29 @@ def test_429_parses_retry_after():
     with pytest.raises(RateLimitError) as exc_info:
         transport.send_batch([{"log_type": "user_login", "patient_id": "p_1", "context": {}}])
     assert exc_info.value.retry_after == 120
+    transport.close()
+
+
+def test_create_project_does_not_retry_on_500():
+    """Non-idempotent project creation must not be replayed on retryable errors."""
+    calls = {"count": 0}
+
+    def respond_500(request):
+        calls["count"] += 1
+        return httpx.Response(500, text="Internal Server Error")
+
+    transport = HttpTransport(
+        base_url="https://api.test.olira.ai",
+        api_key="olira_test_key",
+        max_retries=3,
+    )
+    transport._client = httpx.Client(
+        base_url=transport._base_url,
+        timeout=transport._timeout,
+        headers=transport._client.headers,
+        transport=httpx.MockTransport(respond_500),
+    )
+    with pytest.raises(ServerError):
+        transport.create_project({"name": "Dev Sandbox"})
+    assert calls["count"] == 1
     transport.close()

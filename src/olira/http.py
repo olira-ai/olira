@@ -27,6 +27,8 @@ from .models import (
     PatientBatchResult,
     PatientListResult,
     PatientToken,
+    Project,
+    ProjectListResult,
     SchemaActionResult,
     SchemaCheckResult,
     SchemaDetail,
@@ -98,15 +100,21 @@ class HttpTransport:
         api_key: str,
         timeout: float = 5.0,
         max_retries: int = 3,
+        project: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout
         self._max_retries = max_retries
+        headers = {"Authorization": f"Bearer {api_key}"}
+        if project:
+            # Selects the project (workspace) every request operates in; omitted =
+            # the key's own project (locked keys) or the org's default project.
+            headers["X-Olira-Project"] = project
         self._client = httpx.Client(
             base_url=self._base_url,
             timeout=timeout,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=headers,
         )
 
     def close(self) -> None:
@@ -133,11 +141,15 @@ class HttpTransport:
         path: str,
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
+        retryable: bool = True,
     ) -> Any:
+        # retryable=False for non-idempotent calls (e.g. project create/duplicate):
+        # replaying a POST whose response was lost could create a duplicate resource.
+        max_retries = self._max_retries if retryable else 0
         last_exception: Exception | None = None
         retry_after_seconds: int = 0
 
-        for attempt in range(self._max_retries + 1):
+        for attempt in range(max_retries + 1):
             if retry_after_seconds > 0:
                 time.sleep(retry_after_seconds)
             retry_after_seconds = 0
@@ -146,12 +158,12 @@ class HttpTransport:
                 response = self._client.request(method, path, json=json, params=params)
             except (httpx.ConnectError, httpx.TimeoutException, httpx.ReadError) as e:
                 last_exception = NetworkError(str(e))
-                if attempt < self._max_retries:
+                if attempt < max_retries:
                     delay = min(2**attempt + (time.time() % 1), 60)
                     logger.debug(
                         "Request failed (attempt %s/%s), retry in %.1fs: %s",
                         attempt + 1,
-                        self._max_retries + 1,
+                        max_retries + 1,
                         delay,
                         _redact_key(self._api_key),
                     )
@@ -176,7 +188,7 @@ class HttpTransport:
 
             if status == 429:
                 retry_after_seconds = _parse_retry_after(response)
-                if attempt == self._max_retries:
+                if attempt == max_retries:
                     raise RateLimitError(
                         "Rate limited; retry after backoff",
                         retry_after=retry_after_seconds,
@@ -189,14 +201,14 @@ class HttpTransport:
                 continue
 
             if _should_retry(status):
-                if attempt == self._max_retries:
+                if attempt == max_retries:
                     raise ServerError(f"Server error (HTTP {status}) after retries")
                 delay = min(2**attempt + (time.time() % 1), 60)
                 logger.debug(
                     "Server error %s (attempt %s/%s), retry in %.1fs",
                     status,
                     attempt + 1,
-                    self._max_retries + 1,
+                    max_retries + 1,
                     delay,
                 )
                 time.sleep(delay)
@@ -246,6 +258,45 @@ class HttpTransport:
         """List cohorts (GET /v1/cohorts). Requires api:manage-patients scope."""
         raw = self._request("GET", "/v1/cohorts")
         return CohortListResult.model_validate(raw)
+
+    def create_project(self, body: dict[str, Any]) -> Project:
+        """Create a project (POST /v1/projects). Requires api:manage-projects scope + org-wide key."""
+        raw = self._request("POST", "/v1/projects", json=body, retryable=False)
+        return Project.model_validate(raw)
+
+    def list_projects(self) -> ProjectListResult:
+        """List projects (GET /v1/projects). Requires api:manage-projects scope + org-wide key."""
+        raw = self._request("GET", "/v1/projects")
+        return ProjectListResult.model_validate(raw)
+
+    def get_project(self, project: str) -> Project:
+        """Get a project by id or slug (GET /v1/projects/{id_or_slug})."""
+        raw = self._request("GET", f"/v1/projects/{project}")
+        return Project.model_validate(raw)
+
+    def duplicate_project(self, project: str, body: dict[str, Any]) -> Project:
+        """Duplicate a project's config into a new one (POST /v1/projects/{id}/duplicate)."""
+        raw = self._request("POST", f"/v1/projects/{project}/duplicate", json=body, retryable=False)
+        return Project.model_validate(raw)
+
+    def update_project(self, project: str, body: dict[str, Any]) -> Project:
+        """Rename/retag a project (PATCH /v1/projects/{id})."""
+        raw = self._request("PATCH", f"/v1/projects/{project}", json=body)
+        return Project.model_validate(raw)
+
+    def deprecate_project(self, project: str) -> Project:
+        """Soft-delete a project (POST /v1/projects/{id}/deprecate)."""
+        raw = self._request("POST", f"/v1/projects/{project}/deprecate")
+        return Project.model_validate(raw)
+
+    def restore_project(self, project: str) -> Project:
+        """Reactivate a deprecated project (POST /v1/projects/{id}/restore)."""
+        raw = self._request("POST", f"/v1/projects/{project}/restore")
+        return Project.model_validate(raw)
+
+    def delete_project(self, project: str) -> None:
+        """Permanently delete a deprecated project (DELETE /v1/projects/{id}). No recovery."""
+        self._request("DELETE", f"/v1/projects/{project}")
 
     def get_cohort(self, cohort_id: str) -> Cohort:
         """Get a cohort by id (GET /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""
@@ -450,15 +501,21 @@ class AsyncHttpTransport:
         api_key: str,
         timeout: float = 5.0,
         max_retries: int = 3,
+        project: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout
         self._max_retries = max_retries
+        headers = {"Authorization": f"Bearer {api_key}"}
+        if project:
+            # Selects the project (workspace) every request operates in; omitted =
+            # the key's own project (locked keys) or the org's default project.
+            headers["X-Olira-Project"] = project
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
             timeout=timeout,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=headers,
         )
 
     async def aclose(self) -> None:
@@ -506,6 +563,45 @@ class AsyncHttpTransport:
         """List cohorts (GET /v1/cohorts). Requires api:manage-patients scope."""
         raw = await self._request("GET", "/v1/cohorts")
         return CohortListResult.model_validate(raw)
+
+    async def create_project(self, body: dict[str, Any]) -> Project:
+        """Create a project (POST /v1/projects). Requires api:manage-projects scope + org-wide key."""
+        raw = await self._request("POST", "/v1/projects", json=body, retryable=False)
+        return Project.model_validate(raw)
+
+    async def list_projects(self) -> ProjectListResult:
+        """List projects (GET /v1/projects). Requires api:manage-projects scope + org-wide key."""
+        raw = await self._request("GET", "/v1/projects")
+        return ProjectListResult.model_validate(raw)
+
+    async def get_project(self, project: str) -> Project:
+        """Get a project by id or slug (GET /v1/projects/{id_or_slug})."""
+        raw = await self._request("GET", f"/v1/projects/{project}")
+        return Project.model_validate(raw)
+
+    async def duplicate_project(self, project: str, body: dict[str, Any]) -> Project:
+        """Duplicate a project's config into a new one (POST /v1/projects/{id}/duplicate)."""
+        raw = await self._request("POST", f"/v1/projects/{project}/duplicate", json=body, retryable=False)
+        return Project.model_validate(raw)
+
+    async def update_project(self, project: str, body: dict[str, Any]) -> Project:
+        """Rename/retag a project (PATCH /v1/projects/{id})."""
+        raw = await self._request("PATCH", f"/v1/projects/{project}", json=body)
+        return Project.model_validate(raw)
+
+    async def deprecate_project(self, project: str) -> Project:
+        """Soft-delete a project (POST /v1/projects/{id}/deprecate)."""
+        raw = await self._request("POST", f"/v1/projects/{project}/deprecate")
+        return Project.model_validate(raw)
+
+    async def restore_project(self, project: str) -> Project:
+        """Reactivate a deprecated project (POST /v1/projects/{id}/restore)."""
+        raw = await self._request("POST", f"/v1/projects/{project}/restore")
+        return Project.model_validate(raw)
+
+    async def delete_project(self, project: str) -> None:
+        """Permanently delete a deprecated project (DELETE /v1/projects/{id}). No recovery."""
+        await self._request("DELETE", f"/v1/projects/{project}")
 
     async def get_cohort(self, cohort_id: str) -> Cohort:
         """Get a cohort by id (GET /v1/cohorts/{cohort_id}). Requires api:manage-patients scope."""
@@ -697,11 +793,15 @@ class AsyncHttpTransport:
         path: str,
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
+        retryable: bool = True,
     ) -> Any:
+        # retryable=False for non-idempotent calls (e.g. project create/duplicate):
+        # replaying a POST whose response was lost could create a duplicate resource.
+        max_retries = self._max_retries if retryable else 0
         last_exception: Exception | None = None
         retry_after_seconds: int = 0
 
-        for attempt in range(self._max_retries + 1):
+        for attempt in range(max_retries + 1):
             if retry_after_seconds > 0:
                 await asyncio.sleep(retry_after_seconds)
             retry_after_seconds = 0
@@ -710,12 +810,12 @@ class AsyncHttpTransport:
                 response = await self._client.request(method, path, json=json, params=params)
             except (httpx.ConnectError, httpx.TimeoutException, httpx.ReadError) as e:
                 last_exception = NetworkError(str(e))
-                if attempt < self._max_retries:
+                if attempt < max_retries:
                     delay = min(2**attempt + (time.time() % 1), 60)
                     logger.debug(
                         "Request failed (attempt %s/%s), retry in %.1fs: %s",
                         attempt + 1,
-                        self._max_retries + 1,
+                        max_retries + 1,
                         delay,
                         _redact_key(self._api_key),
                     )
@@ -740,7 +840,7 @@ class AsyncHttpTransport:
 
             if status == 429:
                 retry_after_seconds = _parse_retry_after(response)
-                if attempt == self._max_retries:
+                if attempt == max_retries:
                     raise RateLimitError(
                         "Rate limited; retry after backoff",
                         retry_after=retry_after_seconds,
@@ -753,7 +853,7 @@ class AsyncHttpTransport:
                 continue
 
             if _should_retry(status):
-                if attempt == self._max_retries:
+                if attempt == max_retries:
                     raise ServerError(f"Server error (HTTP {status}) after retries")
                 delay = min(2**attempt + (time.time() % 1), 60)
                 await asyncio.sleep(delay)

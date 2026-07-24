@@ -38,6 +38,10 @@ client = OliraClient(
     api_key=API_KEY,
     base_url=BASE_URL,
     environment=OliraEnv.DEVELOPMENT if "localhost" in BASE_URL else OliraEnv.PRODUCTION,
+    # project="dev-sandbox",  # ← select a project (workspace). Logs inherit their
+    #   patient's project automatically — you never pass a project when logging;
+    #   just target a patient in the workspace you want. Omit for the org default.
+    #   See examples/10_project_management.py and SDK_DOCUMENTATION.md#projects.
 )
 
 # Setup — create a demo patient

@@ -37,6 +37,8 @@ from .models import (
     PatientBatchResult,
     PatientListResult,
     PatientToken,
+    Project,
+    ProjectListResult,
     SchemaActionResult,
     SchemaCheckResult,
     SchemaDetail,
@@ -58,6 +60,7 @@ def init(
     *,
     environment: OliraEnv = OliraEnv.PRODUCTION,
     service_name: str | None = None,
+    project: str | None = None,
     base_url: str = DEFAULT_BASE_URL,
     batch_size: int = 50,
     flush_interval: float = 1.5,
@@ -67,7 +70,11 @@ def init(
     on_error: str = "drop",
     async_flush: bool = True,
 ) -> None:
-    """Initialize the SDK. API key can be passed or set via OLIRA_API_KEY env var."""
+    """Initialize the SDK. API key via OLIRA_API_KEY env var; project via OLIRA_PROJECT.
+
+    ``project`` (id or slug) selects the workspace every call operates in. Omit it
+    to use the key's own project (project-locked keys) or the org's default project.
+    """
     global _client
     key = api_key or os.environ.get("OLIRA_API_KEY")
     if not key:
@@ -76,6 +83,7 @@ def init(
         api_key=key,
         environment=environment,
         service_name=service_name,
+        project=project or os.environ.get("OLIRA_PROJECT"),
         base_url=base_url,
         batch_size=batch_size,
         flush_interval=flush_interval,
@@ -500,6 +508,77 @@ def population_logs(patient_ids: list[str] | None = None) -> LogQuery:
 # ---------------------------------------------------------------------------
 # Cohort management proxies (api:manage-patients scope)
 # ---------------------------------------------------------------------------
+
+
+def create_project(
+    *,
+    name: str,
+    slug: str | None = None,
+    description: str | None = None,
+    environment: str | None = None,
+) -> Project:
+    """Create a project (isolated workspace). Module-level proxy to the singleton client.
+
+    Requires api:manage-projects scope and an org-wide key. New projects start empty;
+    pass the ``slug`` (the handle for ``init(project=...)``) or let it derive from ``name``.
+    """
+    return _get_client().create_project(name=name, slug=slug, description=description, environment=environment)
+
+
+def list_projects() -> ProjectListResult:
+    """List the organisation's projects. Module-level proxy to the singleton client."""
+    return _get_client().list_projects()
+
+
+def get_project(*, project: str) -> Project:
+    """Get one project by id or slug. Module-level proxy to the singleton client."""
+    return _get_client().get_project(project=project)
+
+
+def duplicate_project(
+    *,
+    project: str,
+    name: str,
+    slug: str | None = None,
+    description: str | None = None,
+    environment: str | None = None,
+) -> Project:
+    """Duplicate a project's configuration into a new one. Module-level proxy.
+
+    Copies config (platform config, pipelines, cohort definitions) — never
+    patients, logs, or state. ``slug`` is the new project's handle (pass a
+    distinct one; derived from ``name`` when omitted). Requires
+    api:manage-projects scope + org-wide key.
+    """
+    return _get_client().duplicate_project(
+        project=project, name=name, slug=slug, description=description, environment=environment
+    )
+
+
+def rename_project(
+    *,
+    project: str,
+    name: str | None = None,
+    description: str | None = None,
+    environment: str | None = None,
+) -> Project:
+    """Rename a project or update its description/environment tag. Module-level proxy."""
+    return _get_client().rename_project(project=project, name=name, description=description, environment=environment)
+
+
+def deprecate_project(*, project: str) -> Project:
+    """Soft-delete a project (deprecated list; data retained). Module-level proxy."""
+    return _get_client().deprecate_project(project=project)
+
+
+def restore_project(*, project: str) -> Project:
+    """Reactivate a deprecated project, fully intact. Module-level proxy."""
+    return _get_client().restore_project(project=project)
+
+
+def delete_project(*, project: str) -> None:
+    """Permanently delete a deprecated project (no recovery). Module-level proxy."""
+    _get_client().delete_project(project=project)
 
 
 def create_cohort(*, name: str, description: str | None = None) -> Cohort:

@@ -8,31 +8,32 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.6.0`
+**Package:** `olira` — **Version:** `1.7.0`
 
 ## Related docs
 
-| Doc                                                                             | What it covers                                               | Why you need it                                                                                                                                                             |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Authentication** ([docs](https://docs.olira.ai/authentication))               | API keys, patient tokens, **scopes**, auth errors            | Choose scopes when creating keys; mint patient tokens for device-facing calls                                                                                               |
-| **MCP Patient State** ([docs](https://docs.olira.ai/mcp-server))                | Tools for querying patient health state from AI agents       | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
-| **CLI** ([docs](https://docs.olira.ai/cli))                                     | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server                                                                             |
+| Doc                                                               | What it covers                                               | Why you need it                                                                                                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Authentication** ([docs](https://docs.olira.ai/authentication)) | API keys, patient tokens, **scopes**, auth errors            | Choose scopes when creating keys; mint patient tokens for device-facing calls                                                                                               |
+| **MCP Patient State** ([docs](https://docs.olira.ai/mcp-server))  | Tools for querying patient health state from AI agents       | The events you log with this SDK populate the patient state the MCP server exposes; `get_patient_token()` mints the tokens used to authenticate patient-facing MCP requests |
+| **CLI** ([docs](https://docs.olira.ai/cli))                       | `olira login`, `olira keys create`, `olira configure cursor` | Create and rotate the API keys passed to `olira.init()`; configure Cursor to use the MCP server                                                                             |
 
 ## Scopes
 
 Each API key carries one or more scopes. Assign only what your integration needs.
 
-| Scope                   | What it unlocks                                                                                                                      |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                                                                                                 |
-| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc.                      |
-| `sdk:patient-token`     | `get_patient_token()`                                                                                                                |
-| `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                              |
-| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc.             |
-| `api:org-config`        | `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()` |
-| `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — EHR write-back requests (also requires platform-side write configuration)    |
-| `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [EHR Integrations & Instances](#ehr-integrations--instances) |
-| `mcp:patient-state`     | Query patient state via the MCP Patient State server                                                                                 |
+| Scope                   | What it unlocks                                                                                                                                                                                                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                                                                                                                                                                                                                                   |
+| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc.                                                                                                                                                        |
+| `api:manage-projects`   | `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`, `rename_project()`, `deprecate_project()`, `restore_project()`, `delete_project()` — **requires an org-wide key** (a project-locked key is confined to its own workspace and gets 403). |
+| `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                               |
+| `sdk:patient-token`     | `get_patient_token()`                                                                                                                                                                                                                                                  |
+| `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                                                                                                                                                                |
+| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc.                                                                                                                                               |
+| `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — EHR write-back requests (also requires platform-side write configuration)                                                                                                                                      |
+| `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [EHR Integrations & Instances](#ehr-integrations--instances)                                                                                                                                   |
+| `mcp:patient-state`     | Query patient state via the MCP Patient State server                                                                                                                                                                                                                   |
 
 ## Getting Started
 
@@ -102,12 +103,29 @@ client = OliraClient(api_key="YOUR_OLIRA_API_KEY")
 Production requests go to `https://app-api.prod.olira.ai/app-api` by default (`DEFAULT_BASE_URL`).
 `OliraClient`, `AsyncOliraClient`, and `init()` all use that value when `base_url` is omitted.
 
+#### Selecting a project (workspace)
+
+A **project** is an isolated workspace within your organization (its own patients, logs, state, views, cohorts, and configuration — see [Projects](#projects)). Select which project every data call operates in by passing `project` (id or slug) at init:
+
+```python
+import olira
+
+# Module-level — or set OLIRA_PROJECT in the environment
+olira.init(api_key="YOUR_KEY", project="dev-sandbox")
+
+# Or with the client class
+from olira import OliraClient
+client = OliraClient(api_key="YOUR_KEY", project="dev-sandbox")
+```
+
+Resolution order for every request: the value passed here **>** the `OLIRA_PROJECT` env var **>** the key's own project (for project-locked keys) **>** the org's default project. Under the hood the SDK sends an `X-Olira-Project` header; a **project-locked** key that names a _different_ project is rejected (403). Omit `project` entirely and a project-locked key keeps using its own project, while an otherwise-unscoped (org-wide) key falls back to the org's default project — exactly the pre-projects behavior, so existing integrations keep working unchanged.
+
 ### `init()` — module-level initialisation
 
 #### `init`
 
 ```python
-init(api_key: str | None = None, *, environment: OliraEnv = OliraEnv.PRODUCTION, service_name: str | None = None, base_url: str = 'https://app-api.prod.olira.ai/app-api', batch_size: int = 50, flush_interval: float = 1.5, max_queue_size: int = 10000, timeout: float = 5.0, max_retries: int = 3, on_error: str = 'drop', async_flush: bool = True) -> None
+init(api_key: str | None = None, *, environment: OliraEnv = OliraEnv.PRODUCTION, service_name: str | None = None, project: str | None = None, base_url: str = 'https://app-api.prod.olira.ai/app-api', batch_size: int = 50, flush_interval: float = 1.5, max_queue_size: int = 10000, timeout: float = 5.0, max_retries: int = 3, on_error: str = 'drop', async_flush: bool = True) -> None
 ```
 
 Initialize the SDK. API key can be passed or set via `OLIRA_API_KEY` env var.
@@ -117,6 +135,7 @@ Initialize the SDK. API key can be passed or set via `OLIRA_API_KEY` env var.
 | `api_key`        | No       | `Optional[str]` | `None`                                    | API key; falls back to `OLIRA_API_KEY` env var.                                                                                                                                                      |
 | `environment`    | No       | `OliraEnv`      | `OliraEnv.PRODUCTION`                     | `DEVELOPMENT` tags events for non-production systems; use `PRODUCTION` for live data.                                                                                                                |
 | `service_name`   | No       | `Optional[str]` | `None`                                    | Optional label attached to every event's `context` for observability (e.g. `"my-service"`).                                                                                                          |
+| `project`        | No       | `Optional[str]` | `None`                                    | Project (workspace) id or slug every call operates in; falls back to the `OLIRA_PROJECT` env var. Omit for the org's default project. See [Selecting a project](#selecting-a-project-workspace).     |
 | `base_url`       | No       | `str`           | `'https://app-api.prod.olira.ai/app-api'` | Override for local dev or staging.                                                                                                                                                                   |
 | `batch_size`     | No       | `int`           | `50`                                      | Max events per `/v1/logs/batch` request sent by the background worker.                                                                                                                               |
 | `flush_interval` | No       | `float`         | `1.5`                                     | Seconds between automatic background flushes.                                                                                                                                                        |
@@ -308,6 +327,8 @@ new integrations should use the canonical name listed alongside each one.
 ## Patients
 
 All patient functions require an API key with `api:manage-patients` scope.
+
+> **Project scoping:** patients belong to a single project, stamped at creation from the client's selected workspace. Point the client at a project with `OliraClient(project=...)` / `olira.init(project=...)` and `create_patient()` lands there, while `list_patients()` returns only that project's patients. Omit `project` and a project-locked key uses its own project; an org-wide key uses the org's default project. A patient created in one project is invisible to others. See [Projects](#projects) and [Selecting a project](#selecting-a-project-workspace).
 
 ### Create a patient
 
@@ -670,9 +691,195 @@ and expires after `expires_in` seconds (default 15 minutes).
 | `expires_in`   | Yes      | `int`       | —                       |
 | `scopes`       | Yes      | `list[str]` | —                       |
 
+## Projects
+
+All project functions require an API key with the **`api:manage-projects`** scope **and an org-wide key** (a project-locked key is confined to its own workspace and gets 403 on these routes).
+
+A **project** is a self-contained, isolated workspace within your organisation — its own patients, event logs, patient state, views, cohorts, and platform configuration. Every organisation has exactly one **default** project; data written without a selected project lands there when using an org-wide key (a project-locked key with no selection writes to its own project instead). Everything you can do with projects in the Olira Console is available here. To operate _inside_ a project (create patients, send logs, read state), select it at init via [`project=`](#selecting-a-project-workspace) rather than through these management calls.
+
+The lifecycle mirrors the Console exactly: **create** (or **duplicate**) → active → **rename** / **deprecate** (soft-delete, reversible) → **restore**, and finally **permanent delete** (only from the deprecated state, irreversible).
+
+See the full runnable walkthrough in [`examples/10_project_management.py`](examples/10_project_management.py).
+
+---
+
+### `create_project`
+
+```python
+project = client.create_project(name="Dev Sandbox", slug="dev-sandbox", environment="dev")
+# module-level: olira.create_project(name=..., slug=..., description=..., environment=...)
+```
+
+Creates a new **empty** project — fresh configuration, no patients or data carried over.
+
+**Parameters**
+
+| Name          | Type          | Required | Description                                                                                                                                                                                   |
+| ------------- | ------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | `str`         | Yes      | Display name. Must be unique per org (1–100 chars).                                                                                                                                           |
+| `slug`        | `str \| None` | No       | The handle you later pass to `init(project=...)` / `X-Olira-Project`. Unique per org, normalized server-side (lowercased, non-alphanumerics → hyphens); **derived from `name` when omitted**. |
+| `description` | `str \| None` | No       | Optional free-text description.                                                                                                                                                               |
+| `environment` | `str \| None` | No       | Optional intent tag: `"dev"`, `"staging"`, or `"prod"`.                                                                                                                                       |
+
+**Returns** `Project`.
+
+---
+
+### `list_projects`
+
+```python
+result = client.list_projects()
+for p in result.data:
+    print(p.slug, p.status, p.is_default)
+```
+
+**Returns** `ProjectListResult` — `data: list[Project]` (active first, default first).
+
+---
+
+### `get_project`
+
+```python
+project = client.get_project(project="dev-sandbox")  # id or slug
+```
+
+**Parameters**
+
+| Name      | Type  | Required | Description         |
+| --------- | ----- | -------- | ------------------- |
+| `project` | `str` | Yes      | Project id or slug. |
+
+**Returns** `Project`.
+
+---
+
+### `duplicate_project`
+
+```python
+prod = client.duplicate_project(project="dev-sandbox", name="Prod", slug="prod", environment="prod")
+```
+
+Creates a new project seeded from an existing one's **configuration only** — platform config (event types, connections), population-view pipeline templates, and cohort _definitions_ (with empty rosters). Patients, event logs, patient state, and view results are **never** copied; the duplicate starts empty. This is the dev→prod handoff: validate a setup in a dev project, then duplicate it into production rather than rebuilding by hand.
+
+**Parameters**
+
+| Name          | Type          | Required | Description                                                                                                                                                                             |
+| ------------- | ------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project`     | `str`         | Yes      | Source project id or slug to copy configuration from.                                                                                                                                   |
+| `name`        | `str`         | Yes      | Name for the new project. Must be unique per org.                                                                                                                                       |
+| `slug`        | `str \| None` | No       | The new project's handle for `init(project=...)`. Unique per org, normalized server-side; derived from `name` when omitted — pass a distinct one so it doesn't collide with the source. |
+| `description` | `str \| None` | No       | Optional description for the new project.                                                                                                                                               |
+| `environment` | `str \| None` | No       | Optional intent tag for the new project.                                                                                                                                                |
+
+**Returns** `Project` (the new project).
+
+---
+
+### `rename_project`
+
+```python
+project = client.rename_project(project="dev-sandbox", name="Dev Sandbox 2")
+```
+
+Rename a project or update its description / environment tag. `project` is the id or slug; only supplied fields change.
+
+**Parameters**
+
+| Name          | Type          | Required | Description                        |
+| ------------- | ------------- | -------- | ---------------------------------- |
+| `project`     | `str`         | Yes      | Project id or slug.                |
+| `name`        | `str \| None` | No       | New display name (unique per org). |
+| `description` | `str \| None` | No       | New description.                   |
+| `environment` | `str \| None` | No       | New environment tag.               |
+
+**Returns** `Project`.
+
+---
+
+### `deprecate_project`
+
+```python
+project = client.deprecate_project(project="dev-sandbox")
+print(project.status)  # "deprecated"
+```
+
+Soft-delete: moves the project to the deprecated list. Its data becomes unreachable through normal reads but is fully retained — **reversible** via `restore_project`.
+
+**Guards:** the default project and the org's _last active_ project cannot be deprecated (400).
+
+**Parameters**
+
+| Name      | Type  | Required | Description         |
+| --------- | ----- | -------- | ------------------- |
+| `project` | `str` | Yes      | Project id or slug. |
+
+**Returns** `Project`.
+
+---
+
+### `restore_project`
+
+```python
+project = client.restore_project(project="dev-sandbox")
+print(project.status)  # "active"
+```
+
+Reactivate a deprecated project, fully intact.
+
+**Parameters**
+
+| Name      | Type  | Required | Description         |
+| --------- | ----- | -------- | ------------------- |
+| `project` | `str` | Yes      | Project id or slug. |
+
+**Returns** `Project`.
+
+---
+
+### `delete_project`
+
+```python
+client.deprecate_project(project="dev-sandbox")  # must be deprecated first
+client.delete_project(project="dev-sandbox")     # permanent, no recovery
+```
+
+Permanently delete a **deprecated** project and its scoped configuration (cohorts, view templates, pipelines, config). **Irreversible.**
+
+**Guards:** the project must already be deprecated, and deletion is **blocked (409) while it still has patients** — delete or export them first. The default project can never be deleted.
+
+**Parameters**
+
+| Name      | Type  | Required | Description         |
+| --------- | ----- | -------- | ------------------- |
+| `project` | `str` | Yes      | Project id or slug. |
+
+**Returns** `None`.
+
+---
+
+### `Project`
+
+| Field           | Type               | Description                                                                 |
+| --------------- | ------------------ | --------------------------------------------------------------------------- |
+| `id`            | `str`              | Olira-assigned project id.                                                  |
+| `name`          | `str`              | Display name.                                                               |
+| `slug`          | `str`              | URL-friendly identifier, unique per org. Usable anywhere an id is accepted. |
+| `description`   | `str \| None`      | Free-text description.                                                      |
+| `environment`   | `str \| None`      | Intent tag: `dev` / `staging` / `prod`.                                     |
+| `status`        | `str`              | `active` or `deprecated`.                                                   |
+| `is_default`    | `bool`             | Whether this is the org's default project.                                  |
+| `created_at`    | `str \| None`      | Creation timestamp (ISO 8601 string).                                       |
+| `deprecated_at` | `str \| None`      | When it was deprecated (ISO 8601 string), if applicable.                    |
+
+`ProjectListResult` — `data: list[Project]`.
+
+---
+
 ## Cohorts
 
 All cohort functions require an API key with `api:manage-patients` scope.
+
+> **Project scoping:** cohorts live _inside_ a project. Select the workspace at init (`OliraClient(project=...)` / `olira.init(project=...)`); every cohort call then reads and writes within that project. Omit `project` and a project-locked key uses its own project; an org-wide key uses the org's default project. See [Projects](#projects).
 
 Cohorts are named patient groups scoped to your organisation. Use them to assign summary types to a defined set of patients without touching individual records. Template assignments cascade to patients when they are added to a cohort, and to all existing cohort members when a template is assigned.
 
@@ -897,13 +1104,13 @@ Pass both `schema` and `mapping` for a "full_spec" submission (e.g. your own age
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `subtype` | `str` | Yes | New org-defined source event subtype, e.g. `rc_conversation_completed` (lowercase snake_case, 3–64 chars). |
-| `description` | `str` | No | What this source event represents. |
-| `input_examples` | `list[dict] \| None` | No | Sample raw payloads (capped at 20). |
-| `schema` | `dict \| None` | No | Full JSON Schema for the payload, if already authored. |
-| `mapping` | `dict \| None` | No | Full mapping spec (`source_root`/`targets`/`unmapped_fields_policy`), if already authored. |
+| Name             | Type                 | Required | Description                                                                                                |
+| ---------------- | -------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `subtype`        | `str`                | Yes      | New org-defined source event subtype, e.g. `rc_conversation_completed` (lowercase snake_case, 3–64 chars). |
+| `description`    | `str`                | No       | What this source event represents.                                                                         |
+| `input_examples` | `list[dict] \| None` | No       | Sample raw payloads (capped at 20).                                                                        |
+| `schema`         | `dict \| None`       | No       | Full JSON Schema for the payload, if already authored.                                                     |
+| `mapping`        | `dict \| None`       | No       | Full mapping spec (`source_root`/`targets`/`unmapped_fields_policy`), if already authored.                 |
 
 **Returns** `SchemaRegistrationResult` — `registration_id`, `subtype`, `target_version`, `submission_mode` (`"full_spec"` or `"assisted"`), `status` (always `"pending_review"`), `self_check`.
 
@@ -930,9 +1137,9 @@ for v in detail.versions:
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `subtype` | `str` | Yes | Org-native subtype to look up. |
+| Name      | Type  | Required | Description                    |
+| --------- | ----- | -------- | ------------------------------ |
+| `subtype` | `str` | Yes      | Org-native subtype to look up. |
 
 **Returns** `SchemaDetail` — `subtype`, `status`, `active_version`, `versions: list[SchemaVersion]`. Each `SchemaVersion` has `version`, `status`, `source` (`"registration"` if not yet materialized, else `"materialized"`), `payload_schema`, `mapping_summary`, `description`, `created_at`, `created_by`, `submission_mode`, `self_check`, `registration_id`.
 
@@ -953,13 +1160,13 @@ Dry-runs a schema/mapping over sample payloads — no writes. Runs the same org 
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `examples` | `list[dict]` | Yes | Sample payloads to run through. |
-| `subtype` | `str \| None` | No | Load the active (or pinned `version`) schema/mapping for this subtype as the baseline. |
-| `version` | `int \| None` | No | Pin a specific version instead of the active one. |
-| `schema` | `dict \| None` | No | Inline schema, overriding or replacing the stored one. |
-| `mapping` | `dict \| None` | No | Inline mapping, overriding or replacing the stored one. |
+| Name       | Type           | Required | Description                                                                            |
+| ---------- | -------------- | -------- | -------------------------------------------------------------------------------------- |
+| `examples` | `list[dict]`   | Yes      | Sample payloads to run through.                                                        |
+| `subtype`  | `str \| None`  | No       | Load the active (or pinned `version`) schema/mapping for this subtype as the baseline. |
+| `version`  | `int \| None`  | No       | Pin a specific version instead of the active one.                                      |
+| `schema`   | `dict \| None` | No       | Inline schema, overriding or replacing the stored one.                                 |
+| `mapping`  | `dict \| None` | No       | Inline mapping, overriding or replacing the stored one.                                |
 
 **Returns** `SchemaCheckResult` — `ok`, `results: list[SchemaCheckExampleResult]` (each with `input`, `ok`, `mapped_events`, `errors`), `error`.
 
@@ -976,13 +1183,13 @@ Proposes a schema/mapping change. Always opens a new pending request targeting t
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `subtype` | `str` | Yes | Subtype to propose a change for. |
-| `description` | `str \| None` | No | New description, if changing it. |
-| `input_examples` | `list[dict] \| None` | No | Replacement sample payloads. |
-| `schema` | `dict \| None` | No | New JSON Schema, if changing it. |
-| `mapping` | `dict \| None` | No | New mapping spec, if changing it. |
+| Name             | Type                 | Required | Description                       |
+| ---------------- | -------------------- | -------- | --------------------------------- |
+| `subtype`        | `str`                | Yes      | Subtype to propose a change for.  |
+| `description`    | `str \| None`        | No       | New description, if changing it.  |
+| `input_examples` | `list[dict] \| None` | No       | Replacement sample payloads.      |
+| `schema`         | `dict \| None`       | No       | New JSON Schema, if changing it.  |
+| `mapping`        | `dict \| None`       | No       | New mapping spec, if changing it. |
 
 **Returns** `SchemaRegistrationResult`.
 
@@ -999,10 +1206,10 @@ Deprecates a materialized version (default: the active one), or withdraws a stil
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `subtype` | `str` | Yes | Subtype to deprecate. |
-| `version` | `int \| None` | No | Specific version to archive. Defaults to the currently active version. |
+| Name      | Type          | Required | Description                                                            |
+| --------- | ------------- | -------- | ---------------------------------------------------------------------- |
+| `subtype` | `str`         | Yes      | Subtype to deprecate.                                                  |
+| `version` | `int \| None` | No       | Specific version to archive. Defaults to the currently active version. |
 
 **Returns** `SchemaActionResult` — `subtype`, `version`, `status`.
 
@@ -1019,10 +1226,10 @@ Activates an already-materialized version, archiving whichever version was previ
 
 **Parameters**
 
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `subtype` | `str` | Yes | Subtype to activate a version for. |
-| `version` | `int` | Yes | Version to activate. Must already be materialized (schema and mapping both authored). |
+| Name      | Type  | Required | Description                                                                           |
+| --------- | ----- | -------- | ------------------------------------------------------------------------------------- |
+| `subtype` | `str` | Yes      | Subtype to activate a version for.                                                    |
+| `version` | `int` | Yes      | Version to activate. Must already be materialized (schema and mapping both authored). |
 
 **Returns** `SchemaActionResult`.
 
@@ -1030,21 +1237,23 @@ Activates an already-materialized version, archiving whichever version was previ
 
 ### Schema response models
 
-| Model | Fields |
-| --- | --- |
-| `SchemaRegistrationResult` | `registration_id`, `subtype`, `target_version`, `submission_mode`, `status`, `self_check` |
-| `SchemaSummary` | `subtype`, `status`, `active_version`, `latest_version`, `description` |
-| `SchemaDetail` | `subtype`, `status`, `active_version`, `versions: list[SchemaVersion]` |
-| `SchemaVersion` | `version`, `status`, `source`, `payload_schema`, `mapping_summary`, `description`, `created_at`, `created_by`, `submission_mode`, `self_check`, `registration_id` |
-| `SchemaCheckResult` | `ok`, `results: list[SchemaCheckExampleResult]`, `error` |
-| `SchemaCheckExampleResult` | `input`, `ok`, `mapped_events`, `errors` |
-| `SchemaActionResult` | `subtype`, `version`, `status` |
+| Model                      | Fields                                                                                                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SchemaRegistrationResult` | `registration_id`, `subtype`, `target_version`, `submission_mode`, `status`, `self_check`                                                                         |
+| `SchemaSummary`            | `subtype`, `status`, `active_version`, `latest_version`, `description`                                                                                            |
+| `SchemaDetail`             | `subtype`, `status`, `active_version`, `versions: list[SchemaVersion]`                                                                                            |
+| `SchemaVersion`            | `version`, `status`, `source`, `payload_schema`, `mapping_summary`, `description`, `created_at`, `created_by`, `submission_mode`, `self_check`, `registration_id` |
+| `SchemaCheckResult`        | `ok`, `results: list[SchemaCheckExampleResult]`, `error`                                                                                                          |
+| `SchemaCheckExampleResult` | `input`, `ok`, `mapped_events`, `errors`                                                                                                                          |
+| `SchemaActionResult`       | `subtype`, `version`, `status`                                                                                                                                    |
 
 ---
 
 ## Logs
 
 All log functions require `sdk:event-log` scope.
+
+> **Project scoping:** logs inherit their patient's project automatically — you never pass a project when logging. Just target a patient that lives in the workspace you want (select it at init with `OliraClient(project=...)` / `olira.init(project=...)`), and the log is denormalised into that same project. Reads (`get_logs()`, `logs()`, `population_logs()`) are likewise confined to the selected project. See [Projects](#projects).
 
 Use `log()` and `log_batch()` for **ongoing operational traffic**—applications, integrations, and moderate batch sizes where each submission should update patient state through Olira's immediate graph-update path.
 
