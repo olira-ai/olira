@@ -10,7 +10,7 @@ the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
 Canonical product docs (including the signals pipeline): [docs.olira.ai](https://docs.olira.ai/send-data/passive-signals).
 
-**Package:** `olira` — **Version:** `1.7.1`
+**Package:** `olira` — **Version:** `1.8.0`
 
 ## Related docs
 
