@@ -520,18 +520,37 @@ olira.update_patient(
 #### `delete_patient`
 
 ```python
-delete_patient(*, patient_id: str) -> None
+delete_patient(*, patient_id: str, permanent: bool = False) -> None
 ```
 
-Soft-delete a patient. Module-level proxy to the singleton client.
+Delete a patient. Module-level proxy to the singleton client.
 
 Requires an API key with the api:manage-patients scope.
 
-| Parameter    | Required | Type  | Default |
-| ------------ | -------- | ----- | ------- |
-| `patient_id` | Yes      | `str` | —       |
+| Parameter    | Required | Type   | Default |
+| ------------ | -------- | ------ | ------- |
+| `patient_id` | Yes      | `str`  | —       |
+| `permanent`  | No       | `bool` | `False` |
 
-Soft-deletes the patient. The record is retained for audit purposes.
+Soft-deletes by default (sets `status=deleted`; the record and all associated logs/state
+are retained for audit purposes). Pass `permanent=True` to **hard-delete** the patient and
+cascade-delete every associated document — event logs, state, conversations, notes,
+symptoms, memories, etc. **Irreversible.**
+
+Use `permanent=True` to clean up a duplicate or erroneously-created patient — e.g. one
+whose external identifier collides with another patient's (see
+[EHR integrations & instances](#ehr-integrations--instances) for how identifiers are
+scoped per integration instance). Soft-deleting is enough to free up the identifier for
+reuse (duplicate checks skip `status=deleted` patients), but its logs stick around until
+you hard-delete it.
+
+```python
+# Stop a duplicate from causing further confusion, keep it for now:
+olira.delete_patient(patient_id=duplicate_id)
+
+# Once you're sure it's a true duplicate, purge everything tied to it:
+olira.delete_patient(patient_id=duplicate_id, permanent=True)
+```
 
 ### Batch create patients
 

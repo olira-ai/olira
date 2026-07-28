@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `timestamp`), now returned by `get_logs()` and `.as_logs()`. Matches app-api's
   `ingested_at` exposure in the log query/response layer, so callers can page or filter
   by when an event actually landed on the platform rather than the event's own clock.
+- `delete_patient(patient_id, permanent=True)` — hard-delete option, on `OliraClient`,
+  `AsyncOliraClient`, and the module-level `delete_patient()`. Soft-delete (sets
+  `status=deleted`) remains the default; `permanent=True` cascade-deletes all associated
+  data (event logs, state, conversations, etc) via app-api's
+  `DELETE /v1/patients/{id}?permanent=true`. Self-serve way to purge a duplicate or
+  erroneously-created patient's data without needing Console admin access.
 
 ## [1.7.0] - 2026-07-20
 

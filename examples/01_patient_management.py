@@ -7,7 +7,7 @@ Covers the full patient lifecycle:
   - Batch create up to 500 patients at once
   - Look up by external identifier
   - Update demographics
-  - Soft-delete
+  - Delete — soft (default) vs. permanent (hard-delete + cascade)
 
 Requires: api:manage-patients scope
 Run: python 01_patient_management.py
@@ -97,9 +97,26 @@ batch_result = client.create_patients_batch(
 created_ids.extend(item.id for item in batch_result.items)
 print(f"Batch create:   {batch_result.count} created, {len(batch_result.errors)} errors")
 
-# ── Demo cleanup — remove test patients so your org stays clean ───────────────
-# Not part of a real integration.
+# ── Delete — soft (default) vs. permanent ────────────────────────────────────
+# Soft-delete sets status=deleted. The record and all its logs/state are retained
+# for audit purposes, and the patient stops appearing in list_patients() — but its
+# external identifiers are also freed up, so a new create can reuse the same value.
+client.delete_patient(patient_id=shell.id)
+print(f"Soft-deleted:   {shell.id} (record + logs retained, hidden from listings)")
+
+# permanent=True hard-deletes the patient AND cascade-deletes every associated
+# document (event logs, state, conversations, notes, etc). Irreversible. Use this
+# once you're sure a record was created in error (e.g. test data, or a duplicate)
+# and you need its logs gone entirely, not just hidden.
+client.delete_patient(patient_id=patient.id, permanent=True)
+created_ids.remove(patient.id)
+print(f"Permanently deleted: {patient.id} (record + all associated data removed)")
+
+# ── Demo cleanup — remove remaining test patients so your org stays clean ────
+# Not part of a real integration. permanent=True here so the demo leaves no residue.
 for pid in created_ids:
-    client.delete_patient(patient_id=pid)
+    if pid == shell.id:
+        continue  # already soft-deleted above
+    client.delete_patient(patient_id=pid, permanent=True)
 client.close()
 print(f"Cleaned up {len(created_ids)} patients.")
