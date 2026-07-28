@@ -1,7 +1,7 @@
 """Tests for HttpTransport.delete_patient's permanent-delete option.
 
-Malik/Qurate needs a self-serve way to purge a duplicated patient's logs, not just
-soft-delete it — this mirrors app-api's ``DELETE /v1/patients/{id}?permanent=true``.
+Mirrors app-api's ``DELETE /v1/patients/{id}?permanent=true`` — a self-serve way to
+purge a duplicate or erroneously-created patient's logs, not just soft-delete it.
 """
 
 import httpx
@@ -15,12 +15,15 @@ def _make_transport(respond):
         api_key="olira_test_key",
         max_retries=0,
     )
-    transport._client = httpx.Client(
+    old_client = transport._client
+    mock_client = httpx.Client(
         base_url=transport._base_url,
         timeout=transport._timeout,
-        headers=transport._client.headers,
+        headers=old_client.headers,
         transport=httpx.MockTransport(respond),
     )
+    old_client.close()
+    transport._client = mock_client
     return transport
 
 
