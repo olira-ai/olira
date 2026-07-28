@@ -252,9 +252,15 @@ class HttpTransport:
         raw = self._request("PUT", f"/v1/patients/{patient_id}", json=body)
         return _parse_patient(raw)
 
-    def delete_patient(self, patient_id: str) -> None:
-        """Soft-delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope."""
-        self._request("DELETE", f"/v1/patients/{patient_id}")
+    def delete_patient(self, patient_id: str, *, permanent: bool = False) -> None:
+        """Delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope.
+
+        Soft-deletes by default. Pass ``permanent=True`` to hard-delete the patient and
+        cascade-delete all associated data (logs, state, conversations, etc). Irreversible —
+        use to clean up a duplicate patient created before identifiers converged correctly.
+        """
+        params = {"permanent": "true"} if permanent else None
+        self._request("DELETE", f"/v1/patients/{patient_id}", params=params)
 
     def create_cohort(self, body: dict[str, Any]) -> Cohort:
         """Create a cohort (POST /v1/cohorts). Requires api:manage-patients scope."""
@@ -594,9 +600,15 @@ class AsyncHttpTransport:
         raw = await self._request("PUT", f"/v1/patients/{patient_id}", json=body)
         return _parse_patient(raw)
 
-    async def delete_patient(self, patient_id: str) -> None:
-        """Soft-delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope."""
-        await self._request("DELETE", f"/v1/patients/{patient_id}")
+    async def delete_patient(self, patient_id: str, *, permanent: bool = False) -> None:
+        """Delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope.
+
+        Soft-deletes by default. Pass ``permanent=True`` to hard-delete the patient and
+        cascade-delete all associated data (logs, state, conversations, etc). Irreversible —
+        use to clean up a duplicate patient created before identifiers converged correctly.
+        """
+        params = {"permanent": "true"} if permanent else None
+        await self._request("DELETE", f"/v1/patients/{patient_id}", params=params)
 
     async def create_cohort(self, body: dict[str, Any]) -> Cohort:
         """Create a cohort (POST /v1/cohorts). Requires api:manage-patients scope."""

@@ -365,12 +365,21 @@ def test_as_logs_parses_into_log_entries():
 
     result = LogQueryResult(
         count=1,
-        rows=[{"id": "x", "type": "health_metric_reported", "timestamp": "2026-01-01T00:00:00Z", "payload": {}}],
+        rows=[
+            {
+                "id": "x",
+                "type": "health_metric_reported",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "ingested_at": "2026-01-01T00:00:02Z",
+                "payload": {},
+            }
+        ],
     )
     entries = result.as_logs()
     assert len(entries) == 1
     assert isinstance(entries[0], LogEntry)
     assert entries[0].id == "x"
+    assert entries[0].ingested_at == "2026-01-01T00:00:02Z"
 
 
 # ---------------------------------------------------------------------------
