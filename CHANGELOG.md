@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-07-28
+
+### Added
+
+- **Passive signal ingestion** — `OliraClient.send_signals()` and `get_signal_job()`
+  for accelerometer / gyroscope / GPS batches (requires `sdk:event-log` scope).
+  - Accepts either `records` (serialized to Parquet locally via optional
+    `pip install olira[signals]` / `pyarrow`) or pre-serialized `parquet` bytes.
+  - Auto-routes small/medium payloads through the sync door and large payloads via
+    presigned S3 + manifest commit; returns a `SignalJobHandle` with `wait()` / `poll()`.
+  - Optional collection metadata: `sample_rate_hz`, `units`, `timestamp_unit`,
+    `device_timezone`.
+  - New models: `SignalJob`, `SignalJobHandle`, `SignalJobStatus`, `SignalSensorType`,
+    plus `serialize_signal_records()`.
+  - Example: `examples/11_signals.py`.
+
 ## [1.8.0] - 2026-07-28
 
 ### Added

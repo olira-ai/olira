@@ -54,6 +54,7 @@ from .models import (
     _LogWire,
 )
 from .queue import BackgroundWorker
+from .signals import SignalJob, SignalJobHandle, SignalSensorType, send_signals_via_transport
 from .validation import validate_ingestion_file, validate_ingestion_records
 from .version import __version__ as _sdk_version
 
@@ -936,6 +937,57 @@ class OliraClient:
         only view materialisation failed. Transitions the job back to BACKFILLING.
         """
         return self._transport.retry_view_backfill(job_id)
+
+    def send_signals(
+        self,
+        *,
+        patient_id: str,
+        sensor_type: "SignalSensorType | str",
+        source_device: str,
+        records: list[dict[str, Any]] | None = None,
+        parquet: bytes | None = None,
+        schema_version: str | None = None,
+        sample_rate_hz: float | None = None,
+        units: dict[str, str] | None = None,
+        timestamp_unit: str | None = None,
+        device_timezone: str | None = None,
+    ) -> "SignalJobHandle":
+        """Send a batch of passive sensor data (accelerometer / gyroscope / gps).
+
+        Requires the sdk:event-log scope. Provide either ``records`` (list of dicts,
+        each with a ``ts`` key plus the sensor's measurement fields — serialized to
+        Parquet locally; requires ``pip install olira[signals]``) or ``parquet``
+        (pre-serialized Parquet bytes).
+
+        The SDK hashes the payload, stamps the schema version, measures the size, and
+        routes automatically: small/medium payloads go through the synchronous door;
+        large payloads upload via presigned S3 + manifest commit. Returns a
+        :class:`~olira.signals.SignalJobHandle` — call ``handle.wait()`` to block until
+        absorption finishes or ``handle.poll()`` for the current state.
+
+        Optional collection metadata travels with the batch and is stored alongside the
+        time-series data: ``sample_rate_hz`` (nominal device rate), ``units`` (per-field
+        source units, converted server-side to canonical), ``timestamp_unit``
+        ('s'/'ms'/'us' for epoch-encoded ts columns), ``device_timezone`` (IANA name,
+        retains the original UTC offset).
+        """
+        return send_signals_via_transport(
+            self._transport,
+            patient_id=patient_id,
+            sensor_type=sensor_type,
+            source_device=source_device,
+            records=records,
+            parquet=parquet,
+            schema_version=schema_version,
+            sample_rate_hz=sample_rate_hz,
+            units=units,
+            timestamp_unit=timestamp_unit,
+            device_timezone=device_timezone,
+        )
+
+    def get_signal_job(self, *, job_id: str) -> "SignalJob":
+        """Poll a signal ingestion job. Requires sdk:event-log scope."""
+        return self._transport.get_signal_job(job_id)
 
     def flush(self) -> None:
         """Block until all queued events are sent (or failed)."""

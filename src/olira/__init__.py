@@ -124,6 +124,13 @@ from .models import (
     ViewRecentEventsResult,
     ViewResult,
 )
+from .signals import (
+    SignalJob,
+    SignalJobHandle,
+    SignalJobStatus,
+    SignalSensorType,
+    serialize_signal_records,
+)
 from .validation import validate_ingestion_file, validate_ingestion_records
 from .version import __version__
 
@@ -208,6 +215,12 @@ __all__ = [
     "IngestionJobStatus",
     "IngestionJobListResult",
     "IngestionRowError",
+    # Passive signal ingestion
+    "SignalJob",
+    "SignalJobHandle",
+    "SignalJobStatus",
+    "SignalSensorType",
+    "serialize_signal_records",
     # Local validation helpers
     "validate_ingestion_file",
     "validate_ingestion_records",

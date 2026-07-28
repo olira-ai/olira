@@ -4,11 +4,11 @@
 # Olira Python SDK — API Reference
 
 The Olira Python SDK provides a typed client for logging health events,
-managing patients, backfilling historical data, reading Patient State,
-and minting patient-scoped tokens for use with the
-[Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
+managing patients, backfilling historical data, uploading passive sensor
+Parquet, reading Patient State, and minting patient-scoped tokens for use with
+the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.8.0`
+**Package:** `olira` — **Version:** `1.9.0`
 
 ## Related docs
 
@@ -24,7 +24,7 @@ Each API key carries one or more scopes. Assign only what your integration needs
 
 | Scope                   | What it unlocks                                                                                                                                                                                                                                                        |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                                                                                                                                                                                                                                   |
+| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`, `OliraClient.send_signals()`, `get_signal_job()`                                                                                                                                                                                  |
 | `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc.                                                                                                                                                        |
 | `api:manage-projects`   | `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`, `rename_project()`, `deprecate_project()`, `restore_project()`, `delete_project()` — **requires an org-wide key** (a project-locked key is confined to its own workspace and gets 403). |
 | `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                                |
@@ -2656,6 +2656,60 @@ olira.log(
     },
 )
 ```
+
+---
+
+## Passive Signal Ingestion
+
+Upload multi-Hz **accelerometer**, **gyroscope**, or **GPS** batches as Parquet.
+Canonical guide (pipeline, REST doors, handoff, dedup):
+[Passive signal ingestion](https://docs.olira.ai/send-data/passive-signals).
+
+**Requires** an API key with the `sdk:event-log` scope. For `records=` serialization,
+install `pip install olira[signals]` (or pass pre-serialized `parquet=` bytes).
+
+### Handoff contract
+
+1. Doors land bytes in the **S3 lake** (provenance / replay only — never a query surface).
+2. The absorb worker normalizes and writes **Timescale** (deduped, UTC, canonical units).
+3. **Feature compute reads Timescale only**, never the lake. Derived features emit as
+   `activity_data` event logs.
+
+### Dedup policy (accepted for ≤500 Hz sensors)
+
+- Timestamps are truncated to **milliseconds** at normalize time.
+- Unique key: `(patient_id, source_device, ts)`.
+- Re-uploads of the same instant **first-wins** (`ON CONFLICT DO NOTHING`).
+- Landing may also no-op on exact content-hash match (`deduplicated: true` on sync accept).
+- A sample-sequence tiebreaker is deferred until a sensor above ~500 Hz needs it.
+
+### Quickstart
+
+```python
+from datetime import datetime, timezone
+from olira import OliraClient
+
+client = OliraClient(api_key="YOUR_API_KEY")
+
+handle = client.send_signals(
+    patient_id="PATIENT_ID",
+    sensor_type="accelerometer",
+    source_device="phone-imu-1",
+    sample_rate_hz=60.0,
+    records=[
+        {"ts": datetime(2026, 7, 26, 12, 0, 0, tzinfo=timezone.utc), "x": 0.1, "y": 0.0, "z": 9.8},
+    ],
+)
+job = handle.wait()
+print(job.status, job.records_written, job.records_deduplicated)
+```
+
+The SDK routes small bodies to `POST /v1/signals:batch` and large bodies to
+`:upload-url` + S3 PUT + `:manifest`. Do **not** send `Authorization` on the
+presigned PUT.
+
+Poll with `client.get_signal_job(job_id=...)`. Dead-letters and metrics are REST-only
+(`GET /v1/signals/dead-letters`, `GET /v1/signals/metrics`) — see the docs site.
 
 ---
 
