@@ -342,9 +342,14 @@ class OliraClient:
         )
         return self._transport.update_patient(patient_id, req.model_dump(exclude_none=True))
 
-    def delete_patient(self, *, patient_id: str) -> None:
-        """Soft-delete a patient. Requires api:manage-patients scope."""
-        self._transport.delete_patient(patient_id)
+    def delete_patient(self, *, patient_id: str, permanent: bool = False) -> None:
+        """Delete a patient. Requires api:manage-patients scope.
+
+        Soft-deletes by default. Pass ``permanent=True`` to hard-delete the patient and
+        cascade-delete all associated data (logs, state, conversations, etc). Irreversible —
+        use to clean up a duplicate patient created before identifiers converged correctly.
+        """
+        self._transport.delete_patient(patient_id, permanent=permanent)
 
     # ------------------------------------------------------------------
     # Cohort management (api:manage-patients scope)
@@ -1256,13 +1261,18 @@ class AsyncOliraClient:
         )
         return await self._transport.update_patient(patient_id, req.model_dump(exclude_none=True))
 
-    async def delete_patient(self, *, patient_id: str) -> None:
-        """Soft-delete a patient. Requires api:manage-patients scope."""
+    async def delete_patient(self, *, patient_id: str, permanent: bool = False) -> None:
+        """Delete a patient. Requires api:manage-patients scope.
+
+        Soft-deletes by default. Pass ``permanent=True`` to hard-delete the patient and
+        cascade-delete all associated data (logs, state, conversations, etc). Irreversible —
+        use to clean up a duplicate patient created before identifiers converged correctly.
+        """
         if self._transport is None:
             raise ValidationError(
                 "AsyncOliraClient must be used as an async context manager before calling delete_patient()"
             )
-        await self._transport.delete_patient(patient_id)
+        await self._transport.delete_patient(patient_id, permanent=permanent)
 
     # ------------------------------------------------------------------
     # Cohort management (api:manage-patients scope)

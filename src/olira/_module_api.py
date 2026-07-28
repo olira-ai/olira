@@ -254,12 +254,16 @@ def update_patient(
     )
 
 
-def delete_patient(*, patient_id: str) -> None:
-    """Soft-delete a patient. Module-level proxy to the singleton client.
+def delete_patient(*, patient_id: str, permanent: bool = False) -> None:
+    """Delete a patient. Module-level proxy to the singleton client.
+
+    Soft-deletes by default. Pass ``permanent=True`` to hard-delete the patient and
+    cascade-delete all associated data (logs, state, conversations, etc). Irreversible —
+    use to clean up a duplicate patient created before identifiers converged correctly.
 
     Requires an API key with the api:manage-patients scope.
     """
-    return _get_client().delete_patient(patient_id=patient_id)
+    return _get_client().delete_patient(patient_id=patient_id, permanent=permanent)
 
 
 def get_patient_token(*, patient_id: str) -> PatientToken:

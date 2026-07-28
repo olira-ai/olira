@@ -8,7 +8,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.7.0`
+**Package:** `olira` — **Version:** `1.8.0`
 
 ## Related docs
 
@@ -27,7 +27,7 @@ Each API key carries one or more scopes. Assign only what your integration needs
 | `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                                                                                                                                                                                                                                   |
 | `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc.                                                                                                                                                        |
 | `api:manage-projects`   | `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`, `rename_project()`, `deprecate_project()`, `restore_project()`, `delete_project()` — **requires an org-wide key** (a project-locked key is confined to its own workspace and gets 403). |
-| `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                               |
+| `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                                |
 | `sdk:patient-token`     | `get_patient_token()`                                                                                                                                                                                                                                                  |
 | `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                                                                                                                                                                |
 | `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc.                                                                                                                                               |
@@ -520,18 +520,37 @@ olira.update_patient(
 #### `delete_patient`
 
 ```python
-delete_patient(*, patient_id: str) -> None
+delete_patient(*, patient_id: str, permanent: bool = False) -> None
 ```
 
-Soft-delete a patient. Module-level proxy to the singleton client.
+Delete a patient. Module-level proxy to the singleton client.
 
 Requires an API key with the api:manage-patients scope.
 
-| Parameter    | Required | Type  | Default |
-| ------------ | -------- | ----- | ------- |
-| `patient_id` | Yes      | `str` | —       |
+| Parameter    | Required | Type   | Default |
+| ------------ | -------- | ------ | ------- |
+| `patient_id` | Yes      | `str`  | —       |
+| `permanent`  | No       | `bool` | `False` |
 
-Soft-deletes the patient. The record is retained for audit purposes.
+Soft-deletes by default (sets `status=deleted`; the record and all associated logs/state
+are retained for audit purposes). Pass `permanent=True` to **hard-delete** the patient and
+cascade-delete every associated document — event logs, state, conversations, notes,
+symptoms, memories, etc. **Irreversible.**
+
+Use `permanent=True` to clean up a duplicate or erroneously-created patient — e.g. one
+whose external identifier collides with another patient's (see
+[EHR integrations & instances](#ehr-integrations--instances) for how identifiers are
+scoped per integration instance). Soft-deleting is enough to free up the identifier for
+reuse (duplicate checks skip `status=deleted` patients), but its logs stick around until
+you hard-delete it.
+
+```python
+# Stop a duplicate from causing further confusion, keep it for now:
+olira.delete_patient(patient_id=duplicate_id)
+
+# Once you're sure it's a true duplicate, purge everything tied to it:
+olira.delete_patient(patient_id=duplicate_id, permanent=True)
+```
 
 ### Batch create patients
 
@@ -859,17 +878,17 @@ Permanently delete a **deprecated** project and its scoped configuration (cohort
 
 ### `Project`
 
-| Field           | Type               | Description                                                                 |
-| --------------- | ------------------ | --------------------------------------------------------------------------- |
-| `id`            | `str`              | Olira-assigned project id.                                                  |
-| `name`          | `str`              | Display name.                                                               |
-| `slug`          | `str`              | URL-friendly identifier, unique per org. Usable anywhere an id is accepted. |
-| `description`   | `str \| None`      | Free-text description.                                                      |
-| `environment`   | `str \| None`      | Intent tag: `dev` / `staging` / `prod`.                                     |
-| `status`        | `str`              | `active` or `deprecated`.                                                   |
-| `is_default`    | `bool`             | Whether this is the org's default project.                                  |
-| `created_at`    | `str \| None`      | Creation timestamp (ISO 8601 string).                                       |
-| `deprecated_at` | `str \| None`      | When it was deprecated (ISO 8601 string), if applicable.                    |
+| Field           | Type          | Description                                                                 |
+| --------------- | ------------- | --------------------------------------------------------------------------- |
+| `id`            | `str`         | Olira-assigned project id.                                                  |
+| `name`          | `str`         | Display name.                                                               |
+| `slug`          | `str`         | URL-friendly identifier, unique per org. Usable anywhere an id is accepted. |
+| `description`   | `str \| None` | Free-text description.                                                      |
+| `environment`   | `str \| None` | Intent tag: `dev` / `staging` / `prod`.                                     |
+| `status`        | `str`         | `active` or `deprecated`.                                                   |
+| `is_default`    | `bool`        | Whether this is the org's default project.                                  |
+| `created_at`    | `str \| None` | Creation timestamp (ISO 8601 string).                                       |
+| `deprecated_at` | `str \| None` | When it was deprecated (ISO 8601 string), if applicable.                    |
 
 `ProjectListResult` — `data: list[Project]`.
 
@@ -2000,7 +2019,8 @@ logs = olira.get_logs(
     trace_id="conv-abc-123",
 )
 for entry in logs.logs:
-    print(entry.type, entry.timestamp, entry.payload)
+    # timestamp: when the event happened. ingested_at: when the platform received it.
+    print(entry.type, entry.timestamp, entry.ingested_at, entry.payload)
 ```
 
 **Mock response:**
@@ -2014,6 +2034,7 @@ for entry in logs.logs:
       "id": "66f1a2b3c4d5e6f7a8b9c0d3",
       "type": "symptom_report",
       "timestamp": "2026-03-18T10:00:00+00:00",
+      "ingested_at": "2026-03-18T10:00:00+00:00",
       "payload": {
         "instrument": "esas_r",
         "symptoms": [
@@ -2027,6 +2048,7 @@ for entry in logs.logs:
       "id": "66f1a2b3c4d5e6f7a8b9c0d4",
       "type": "moods_report",
       "timestamp": "2026-03-18T10:01:00+00:00",
+      "ingested_at": "2026-03-18T10:01:00+00:00",
       "payload": { "moods": [{ "mood": "anxious", "intensity": 3 }] },
       "trace": { "object_type": "conversation", "object_id": "conv-abc-123" }
     }
@@ -2077,7 +2099,7 @@ Returns a builder scoped to one patient. Chain methods then call a terminal.
 |                 | `.sum / .avg / .min / .max(field, alias)`              | Numeric aggregations                                        |
 |                 | `.agg(op, field, alias=)`                              | Generic aggregation                                         |
 
-**Allowed field roots:** `type`, `timestamp`, `trace`, `payload`. Any other root (e.g. `id`) returns HTTP 422 → `ValidationError`.
+**Allowed field roots:** `type`, `timestamp`, `ingested_at`, `trace`, `payload`. Any other root (e.g. `id`) returns HTTP 422 → `ValidationError`. See [`LogEntry`](#logentry) below for the `timestamp` vs. `ingested_at` distinction — both are valid to filter/order/select on.
 
 **Terminals:**
 
@@ -2154,6 +2176,17 @@ row = (
         .order("timestamp", desc=True)
         .limit(1)
         .maybe_single()
+)
+
+# Poll for everything the platform has ingested since your last check — use ingested_at,
+# not timestamp: a backfill or delayed integration sync can insert old-timestamp rows at
+# any time, so timestamp alone can silently skip events a timestamp-based cursor already
+# passed. ingested_at only ever moves forward.
+new_rows = (
+    olira.logs("patient-uuid")
+        .gt("ingested_at", last_poll_iso)
+        .order("ingested_at")
+        .execute()
 )
 ```
 
@@ -2393,13 +2426,28 @@ for m in memories.results:
 
 ### `LogEntry`
 
-| Field       | Type                 | Description         |
-| ----------- | -------------------- | ------------------- |
-| `id`        | `str`                | MongoDB document ID |
-| `type`      | `str \| None`        | Event type string   |
-| `timestamp` | `str \| None`        | ISO 8601 timestamp  |
-| `payload`   | `dict[str, Any]`     | Event payload       |
-| `trace`     | `OliraTrace \| None` | Provenance trace    |
+| Field         | Type                 | Description                                                   |
+| ------------- | -------------------- | ------------------------------------------------------------- |
+| `id`          | `str`                | MongoDB document ID                                           |
+| `type`        | `str \| None`        | Event type string                                             |
+| `timestamp`   | `str \| None`        | ISO 8601 — when the event _happened_ (see below)              |
+| `ingested_at` | `str \| None`        | ISO 8601 — when the platform _received_ the event (see below) |
+| `payload`     | `dict[str, Any]`     | Event payload                                                 |
+| `trace`       | `OliraTrace \| None` | Provenance trace                                              |
+
+**`timestamp` vs. `ingested_at`:** `timestamp` is the event's own clock — when it actually
+occurred (e.g. when a patient reported a symptom, or the EHR's recorded observation time).
+It's caller-supplied on write (see `log()`'s `timestamp` param, used to backdate historical
+events) and is what logs are sorted by for a patient's timeline. `ingested_at` is server-set
+and non-overridable — the moment app-api actually wrote the row — and is only ever populated
+by the platform, never by a caller. The two commonly differ: a backfilled historical event
+might have a `timestamp` from months ago but an `ingested_at` from today's import job; a
+delayed EHR sync might report a `timestamp` from the integration's roster pull with
+`ingested_at` lagging by minutes or hours. Use `timestamp` to place events on the patient's
+clinical timeline; use `ingested_at` to page/audit by when data actually landed on the
+platform (e.g. "give me everything ingested since my last poll," which `timestamp` alone
+can't answer reliably since backfills and delayed integration syncs can insert old-`timestamp`
+rows at any time).
 
 ### `LogsResult`
 

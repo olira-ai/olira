@@ -96,7 +96,12 @@ print("\n── Recent logs (last 5) ──")
 logs = client.get_logs(patient_id=PATIENT_ID, limit=5)
 print(f"  Total logs on record: {logs.count}")
 for entry in logs.logs:
-    print(f"  {entry.timestamp or '?'}  {entry.type}  payload keys: {list((entry.payload or {}).keys())}")
+    # timestamp: when the event happened. ingested_at: when the platform received it —
+    # these can differ for backfilled or delayed-sync events.
+    print(
+        f"  timestamp={entry.timestamp or '?'}  ingested_at={entry.ingested_at or '?'}  "
+        f"{entry.type}  payload keys: {list((entry.payload or {}).keys())}"
+    )
 
 # ── State events ───────────────────────────────────────────────────────────────
 print("\n── Recent state events (last 5) ──")
