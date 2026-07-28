@@ -488,6 +488,7 @@ class LogEntry(BaseModel):
     id: str
     type: str | None = None
     timestamp: str | None = None
+    ingested_at: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     trace: OliraTrace | None = None
 

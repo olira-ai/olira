@@ -2000,7 +2000,8 @@ logs = olira.get_logs(
     trace_id="conv-abc-123",
 )
 for entry in logs.logs:
-    print(entry.type, entry.timestamp, entry.payload)
+    # timestamp: when the event happened. ingested_at: when the platform received it.
+    print(entry.type, entry.timestamp, entry.ingested_at, entry.payload)
 ```
 
 **Mock response:**
@@ -2014,6 +2015,7 @@ for entry in logs.logs:
       "id": "66f1a2b3c4d5e6f7a8b9c0d3",
       "type": "symptom_report",
       "timestamp": "2026-03-18T10:00:00+00:00",
+      "ingested_at": "2026-03-18T10:00:00+00:00",
       "payload": {
         "instrument": "esas_r",
         "symptoms": [
@@ -2027,6 +2029,7 @@ for entry in logs.logs:
       "id": "66f1a2b3c4d5e6f7a8b9c0d4",
       "type": "moods_report",
       "timestamp": "2026-03-18T10:01:00+00:00",
+      "ingested_at": "2026-03-18T10:01:00+00:00",
       "payload": { "moods": [{ "mood": "anxious", "intensity": 3 }] },
       "trace": { "object_type": "conversation", "object_id": "conv-abc-123" }
     }
@@ -2077,7 +2080,7 @@ Returns a builder scoped to one patient. Chain methods then call a terminal.
 |                 | `.sum / .avg / .min / .max(field, alias)`              | Numeric aggregations                                        |
 |                 | `.agg(op, field, alias=)`                              | Generic aggregation                                         |
 
-**Allowed field roots:** `type`, `timestamp`, `trace`, `payload`. Any other root (e.g. `id`) returns HTTP 422 → `ValidationError`.
+**Allowed field roots:** `type`, `timestamp`, `ingested_at`, `trace`, `payload`. Any other root (e.g. `id`) returns HTTP 422 → `ValidationError`. See [`LogEntry`](#logentry) below for the `timestamp` vs. `ingested_at` distinction — both are valid to filter/order/select on.
 
 **Terminals:**
 
@@ -2154,6 +2157,17 @@ row = (
         .order("timestamp", desc=True)
         .limit(1)
         .maybe_single()
+)
+
+# Poll for everything the platform has ingested since your last check — use ingested_at,
+# not timestamp: a backfill or delayed integration sync can insert old-timestamp rows at
+# any time, so timestamp alone can silently skip events a timestamp-based cursor already
+# passed. ingested_at only ever moves forward.
+new_rows = (
+    olira.logs("patient-uuid")
+        .gt("ingested_at", last_poll_iso)
+        .order("ingested_at")
+        .execute()
 )
 ```
 
@@ -2393,13 +2407,28 @@ for m in memories.results:
 
 ### `LogEntry`
 
-| Field       | Type                 | Description         |
-| ----------- | -------------------- | ------------------- |
-| `id`        | `str`                | MongoDB document ID |
-| `type`      | `str \| None`        | Event type string   |
-| `timestamp` | `str \| None`        | ISO 8601 timestamp  |
-| `payload`   | `dict[str, Any]`     | Event payload       |
-| `trace`     | `OliraTrace \| None` | Provenance trace    |
+| Field         | Type                 | Description                                                  |
+| ------------- | -------------------- | -------------------------------------------------------------- |
+| `id`          | `str`                | MongoDB document ID                                           |
+| `type`        | `str \| None`        | Event type string                                             |
+| `timestamp`   | `str \| None`        | ISO 8601 — when the event *happened* (see below)              |
+| `ingested_at` | `str \| None`        | ISO 8601 — when the platform *received* the event (see below) |
+| `payload`     | `dict[str, Any]`     | Event payload                                                 |
+| `trace`       | `OliraTrace \| None` | Provenance trace                                              |
+
+**`timestamp` vs. `ingested_at`:** `timestamp` is the event's own clock — when it actually
+occurred (e.g. when a patient reported a symptom, or the EHR's recorded observation time).
+It's caller-supplied on write (see `log()`'s `timestamp` param, used to backdate historical
+events) and is what logs are sorted by for a patient's timeline. `ingested_at` is server-set
+and non-overridable — the moment app-api actually wrote the row — and is only ever populated
+by the platform, never by a caller. The two commonly differ: a backfilled historical event
+might have a `timestamp` from months ago but an `ingested_at` from today's import job; a
+delayed EHR sync might report a `timestamp` from the integration's roster pull with
+`ingested_at` lagging by minutes or hours. Use `timestamp` to place events on the patient's
+clinical timeline; use `ingested_at` to page/audit by when data actually landed on the
+platform (e.g. "give me everything ingested since my last poll," which `timestamp` alone
+can't answer reliably since backfills and delayed integration syncs can insert old-`timestamp`
+rows at any time).
 
 ### `LogsResult`
 
