@@ -65,7 +65,9 @@ def test_logs_result_ingested_at_defaults_to_none():
         {
             "patient_id": "p_123",
             "count": 1,
-            "logs": [{"id": "log_1", "type": "symptom_report", "timestamp": "2026-03-18T10:00:00+00:00", "payload": {}}],
+            "logs": [
+                {"id": "log_1", "type": "symptom_report", "timestamp": "2026-03-18T10:00:00+00:00", "payload": {}}
+            ],
         }
     )
     assert result.logs[0].ingested_at is None

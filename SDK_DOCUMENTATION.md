@@ -8,7 +8,7 @@ managing patients, backfilling historical data, reading Patient State,
 and minting patient-scoped tokens for use with the
 [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.7.0`
+**Package:** `olira` — **Version:** `1.8.0`
 
 ## Related docs
 
@@ -27,7 +27,7 @@ Each API key carries one or more scopes. Assign only what your integration needs
 | `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`                                                                                                                                                                                                                                   |
 | `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc.                                                                                                                                                        |
 | `api:manage-projects`   | `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`, `rename_project()`, `deprecate_project()`, `restore_project()`, `delete_project()` — **requires an org-wide key** (a project-locked key is confined to its own workspace and gets 403). |
-| `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                               |
+| `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                                |
 | `sdk:patient-token`     | `get_patient_token()`                                                                                                                                                                                                                                                  |
 | `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                                                                                                                                                                |
 | `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc.                                                                                                                                               |
@@ -859,17 +859,17 @@ Permanently delete a **deprecated** project and its scoped configuration (cohort
 
 ### `Project`
 
-| Field           | Type               | Description                                                                 |
-| --------------- | ------------------ | --------------------------------------------------------------------------- |
-| `id`            | `str`              | Olira-assigned project id.                                                  |
-| `name`          | `str`              | Display name.                                                               |
-| `slug`          | `str`              | URL-friendly identifier, unique per org. Usable anywhere an id is accepted. |
-| `description`   | `str \| None`      | Free-text description.                                                      |
-| `environment`   | `str \| None`      | Intent tag: `dev` / `staging` / `prod`.                                     |
-| `status`        | `str`              | `active` or `deprecated`.                                                   |
-| `is_default`    | `bool`             | Whether this is the org's default project.                                  |
-| `created_at`    | `str \| None`      | Creation timestamp (ISO 8601 string).                                       |
-| `deprecated_at` | `str \| None`      | When it was deprecated (ISO 8601 string), if applicable.                    |
+| Field           | Type          | Description                                                                 |
+| --------------- | ------------- | --------------------------------------------------------------------------- |
+| `id`            | `str`         | Olira-assigned project id.                                                  |
+| `name`          | `str`         | Display name.                                                               |
+| `slug`          | `str`         | URL-friendly identifier, unique per org. Usable anywhere an id is accepted. |
+| `description`   | `str \| None` | Free-text description.                                                      |
+| `environment`   | `str \| None` | Intent tag: `dev` / `staging` / `prod`.                                     |
+| `status`        | `str`         | `active` or `deprecated`.                                                   |
+| `is_default`    | `bool`        | Whether this is the org's default project.                                  |
+| `created_at`    | `str \| None` | Creation timestamp (ISO 8601 string).                                       |
+| `deprecated_at` | `str \| None` | When it was deprecated (ISO 8601 string), if applicable.                    |
 
 `ProjectListResult` — `data: list[Project]`.
 
@@ -2407,12 +2407,12 @@ for m in memories.results:
 
 ### `LogEntry`
 
-| Field         | Type                 | Description                                                  |
-| ------------- | -------------------- | -------------------------------------------------------------- |
+| Field         | Type                 | Description                                                   |
+| ------------- | -------------------- | ------------------------------------------------------------- |
 | `id`          | `str`                | MongoDB document ID                                           |
 | `type`        | `str \| None`        | Event type string                                             |
-| `timestamp`   | `str \| None`        | ISO 8601 — when the event *happened* (see below)              |
-| `ingested_at` | `str \| None`        | ISO 8601 — when the platform *received* the event (see below) |
+| `timestamp`   | `str \| None`        | ISO 8601 — when the event _happened_ (see below)              |
+| `ingested_at` | `str \| None`        | ISO 8601 — when the platform _received_ the event (see below) |
 | `payload`     | `dict[str, Any]`     | Event payload                                                 |
 | `trace`       | `OliraTrace \| None` | Provenance trace                                              |
 
