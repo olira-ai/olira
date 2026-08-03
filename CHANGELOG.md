@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-07-31
+
+### Added
+
+- **`IngestionJobStatus`** — `EXTRACTING` / `LOADING` / `REBASING` /
+  `EMBEDDING` match worker `IngestionStage` after historical-ingestion cutover.
+- **`IngestionStageWork` / `IngestionJob.stage_work`** — leaf-unit x/N for the active Temporal
+  stage (`logs` / `docs` / `blocks`), plus raw ``progress`` on ``IngestionJob``.
+
+### Changed
+
+- **Example `04_historical_ingestion.py`** stage list documents the full pipeline
+  (extract → replay → load → rebase → embed → backfill).
+
+### Removed
+
+- **`rollback_on_cancel`** on `create_ingestion_job` — cancel cleanup is server-defined (pre-Load
+  removes job-created patients with no other history; post-Load is a soft stop).
+
 ## [1.9.0] - 2026-07-28
 
 ### Added
