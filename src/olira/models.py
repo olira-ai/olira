@@ -574,7 +574,11 @@ class IngestionJobStatus(StrEnum):
     INSERTING_LOGS = "inserting_logs"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
     CONFIRMED = "confirmed"
+    EXTRACTING = "extracting"
     REPLAYING = "replaying"
+    LOADING = "loading"
+    REBASING = "rebasing"
+    EMBEDDING = "embedding"
     BACKFILLING = "backfilling"
     COMPLETED = "completed"
     COMPLETED_WITH_ERRORS = "completed_with_errors"
@@ -588,6 +592,16 @@ class IngestionRowError(BaseModel):
     line: int = Field(..., description="1-indexed line number in the JSONL file (0 = non-row error)")
     code: str = Field(..., description="Machine-readable error code, e.g. 'missing_patient'")
     message: str = Field(..., description="Human-readable description")
+
+
+class IngestionStageWork(BaseModel):
+    """Leaf-unit progress for the active Temporal stage (aggregated across patients)."""
+
+    key: str
+    label: str
+    unit: str = Field(..., description="logs | docs | blocks")
+    done: int = 0
+    total: int = 0
 
 
 class IngestionJob(BaseModel):
@@ -625,6 +639,8 @@ class IngestionJob(BaseModel):
     created_at: str | None = None
     started_at: str | None = None
     completed_at: str | None = None
+    progress: dict[str, Any] | None = None
+    stage_work: IngestionStageWork | None = None
 
 
 class IngestionJobListResult(BaseModel):

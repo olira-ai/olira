@@ -90,6 +90,7 @@ from .models import (
     IngestionJobListResult,
     IngestionJobStatus,
     IngestionRowError,
+    IngestionStageWork,
     IngestLogSpec,
     IngestRecord,
     LogEntry,
@@ -215,6 +216,7 @@ __all__ = [
     "IngestionJobStatus",
     "IngestionJobListResult",
     "IngestionRowError",
+    "IngestionStageWork",
     # Passive signal ingestion
     "SignalJob",
     "SignalJobHandle",
