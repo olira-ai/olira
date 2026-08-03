@@ -403,7 +403,6 @@ def create_ingestion_job(
     records: list[IngestRecord] | None = None,
     idempotency_key: str | None = None,
     require_confirmation: bool = True,
-    rollback_on_cancel: bool = False,
     summary_types: list[str] | None = None,
     max_event_logs: int | None = None,
 ) -> IngestionJob:
@@ -418,7 +417,6 @@ def create_ingestion_job(
         records=records,
         idempotency_key=idempotency_key,
         require_confirmation=require_confirmation,
-        rollback_on_cancel=rollback_on_cancel,
         summary_types=summary_types,
         max_event_logs=max_event_logs,
     )

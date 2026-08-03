@@ -790,7 +790,6 @@ class OliraClient:
         records: list[IngestRecord] | None = None,
         idempotency_key: str | None = None,
         require_confirmation: bool = True,
-        rollback_on_cancel: bool = False,
         summary_types: list[str] | None = None,
         max_event_logs: int | None = None,
     ) -> IngestionJob:
@@ -805,6 +804,9 @@ class OliraClient:
         The job starts automatically. Poll with :meth:`get_ingestion_job` until
         ``status`` reaches ``awaiting_confirmation`` (default) or ``completed``.
         Pass ``require_confirmation=False`` to skip the review pause.
+
+        Cancel (pre-Load) removes job-created patients with no other history; after Load
+        has committed, cancel is a soft stop and leaves partial ontology in place.
         """
         if file is None and records is None:
             raise ValidationError("Provide either 'file' or 'records'")
@@ -813,7 +815,6 @@ class OliraClient:
 
         body: dict[str, Any] = {
             "require_confirmation": require_confirmation,
-            "rollback_on_cancel": rollback_on_cancel,
         }
         if idempotency_key:
             body["idempotency_key"] = idempotency_key
@@ -1773,7 +1774,6 @@ class AsyncOliraClient:
         records: list[IngestRecord] | None = None,
         idempotency_key: str | None = None,
         require_confirmation: bool = True,
-        rollback_on_cancel: bool = False,
         summary_types: list[str] | None = None,
         max_event_logs: int | None = None,
     ) -> IngestionJob:
@@ -1787,7 +1787,6 @@ class AsyncOliraClient:
 
         body: dict[str, Any] = {
             "require_confirmation": require_confirmation,
-            "rollback_on_cancel": rollback_on_cancel,
         }
         if idempotency_key:
             body["idempotency_key"] = idempotency_key

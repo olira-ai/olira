@@ -11,10 +11,11 @@ Two paths to bulk-load existing patient data before going live:
     Pass a list of IngestRecord objects directly — no file on disk needed.
     Capped at 50,000 records per job. Optional OliraTrace on individual logs.
 
-Both paths go through the same five-stage pipeline:
+Both paths go through the same pipeline:
   QUEUED → VALIDATING → INSERTING_PATIENTS → INSERTING_LOGS → AWAITING_CONFIRMATION
   (then, after confirm)
-  REPLAYING → BACKFILLING → COMPLETED
+  EXTRACTING → REPLAYING → LOADING → REBASING → EMBEDDING → BACKFILLING → COMPLETED
+  (EXTRACTING / REBASING / EMBEDDING are skipped when the job has nothing for that stage)
 
 Requires: sdk:historical-ingest scope
 Run: python 04_historical_ingestion.py
