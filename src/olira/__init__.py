@@ -90,6 +90,7 @@ from .models import (
     IngestionJobListResult,
     IngestionJobStatus,
     IngestionRowError,
+    IngestDocument,
     IngestLogSpec,
     IngestRecord,
     LogEntry,
@@ -210,6 +211,7 @@ __all__ = [
     "SchemaActionResult",
     # Historical ingestion models
     "IngestRecord",
+    "IngestDocument",
     "IngestLogSpec",
     "IngestionJob",
     "IngestionJobStatus",

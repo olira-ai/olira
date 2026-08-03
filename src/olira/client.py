@@ -25,6 +25,7 @@ from .models import (
     EventStateModuleResult,
     EventStateModuleSummary,
     ExternalIdentifier,
+    IngestDocument,
     IngestionJob,
     IngestionJobListResult,
     IngestRecord,
@@ -54,6 +55,7 @@ from .models import (
     _LogWire,
 )
 from .queue import BackgroundWorker
+from .documents import DocumentHandle, DocumentLogType, upload_document_via_transport
 from .signals import SignalJob, SignalJobHandle, SignalSensorType, send_signals_via_transport
 from .validation import validate_ingestion_file, validate_ingestion_records
 from .version import __version__ as _sdk_version
@@ -67,6 +69,21 @@ class OliraEnv(StrEnum):
 
 
 DEFAULT_BASE_URL = "https://app-api.prod.olira.ai/app-api"
+
+_CONTENT_TYPE_BY_SUFFIX = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+    ".gif": "image/gif",
+}
+
+
+def _guess_content_type(path: Path) -> str:
+    return _CONTENT_TYPE_BY_SUFFIX.get(path.suffix.lower(), "application/pdf")
 
 
 def _build_context(
@@ -788,28 +805,34 @@ class OliraClient:
         *,
         file: str | Path | None = None,
         records: list[IngestRecord] | None = None,
+        documents: list[IngestDocument] | None = None,
         idempotency_key: str | None = None,
         require_confirmation: bool = True,
         rollback_on_cancel: bool = False,
         summary_types: list[str] | None = None,
         max_event_logs: int | None = None,
+        processing_engine: str | None = None,
     ) -> IngestionJob:
         """Create a historical data ingestion job. Requires sdk:historical-ingest scope.
 
-        Provide either ``file`` (path to a JSONL file — SDK handles S3 upload) or
-        ``records`` (inline list of :class:`IngestRecord` objects, ≤ 50,000).
+        Provide either ``file`` (path to a JSONL file — SDK handles S3 upload),
+        ``records`` (inline list of :class:`IngestRecord` objects, ≤ 50,000), and/or
+        ``documents`` (H1 package binaries — multi-PUT via ``jobs:begin``).
 
-        For ``file``, the SDK fetches your org SDK config for the server-controlled
-        ``ingestion_max_file_bytes`` limit (falls back to 100 MB if the config request fails).
+        When ``documents`` is set, the SDK builds a ``manifest.jsonl`` (records + document
+        rows), requires ``processing_engine="temporal"`` (defaulted when omitted), and
+        uploads via the package path.
 
         The job starts automatically. Poll with :meth:`get_ingestion_job` until
         ``status`` reaches ``awaiting_confirmation`` (default) or ``completed``.
         Pass ``require_confirmation=False`` to skip the review pause.
         """
-        if file is None and records is None:
-            raise ValidationError("Provide either 'file' or 'records'")
+        if file is None and records is None and not documents:
+            raise ValidationError("Provide 'file', 'records', and/or 'documents'")
         if file is not None and records is not None:
             raise ValidationError("Provide either 'file' or 'records', not both")
+        if file is not None and documents:
+            raise ValidationError("H1 document packages use records=… + documents=… (not file=)")
 
         body: dict[str, Any] = {
             "require_confirmation": require_confirmation,
@@ -821,6 +844,11 @@ class OliraClient:
             body["summary_types"] = summary_types
         if max_event_logs is not None:
             body["max_event_logs"] = max_event_logs
+        if processing_engine is not None:
+            body["processing_engine"] = processing_engine
+
+        if documents:
+            return self._create_h1_package_job(body=body, records=records or [], documents=documents)
 
         if file is not None:
             try:
@@ -849,6 +877,90 @@ class OliraClient:
                 raise ValidationError(f"Records validation failed ({len(blocking)} error(s)): {summary}{suffix}")
             body["records"] = [r.model_dump() for r in inline]
 
+        return self._transport.create_ingestion_job(body)
+
+    def _create_h1_package_job(
+        self,
+        *,
+        body: dict[str, Any],
+        records: list[IngestRecord],
+        documents: list[IngestDocument],
+    ) -> IngestionJob:
+        """jobs:begin → PUT PDFs → PUT manifest.jsonl → POST jobs (temporal)."""
+        if body.get("processing_engine") not in (None, "temporal"):
+            raise ValidationError("Document packages require processing_engine='temporal'")
+        body["processing_engine"] = "temporal"
+
+        for rec in records:
+            if rec.type == "document":
+                raise ValidationError("Pass document binaries via documents=, not IngestRecord.document in records")
+
+        begin_docs: list[dict[str, Any]] = []
+        resolved: list[tuple[IngestDocument, str, str, Path]] = []
+        for i, doc in enumerate(documents):
+            path = Path(doc.path)
+            if not path.is_file():
+                raise ValidationError(f"Document path not found: {doc.path}")
+            ref_id = doc.ref_id or f"d{i + 1}"
+            content_type = doc.content_type or _guess_content_type(path)
+            filename = doc.filename or path.name
+            begin_docs.append(
+                {
+                    "ref_id": ref_id,
+                    "content_type": content_type,
+                    "filename": filename,
+                    "size_bytes": path.stat().st_size,
+                }
+            )
+            resolved.append((doc, ref_id, content_type, path))
+
+        begin = self._transport.begin_ingestion_job({"documents": begin_docs})
+        uploads_by_ref = {d["ref_id"]: d for d in begin["documents"]}
+
+        for doc, ref_id, content_type, path in resolved:
+            upload = uploads_by_ref[ref_id]
+            httpx.put(
+                upload["upload_url"],
+                content=path.read_bytes(),
+                headers={"Content-Type": content_type},
+                timeout=300,
+            )
+
+        manifest_rows: list[IngestRecord] = list(records)
+        for doc, ref_id, content_type, _path in resolved:
+            upload = uploads_by_ref[ref_id]
+            # Prefer relative key in the manifest (validate resolves under job prefix).
+            rel_key = "/".join(str(upload["s3_key"]).split("/")[2:])
+            # Patch content_type/filename onto a copy for the factory.
+            patched = IngestDocument(
+                path=doc.path,
+                patient_id=doc.patient_id,
+                log_type=doc.log_type,
+                timestamp=doc.timestamp,
+                ref_id=ref_id,
+                document_type=doc.document_type,
+                note_type=doc.note_type,
+                source=doc.source,
+                idempotency_key=doc.idempotency_key,
+                content_type=content_type,
+                filename=doc.filename or Path(doc.path).name,
+            )
+            manifest_rows.append(IngestRecord.document(patched, s3_key=rel_key, ref_id=ref_id))
+
+        all_issues = validate_ingestion_records(manifest_rows)
+        blocking = [e for e in all_issues if e.code != "patient_id_not_in_file"]
+        if blocking:
+            summary = "; ".join(f"record {e.line} [{e.code}] {e.message}" for e in blocking[:5])
+            suffix = f" … and {len(blocking) - 5} more" if len(blocking) > 5 else ""
+            raise ValidationError(f"Records validation failed ({len(blocking)} error(s)): {summary}{suffix}")
+
+        manifest_bytes = ("\n".join(r.model_dump_json() for r in manifest_rows) + "\n").encode("utf-8")
+        httpx.put(begin["manifest_upload_url"], content=manifest_bytes, timeout=120)
+
+        body["job_id"] = begin["job_id"]
+        body["s3_key"] = begin["manifest_s3_key"]
+        body["has_documents"] = True
+        body["documents_total"] = len(documents)
         return self._transport.create_ingestion_job(body)
 
     def get_ingestion_job(self, *, job_id: str) -> IngestionJob:
@@ -937,6 +1049,53 @@ class OliraClient:
         only view materialisation failed. Transitions the job back to BACKFILLING.
         """
         return self._transport.retry_view_backfill(job_id)
+
+    def upload_document(
+        self,
+        *,
+        patient_id: str,
+        path: str | Path,
+        log_type: "DocumentLogType | str",
+        timestamp: "datetime",
+        idempotency_key: str,
+        document_type: str | None = None,
+        note_type: str | None = None,
+        source: Any | None = None,
+        content_type: str | None = None,
+        wait: bool = False,
+        wait_timeout_s: float = 600.0,
+    ) -> "DocumentHandle":
+        """Upload a PDF/image for OCR → EventLog (upload-url + PUT + commit).
+
+        ``log_type`` is ``unstructured_report`` (requires ``document_type``) or
+        ``clinical_note`` (requires ``note_type`` + ``source``). Types are chosen
+        by the caller — the platform does not infer them from the file.
+        """
+        from datetime import datetime as _dt  # noqa: PLC0415
+
+        if not isinstance(timestamp, _dt):
+            raise ValidationError("timestamp must be a datetime")
+        handle = upload_document_via_transport(
+            self._transport,
+            patient_id=patient_id,
+            path=path,
+            log_type=log_type,
+            timestamp=timestamp,
+            idempotency_key=idempotency_key,
+            document_type=document_type,
+            note_type=note_type,
+            source=source,
+            content_type=content_type,
+        )
+        if wait:
+            handle.wait(timeout_s=wait_timeout_s)
+        return handle
+
+    def get_document(self, document_id: str) -> "DocumentResource":
+        """Poll document OCR status (GET /v1/documents/{id})."""
+        from .documents import DocumentResource  # noqa: PLC0415
+
+        return self._transport.get_document(document_id)
 
     def send_signals(
         self,
@@ -1771,17 +1930,21 @@ class AsyncOliraClient:
         *,
         file: str | Path | None = None,
         records: list[IngestRecord] | None = None,
+        documents: list[IngestDocument] | None = None,
         idempotency_key: str | None = None,
         require_confirmation: bool = True,
         rollback_on_cancel: bool = False,
         summary_types: list[str] | None = None,
         max_event_logs: int | None = None,
+        processing_engine: str | None = None,
     ) -> IngestionJob:
         """Async version of create_ingestion_job. Requires sdk:historical-ingest scope."""
-        if file is None and records is None:
-            raise ValidationError("Provide either 'file' or 'records'")
+        if file is None and records is None and not documents:
+            raise ValidationError("Provide 'file', 'records', and/or 'documents'")
         if file is not None and records is not None:
             raise ValidationError("Provide either 'file' or 'records', not both")
+        if file is not None and documents:
+            raise ValidationError("H1 document packages use records=… + documents=… (not file=)")
 
         transport = self._require_transport("create_ingestion_job")
 
@@ -1795,6 +1958,13 @@ class AsyncOliraClient:
             body["summary_types"] = summary_types
         if max_event_logs is not None:
             body["max_event_logs"] = max_event_logs
+        if processing_engine is not None:
+            body["processing_engine"] = processing_engine
+
+        if documents:
+            return await self._create_h1_package_job_async(
+                transport, body=body, records=records or [], documents=documents
+            )
 
         if file is not None:
             try:
@@ -1824,6 +1994,85 @@ class AsyncOliraClient:
                 raise ValidationError(f"Records validation failed ({len(blocking)} error(s)): {summary}{suffix}")
             body["records"] = [r.model_dump() for r in inline]
 
+        return await transport.create_ingestion_job(body)
+
+    async def _create_h1_package_job_async(
+        self,
+        transport: Any,
+        *,
+        body: dict[str, Any],
+        records: list[IngestRecord],
+        documents: list[IngestDocument],
+    ) -> IngestionJob:
+        if body.get("processing_engine") not in (None, "temporal"):
+            raise ValidationError("Document packages require processing_engine='temporal'")
+        body["processing_engine"] = "temporal"
+
+        begin_docs: list[dict[str, Any]] = []
+        resolved: list[tuple[IngestDocument, str, str, Path]] = []
+        for i, doc in enumerate(documents):
+            path = Path(doc.path)
+            if not path.is_file():
+                raise ValidationError(f"Document path not found: {doc.path}")
+            ref_id = doc.ref_id or f"d{i + 1}"
+            content_type = doc.content_type or _guess_content_type(path)
+            filename = doc.filename or path.name
+            begin_docs.append(
+                {
+                    "ref_id": ref_id,
+                    "content_type": content_type,
+                    "filename": filename,
+                    "size_bytes": path.stat().st_size,
+                }
+            )
+            resolved.append((doc, ref_id, content_type, path))
+
+        begin = await transport.begin_ingestion_job({"documents": begin_docs})
+        uploads_by_ref = {d["ref_id"]: d for d in begin["documents"]}
+
+        async with httpx.AsyncClient() as http:
+            for doc, ref_id, content_type, path in resolved:
+                upload = uploads_by_ref[ref_id]
+                await http.put(
+                    upload["upload_url"],
+                    content=path.read_bytes(),
+                    headers={"Content-Type": content_type},
+                    timeout=300,
+                )
+
+            manifest_rows: list[IngestRecord] = list(records)
+            for doc, ref_id, content_type, _path in resolved:
+                upload = uploads_by_ref[ref_id]
+                rel_key = "/".join(str(upload["s3_key"]).split("/")[2:])
+                patched = IngestDocument(
+                    path=doc.path,
+                    patient_id=doc.patient_id,
+                    log_type=doc.log_type,
+                    timestamp=doc.timestamp,
+                    ref_id=ref_id,
+                    document_type=doc.document_type,
+                    note_type=doc.note_type,
+                    source=doc.source,
+                    idempotency_key=doc.idempotency_key,
+                    content_type=content_type,
+                    filename=doc.filename or Path(doc.path).name,
+                )
+                manifest_rows.append(IngestRecord.document(patched, s3_key=rel_key, ref_id=ref_id))
+
+            all_issues = validate_ingestion_records(manifest_rows)
+            blocking = [e for e in all_issues if e.code != "patient_id_not_in_file"]
+            if blocking:
+                summary = "; ".join(f"record {e.line} [{e.code}] {e.message}" for e in blocking[:5])
+                suffix = f" … and {len(blocking) - 5} more" if len(blocking) > 5 else ""
+                raise ValidationError(f"Records validation failed ({len(blocking)} error(s)): {summary}{suffix}")
+
+            manifest_bytes = ("\n".join(r.model_dump_json() for r in manifest_rows) + "\n").encode("utf-8")
+            await http.put(begin["manifest_upload_url"], content=manifest_bytes, timeout=120)
+
+        body["job_id"] = begin["job_id"]
+        body["s3_key"] = begin["manifest_s3_key"]
+        body["has_documents"] = True
+        body["documents_total"] = len(documents)
         return await transport.create_ingestion_job(body)
 
     async def get_ingestion_job(self, *, job_id: str) -> IngestionJob:
