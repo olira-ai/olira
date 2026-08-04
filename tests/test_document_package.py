@@ -1,4 +1,4 @@
-"""SDK H1 package (documents=) helpers."""
+"""SDK document-package (documents=) helpers."""
 
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def test_create_ingestion_job_rejects_sqs_with_documents(tmp_path: Path) -> None
     # Force a transport so create doesn't fail earlier for missing key wiring in unit scope.
     with pytest.raises(ValidationError, match="temporal"):
         # Call the package helper directly with a fake body that sets sqs.
-        client._create_h1_package_job(  # noqa: SLF001
+        client._create_document_package_job(  # noqa: SLF001
             body={"processing_engine": "sqs", "require_confirmation": True},
             records=[],
             documents=[

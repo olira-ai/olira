@@ -457,7 +457,7 @@ class HttpTransport:
         return cast(dict[str, Any], self._request("POST", "/v1/ingestion/upload-url"))
 
     def begin_ingestion_job(self, body: dict[str, Any]) -> dict[str, Any]:
-        """Allocate H1 package upload URLs (POST /v1/ingestion/jobs:begin)."""
+        """Allocate document-package upload URLs (POST /v1/ingestion/jobs:begin)."""
         return cast(dict[str, Any], self._request("POST", "/v1/ingestion/jobs:begin", json=body))
 
     def create_ingestion_job(self, body: dict[str, Any]) -> IngestionJob:

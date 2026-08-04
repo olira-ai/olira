@@ -676,7 +676,7 @@ class IngestLogSpec:
 
 @dataclass
 class IngestDocument:
-    """A document binary for a historical H1 package job.
+    """A document binary for a historical document-package ingestion job.
 
     Uploaded via ``jobs:begin`` multi-PUT; OCR runs post-confirm inside
     ``HistoricalIngestionWorkflow`` (requires ``processing_engine="temporal"``).

@@ -816,7 +816,7 @@ class OliraClient:
 
         Provide either ``file`` (path to a JSONL file — SDK handles S3 upload),
         ``records`` (inline list of :class:`IngestRecord` objects, ≤ 50,000), and/or
-        ``documents`` (H1 package binaries — multi-PUT via ``jobs:begin``).
+        ``documents`` (document-package binaries — multi-PUT via ``jobs:begin``).
 
         When ``documents`` is set, the SDK builds a ``manifest.jsonl`` (records + document
         rows), requires ``processing_engine="temporal"`` (defaulted when omitted), and
@@ -834,7 +834,7 @@ class OliraClient:
         if file is not None and records is not None:
             raise ValidationError("Provide either 'file' or 'records', not both")
         if file is not None and documents:
-            raise ValidationError("H1 document packages use records=… + documents=… (not file=)")
+            raise ValidationError("Document packages use records=… + documents=… (not file=)")
 
         body: dict[str, Any] = {
             "require_confirmation": require_confirmation,
@@ -849,7 +849,9 @@ class OliraClient:
             body["processing_engine"] = processing_engine
 
         if documents:
-            return self._create_h1_package_job(body=body, records=records or [], documents=documents)
+            return self._create_document_package_job(
+                body=body, records=records or [], documents=documents
+            )
 
         if file is not None:
             try:
@@ -880,14 +882,14 @@ class OliraClient:
 
         return self._transport.create_ingestion_job(body)
 
-    def _create_h1_package_job(
+    def _create_document_package_job(
         self,
         *,
         body: dict[str, Any],
         records: list[IngestRecord],
         documents: list[IngestDocument],
     ) -> IngestionJob:
-        """jobs:begin → PUT PDFs → PUT manifest.jsonl → POST jobs (temporal)."""
+        """jobs:begin → PUT documents → PUT manifest.jsonl → POST jobs (temporal)."""
         if body.get("processing_engine") not in (None, "temporal"):
             raise ValidationError("Document packages require processing_engine='temporal'")
         body["processing_engine"] = "temporal"
@@ -1944,7 +1946,7 @@ class AsyncOliraClient:
         if file is not None and records is not None:
             raise ValidationError("Provide either 'file' or 'records', not both")
         if file is not None and documents:
-            raise ValidationError("H1 document packages use records=… + documents=… (not file=)")
+            raise ValidationError("Document packages use records=… + documents=… (not file=)")
 
         transport = self._require_transport("create_ingestion_job")
 
@@ -1961,7 +1963,7 @@ class AsyncOliraClient:
             body["processing_engine"] = processing_engine
 
         if documents:
-            return await self._create_h1_package_job_async(
+            return await self._create_document_package_job_async(
                 transport, body=body, records=records or [], documents=documents
             )
 
@@ -1995,7 +1997,7 @@ class AsyncOliraClient:
 
         return await transport.create_ingestion_job(body)
 
-    async def _create_h1_package_job_async(
+    async def _create_document_package_job_async(
         self,
         transport: Any,
         *,
