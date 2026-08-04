@@ -8,7 +8,7 @@ managing patients, backfilling historical data, uploading passive sensor
 Parquet, reading Patient State, and minting patient-scoped tokens for use with
 the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.10.0`
+**Package:** `olira` — **Version:** `1.11.0`
 
 ## Related docs
 
@@ -24,7 +24,7 @@ Each API key carries one or more scopes. Assign only what your integration needs
 
 | Scope                   | What it unlocks                                                                                                                                                                                                                                                        |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`, `OliraClient.send_signals()`, `get_signal_job()`                                                                                                                                                                                  |
+| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`, `upload_document()`, `get_document()`, `OliraClient.send_signals()`, `get_signal_job()`                                                                                                                                           |
 | `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc.                                                                                                                                                        |
 | `api:manage-projects`   | `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`, `rename_project()`, `deprecate_project()`, `restore_project()`, `delete_project()` — **requires an org-wide key** (a project-locked key is confined to its own workspace and gets 403). |
 | `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                                |

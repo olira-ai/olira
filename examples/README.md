@@ -1,6 +1,6 @@
 # Olira SDK — Examples
 
-Runnable Python scripts that demonstrate the SDK's main workflows. Each file is self-contained and can be run directly after setup.
+Runnable Python scripts (and one Jupyter notebook) that demonstrate the SDK's main workflows. Each file is self-contained and can be run directly after setup.
 
 ## Setup
 
@@ -26,6 +26,7 @@ python 00_quickstart.py
 | `09_ehr_integrations.py`     | EHR integrations end-to-end: management via raw REST (catalog, connect an instance, probe polling, data points + sync-now, per-instance patient lookup, rename) and write-back from `log()`/`log_batch()` (`write_back`, `write_back_integration_id` for multi-instance orgs) | `sdk:integrations`, `sdk:event-log`, `sdk:integration-write`, `api:manage-patients` |
 | `10_project_management.py`   | Full project (workspace) lifecycle: list, create, select via `OliraClient(project=...)`, duplicate (config-only), rename, deprecate, restore, permanent delete                                                                                                                | `api:manage-projects` (org-wide key), `api:manage-patients`                         |
 | `11_signals.py`              | Passive accelerometer Parquet via `OliraClient.send_signals`, wait for absorb                                                                                                                                                                                                   | `sdk:event-log`, `api:manage-patients` (+ `pip install olira[signals]`)             |
+| `12_document_resource_ingestion.ipynb` | Document resource ingestion: live `upload_document()` / OCR poll, plus historical `create_ingestion_job(documents=[IngestDocument(…)])` package path                                                                                                                      | `sdk:event-log`, `sdk:historical-ingest`, `api:manage-patients`                     |
 
 ## Working with projects
 
@@ -44,6 +45,7 @@ Omit `project` and a project-locked key uses its own project, while an org-wide 
 ## Notes
 
 - Examples `04` and `05` both demonstrate historical ingestion; `05` covers the specific case where patients already exist in your org.
+- `12_document_resource_ingestion.ipynb` is a Jupyter notebook (`uv sync` installs `ipykernel`). Set `DOCUMENT_PATH` in `.env` to a real PDF/image for end-to-end OCR; otherwise the notebook writes a tiny stub PDF (upload works; OCR may fail on the stub).
 - `10_project_management.py` needs an **org-wide** key with `api:manage-projects` (a project-locked key is confined to its own workspace); it creates, duplicates, and deletes throwaway projects and cleans them up.
 - `06_read_patient_state.py` and `07_patient_token.py` require an existing patient id — run `00_quickstart.py` or `02_event_logging.py` first, then pass the printed id or set `PATIENT_ID` in `.env`.
 - `08_cohort_management.py` includes template assignment steps that are skipped by default. Set `OLIRA_EXAMPLE_SUMMARY_TYPE` in `.env` (e.g. `symptom_snapshot`) to a summary type active in your org to run them.

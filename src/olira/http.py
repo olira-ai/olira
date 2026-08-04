@@ -42,6 +42,7 @@ from .models import (
 )
 
 if TYPE_CHECKING:
+    from .documents import DocumentResource
     from .signals import SignalJob
 
 logger = logging.getLogger("olira")
@@ -456,6 +457,10 @@ class HttpTransport:
         """Get a presigned S3 PUT URL for file-based ingestion (POST /v1/ingestion/upload-url)."""
         return cast(dict[str, Any], self._request("POST", "/v1/ingestion/upload-url"))
 
+    def begin_ingestion_job(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Allocate document-package upload URLs (POST /v1/ingestion/jobs:begin)."""
+        return cast(dict[str, Any], self._request("POST", "/v1/ingestion/jobs:begin", json=body))
+
     def create_ingestion_job(self, body: dict[str, Any]) -> IngestionJob:
         """Create a historical ingestion job (POST /v1/ingestion/jobs)."""
         raw = self._request("POST", "/v1/ingestion/jobs", json=body)
@@ -532,13 +537,40 @@ class HttpTransport:
         raw = self._request("GET", f"/v1/signals/jobs/{job_id}")
         return SignalJob.model_validate(raw)
 
-    def put_presigned(self, url: str, blob: bytes) -> None:
-        """PUT bytes to a presigned S3 URL (heavy payloads never traverse the API)."""
-        response = httpx.put(url, content=blob, timeout=300)
+    def put_presigned(
+        self,
+        url: str,
+        blob: bytes,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        """PUT bytes to a presigned S3 URL (heavy payloads never traverse the API).
+
+        When the URL was signed with ``ContentType``, callers must pass a matching
+        ``Content-Type`` header or S3 returns 403 SignatureDoesNotMatch.
+        """
+        response = httpx.put(url, content=blob, headers=headers, timeout=300)
         if response.status_code >= 300:
             raise ServerError(
                 f"Presigned upload failed (HTTP {response.status_code})", status_code=response.status_code
             )
+
+    def get_document_upload_url(self, body: dict[str, Any]) -> dict[str, Any]:
+        """POST /v1/documents:upload-url — create DocumentResource + presigned PUT."""
+        return cast(dict[str, Any], self._request("POST", "/v1/documents:upload-url", json=body))
+
+    def commit_document(self, document_id: str) -> dict[str, Any]:
+        """POST /v1/documents/{id}:commit — start OCR after PUT."""
+        return cast(
+            dict[str, Any],
+            self._request("POST", f"/v1/documents/{document_id}:commit"),
+        )
+
+    def get_document(self, document_id: str) -> "DocumentResource":
+        """GET /v1/documents/{id}."""
+        from .documents import DocumentResource  # noqa: PLC0415
+
+        raw = self._request("GET", f"/v1/documents/{document_id}")
+        return DocumentResource.model_validate(raw)
 
 
 class AsyncHttpTransport:
@@ -803,6 +835,23 @@ class AsyncHttpTransport:
 
     async def get_upload_url(self) -> dict[str, Any]:
         return cast(dict[str, Any], await self._request("POST", "/v1/ingestion/upload-url"))
+
+    async def begin_ingestion_job(self, body: dict[str, Any]) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._request("POST", "/v1/ingestion/jobs:begin", json=body))
+
+    async def put_presigned(
+        self,
+        url: str,
+        blob: bytes,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        """PUT bytes to a presigned S3 URL (async). Raises on HTTP status ≥ 300."""
+        async with httpx.AsyncClient() as client:
+            response = await client.put(url, content=blob, headers=headers, timeout=300)
+        if response.status_code >= 300:
+            raise ServerError(
+                f"Presigned upload failed (HTTP {response.status_code})", status_code=response.status_code
+            )
 
     async def create_ingestion_job(self, body: dict[str, Any]) -> IngestionJob:
         raw = await self._request("POST", "/v1/ingestion/jobs", json=body)

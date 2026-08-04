@@ -86,6 +86,7 @@ from .models import (
     EventStateModuleResult,
     EventStateModuleSummary,
     ExternalIdentifier,
+    IngestDocument,
     IngestionJob,
     IngestionJobListResult,
     IngestionJobStatus,
@@ -211,6 +212,7 @@ __all__ = [
     "SchemaActionResult",
     # Historical ingestion models
     "IngestRecord",
+    "IngestDocument",
     "IngestLogSpec",
     "IngestionJob",
     "IngestionJobStatus",

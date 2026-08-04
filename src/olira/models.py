@@ -595,7 +595,7 @@ class IngestionRowError(BaseModel):
 
 
 class IngestionStageWork(BaseModel):
-    """Leaf-unit progress for the active Temporal stage (aggregated across patients)."""
+    """Leaf-unit progress for the active ingestion stage (aggregated across patients)."""
 
     key: str
     label: str
@@ -618,6 +618,10 @@ class IngestionJob(BaseModel):
     logs_total: int = 0
     logs_processed: int = 0
     logs_failed: int = 0
+    documents_total: int = 0
+    documents_registered: int = 0
+    documents_ocr_succeeded: int = 0
+    documents_ocr_failed: int = 0
     logs_by_event_type: dict[str, int] = Field(default_factory=dict)
     patient_log_counts: dict[str, int] = Field(default_factory=dict)
     patient_event_type_counts: dict[str, dict[str, int]] = Field(default_factory=dict)
@@ -670,13 +674,35 @@ class IngestLogSpec:
     trace: OliraTrace | None = None
 
 
+@dataclass
+class IngestDocument:
+    """A document binary for a historical document-package ingestion job.
+
+    Uploaded via ``jobs:begin`` multi-PUT; OCR runs post-confirm inside
+    ``HistoricalIngestionWorkflow``.
+    """
+
+    path: str  # local filesystem path
+    patient_id: str
+    log_type: str  # unstructured_report | clinical_note
+    timestamp: str
+    ref_id: str | None = None
+    document_type: str | None = None
+    note_type: str | None = None
+    source: Any | None = None
+    idempotency_key: str | None = None
+    content_type: str | None = None
+    filename: str | None = None
+
+
 class IngestRecord(BaseModel):
-    """A single record in a historical ingestion payload (patient or log).
+    """A single record in a historical ingestion payload (patient, log, or document).
 
     Build via the factory methods rather than constructing directly::
 
         IngestRecord.patient(CreatePatientRequest(...))
         IngestRecord.log(IngestLogSpec(...))
+        IngestRecord.document(IngestDocument(...), s3_key="…/documents/d1.pdf", ref_id="d1")
     """
 
     type: str
@@ -707,6 +733,32 @@ class IngestRecord(BaseModel):
                 "object_id": spec.trace.object_id,
             }
         return cls(type="log", data=data)
+
+    @classmethod
+    def document(cls, spec: IngestDocument, *, s3_key: str, ref_id: str) -> "IngestRecord":
+        """Create a document manifest row (binary already uploaded under ``s3_key``)."""
+        from pathlib import Path  # noqa: PLC0415
+
+        filename = spec.filename or Path(spec.path).name
+        content_type = spec.content_type or "application/pdf"
+        data: dict[str, Any] = {
+            "ref_id": ref_id,
+            "patient_id": spec.patient_id,
+            "filename": filename,
+            "content_type": content_type,
+            "s3_key": s3_key,
+            "log_type": spec.log_type,
+            "timestamp": spec.timestamp,
+        }
+        if spec.document_type:
+            data["document_type"] = spec.document_type
+        if spec.note_type:
+            data["note_type"] = spec.note_type
+        if spec.source is not None:
+            data["source"] = spec.source
+        if spec.idempotency_key:
+            data["idempotency_key"] = spec.idempotency_key
+        return cls(type="document", data=data)
 
 
 # ---------------------------------------------------------------------------

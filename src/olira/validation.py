@@ -6,13 +6,14 @@ than waiting for server-side Stage 1 to reject the file.
 
 What is checked locally:
   - Each line is valid JSON
-  - ``type`` is ``"patient"`` or ``"log"``
+  - ``type`` is ``"patient"``, ``"log"``, or ``"document"``
   - Patient anchor rule: at least one identifying field present
   - Log required fields: ``event_type``, ``patient_id``, ``timestamp``
+  - Document required fields: ``ref_id``, ``patient_id``, ``s3_key``, ``log_type``, ``timestamp``
   - ``event_type`` is a known platform type (via OliraLogType)
   - ``timestamp`` is parseable ISO 8601
-  - ``patient_id`` in each log resolves to a patient defined anywhere in the file (order-agnostic)
-    (within-file check only; existing org patients are not checked)
+  - ``patient_id`` in each log/document resolves to a patient defined anywhere in the file
+    (order-agnostic; within-file check only; existing org patients are not checked)
   - Optional ``trace``: when present, ``object_type`` and ``object_id`` must be non-empty strings
 
 What requires a network call and is NOT checked locally:
@@ -177,12 +178,12 @@ def validate_ingestion_file(
             record_type = row.get("type")
             data = row.get("data")
 
-            if record_type not in ("patient", "log"):
+            if record_type not in ("patient", "log", "document"):
                 errors.append(
                     IngestionRowError(
                         line=line_num,
                         code="unknown_record_type",
-                        message=f"type must be 'patient' or 'log', got {record_type!r}",
+                        message=f"type must be 'patient', 'log', or 'document', got {record_type!r}",
                     )
                 )
                 continue
@@ -211,6 +212,9 @@ def validate_ingestion_file(
             parsed.append((line_num, record_type, data))
 
     for line_num, record_type, data in parsed:
+        if record_type == "document":
+            errors.extend(_validate_document_row(data, line_num, known_patient_ids))
+            continue
         if record_type != "log":
             continue
 
@@ -281,6 +285,77 @@ def validate_ingestion_file(
     return errors
 
 
+_DOC_LOG_TYPES = frozenset({"unstructured_report", "clinical_note"})
+
+
+def _validate_document_row(data: dict[str, Any], line: int, known_patient_ids: set[str]) -> list[IngestionRowError]:
+    errors: list[IngestionRowError] = []
+    for field in ("ref_id", "patient_id", "s3_key", "log_type", "timestamp"):
+        if not data.get(field):
+            errors.append(
+                IngestionRowError(
+                    line=line,
+                    code=f"missing_{field}",
+                    message=f"Document record must have a '{field}' field",
+                )
+            )
+    log_type = data.get("log_type")
+    if log_type and log_type not in _DOC_LOG_TYPES:
+        errors.append(
+            IngestionRowError(
+                line=line,
+                code="invalid_log_type",
+                message="document log_type must be 'unstructured_report' or 'clinical_note'",
+            )
+        )
+    elif log_type == "unstructured_report" and not data.get("document_type"):
+        errors.append(
+            IngestionRowError(
+                line=line,
+                code="missing_document_type",
+                message="document_type is required for unstructured_report",
+            )
+        )
+    elif log_type == "clinical_note":
+        if not data.get("note_type"):
+            errors.append(
+                IngestionRowError(
+                    line=line,
+                    code="missing_note_type",
+                    message="note_type is required for clinical_note",
+                )
+            )
+        if data.get("source") is None:
+            errors.append(
+                IngestionRowError(
+                    line=line,
+                    code="missing_source",
+                    message="source is required for clinical_note",
+                )
+            )
+    if data.get("timestamp") and not _parse_iso(str(data["timestamp"])):
+        errors.append(
+            IngestionRowError(
+                line=line,
+                code="invalid_timestamp",
+                message=f"timestamp {data['timestamp']!r} is not a valid ISO 8601 datetime",
+            )
+        )
+    pid = data.get("patient_id")
+    if pid and str(pid) not in known_patient_ids and not _looks_like_uuid(str(pid)):
+        errors.append(
+            IngestionRowError(
+                line=line,
+                code="patient_id_not_in_file",
+                message=(
+                    f"patient_id {pid!r} not found in any patient record in this file. "
+                    "If the patient was created separately it will resolve server-side."
+                ),
+            )
+        )
+    return errors
+
+
 def validate_ingestion_records(records: list[IngestRecord]) -> list[IngestionRowError]:
     """Validate a list of :class:`IngestRecord` objects locally before submitting inline.
 
@@ -310,18 +385,22 @@ def validate_ingestion_records(records: list[IngestRecord]) -> list[IngestionRow
             for ext in data.get("external_identifiers") or []:
                 if isinstance(ext, dict) and ext.get("value"):
                     known_patient_ids.add(str(ext["value"]))
-        elif record.type not in ("patient", "log"):
+        elif record.type not in ("patient", "log", "document"):
             errors.append(
                 IngestionRowError(
                     line=i,
                     code="unknown_record_type",
-                    message=f"type must be 'patient' or 'log', got {record.type!r}",
+                    message=f"type must be 'patient', 'log', or 'document', got {record.type!r}",
                 )
             )
 
     for i, record in enumerate(records, start=1):
         data = record.data
         record_type = record.type
+
+        if record_type == "document":
+            errors.extend(_validate_document_row(data, i, known_patient_ids))
+            continue
 
         if record_type not in ("patient", "log"):
             continue
