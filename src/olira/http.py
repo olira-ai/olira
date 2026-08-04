@@ -839,6 +839,20 @@ class AsyncHttpTransport:
     async def begin_ingestion_job(self, body: dict[str, Any]) -> dict[str, Any]:
         return cast(dict[str, Any], await self._request("POST", "/v1/ingestion/jobs:begin", json=body))
 
+    async def put_presigned(
+        self,
+        url: str,
+        blob: bytes,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        """PUT bytes to a presigned S3 URL (async). Raises on HTTP status ≥ 300."""
+        async with httpx.AsyncClient() as client:
+            response = await client.put(url, content=blob, headers=headers, timeout=300)
+        if response.status_code >= 300:
+            raise ServerError(
+                f"Presigned upload failed (HTTP {response.status_code})", status_code=response.status_code
+            )
+
     async def create_ingestion_job(self, body: dict[str, Any]) -> IngestionJob:
         raw = await self._request("POST", "/v1/ingestion/jobs", json=body)
         return IngestionJob.model_validate(raw)

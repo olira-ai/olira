@@ -892,11 +892,15 @@ class OliraClient:
 
         begin_docs: list[dict[str, Any]] = []
         resolved: list[tuple[IngestDocument, str, str, Path]] = []
+        seen_ref_ids: set[str] = set()
         for i, doc in enumerate(documents):
             path = Path(doc.path)
             if not path.is_file():
                 raise ValidationError(f"Document path not found: {doc.path}")
             ref_id = doc.ref_id or f"d{i + 1}"
+            if ref_id in seen_ref_ids:
+                raise ValidationError(f"Duplicate document ref_id: {ref_id!r}")
+            seen_ref_ids.add(ref_id)
             content_type = doc.content_type or _guess_content_type(path)
             filename = doc.filename or path.name
             begin_docs.append(
@@ -914,11 +918,10 @@ class OliraClient:
 
         for _doc, ref_id, content_type, path in resolved:
             upload = uploads_by_ref[ref_id]
-            httpx.put(
+            self._transport.put_presigned(
                 upload["upload_url"],
-                content=path.read_bytes(),
+                path.read_bytes(),
                 headers={"Content-Type": content_type},
-                timeout=300,
             )
 
         manifest_rows: list[IngestRecord] = list(records)
@@ -950,7 +953,7 @@ class OliraClient:
             raise ValidationError(f"Records validation failed ({len(blocking)} error(s)): {summary}{suffix}")
 
         manifest_bytes = ("\n".join(r.model_dump_json() for r in manifest_rows) + "\n").encode("utf-8")
-        httpx.put(begin["manifest_upload_url"], content=manifest_bytes, timeout=120)
+        self._transport.put_presigned(begin["manifest_upload_url"], manifest_bytes)
 
         body["job_id"] = begin["job_id"]
         body["s3_key"] = begin["manifest_s3_key"]
@@ -1990,13 +1993,21 @@ class AsyncOliraClient:
         records: list[IngestRecord],
         documents: list[IngestDocument],
     ) -> IngestionJob:
+        for rec in records:
+            if rec.type == "document":
+                raise ValidationError("Pass document binaries via documents=, not IngestRecord.document in records")
+
         begin_docs: list[dict[str, Any]] = []
         resolved: list[tuple[IngestDocument, str, str, Path]] = []
+        seen_ref_ids: set[str] = set()
         for i, doc in enumerate(documents):
             path = Path(doc.path)
             if not path.is_file():
                 raise ValidationError(f"Document path not found: {doc.path}")
             ref_id = doc.ref_id or f"d{i + 1}"
+            if ref_id in seen_ref_ids:
+                raise ValidationError(f"Duplicate document ref_id: {ref_id!r}")
+            seen_ref_ids.add(ref_id)
             content_type = doc.content_type or _guess_content_type(path)
             filename = doc.filename or path.name
             begin_docs.append(
@@ -2012,44 +2023,42 @@ class AsyncOliraClient:
         begin = await transport.begin_ingestion_job({"documents": begin_docs})
         uploads_by_ref = {d["ref_id"]: d for d in begin["documents"]}
 
-        async with httpx.AsyncClient() as http:
-            for _doc, ref_id, content_type, path in resolved:
-                upload = uploads_by_ref[ref_id]
-                await http.put(
-                    upload["upload_url"],
-                    content=path.read_bytes(),
-                    headers={"Content-Type": content_type},
-                    timeout=300,
-                )
+        for _doc, ref_id, content_type, path in resolved:
+            upload = uploads_by_ref[ref_id]
+            await transport.put_presigned(
+                upload["upload_url"],
+                path.read_bytes(),
+                headers={"Content-Type": content_type},
+            )
 
-            manifest_rows: list[IngestRecord] = list(records)
-            for doc, ref_id, content_type, _path in resolved:
-                upload = uploads_by_ref[ref_id]
-                rel_key = "/".join(str(upload["s3_key"]).split("/")[2:])
-                patched = IngestDocument(
-                    path=doc.path,
-                    patient_id=doc.patient_id,
-                    log_type=doc.log_type,
-                    timestamp=doc.timestamp,
-                    ref_id=ref_id,
-                    document_type=doc.document_type,
-                    note_type=doc.note_type,
-                    source=doc.source,
-                    idempotency_key=doc.idempotency_key,
-                    content_type=content_type,
-                    filename=doc.filename or Path(doc.path).name,
-                )
-                manifest_rows.append(IngestRecord.document(patched, s3_key=rel_key, ref_id=ref_id))
+        manifest_rows: list[IngestRecord] = list(records)
+        for doc, ref_id, content_type, _path in resolved:
+            upload = uploads_by_ref[ref_id]
+            rel_key = "/".join(str(upload["s3_key"]).split("/")[2:])
+            patched = IngestDocument(
+                path=doc.path,
+                patient_id=doc.patient_id,
+                log_type=doc.log_type,
+                timestamp=doc.timestamp,
+                ref_id=ref_id,
+                document_type=doc.document_type,
+                note_type=doc.note_type,
+                source=doc.source,
+                idempotency_key=doc.idempotency_key,
+                content_type=content_type,
+                filename=doc.filename or Path(doc.path).name,
+            )
+            manifest_rows.append(IngestRecord.document(patched, s3_key=rel_key, ref_id=ref_id))
 
-            all_issues = validate_ingestion_records(manifest_rows)
-            blocking = [e for e in all_issues if e.code != "patient_id_not_in_file"]
-            if blocking:
-                summary = "; ".join(f"record {e.line} [{e.code}] {e.message}" for e in blocking[:5])
-                suffix = f" … and {len(blocking) - 5} more" if len(blocking) > 5 else ""
-                raise ValidationError(f"Records validation failed ({len(blocking)} error(s)): {summary}{suffix}")
+        all_issues = validate_ingestion_records(manifest_rows)
+        blocking = [e for e in all_issues if e.code != "patient_id_not_in_file"]
+        if blocking:
+            summary = "; ".join(f"record {e.line} [{e.code}] {e.message}" for e in blocking[:5])
+            suffix = f" … and {len(blocking) - 5} more" if len(blocking) > 5 else ""
+            raise ValidationError(f"Records validation failed ({len(blocking)} error(s)): {summary}{suffix}")
 
-            manifest_bytes = ("\n".join(r.model_dump_json() for r in manifest_rows) + "\n").encode("utf-8")
-            await http.put(begin["manifest_upload_url"], content=manifest_bytes, timeout=120)
+        manifest_bytes = ("\n".join(r.model_dump_json() for r in manifest_rows) + "\n").encode("utf-8")
+        await transport.put_presigned(begin["manifest_upload_url"], manifest_bytes)
 
         body["job_id"] = begin["job_id"]
         body["s3_key"] = begin["manifest_s3_key"]
