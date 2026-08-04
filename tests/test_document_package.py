@@ -85,5 +85,3 @@ def test_validate_document_requires_document_type(tmp_path: Path) -> None:
     ]
     codes = {e.code for e in validate_ingestion_records(records)}
     assert "missing_document_type" in codes
-
-

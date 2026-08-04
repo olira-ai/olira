@@ -42,6 +42,7 @@ from .models import (
 )
 
 if TYPE_CHECKING:
+    from .documents import DocumentResource
     from .signals import SignalJob
 
 logger = logging.getLogger("olira")

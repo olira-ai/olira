@@ -58,9 +58,7 @@ class MockTransport:
             ]
         }
 
-    def put_presigned(
-        self, url: str, blob: bytes, headers: dict[str, str] | None = None
-    ) -> None:
+    def put_presigned(self, url: str, blob: bytes, headers: dict[str, str] | None = None) -> None:
         self.presigned_puts.append((url, blob))
 
     def commit_signal_manifest(self, body) -> SignalJob:

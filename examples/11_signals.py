@@ -10,15 +10,18 @@ Run: python 11_signals.py
 """
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
 
-from olira import OliraClient, OliraEnv  # noqa: E402
-from olira import DEFAULT_BASE_URL  # noqa: E402
+from olira import (  # noqa: E402
+    DEFAULT_BASE_URL,  # noqa: E402
+    OliraClient,
+    OliraEnv,
+)
 
 BASE_URL = os.environ.get("OLIRA_BASE_URL", DEFAULT_BASE_URL)
 
@@ -36,11 +39,8 @@ patient = client.create_patient(
 )
 print(f"Patient created: {patient.id}")
 
-t0 = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=1)
-records = [
-    {"ts": t0 + timedelta(milliseconds=i * 50), "x": 0.0, "y": 0.0, "z": 9.81}
-    for i in range(20)
-]
+t0 = datetime.now(UTC).replace(microsecond=0) - timedelta(hours=1)
+records = [{"ts": t0 + timedelta(milliseconds=i * 50), "x": 0.0, "y": 0.0, "z": 9.81} for i in range(20)]
 
 handle = client.send_signals(
     patient_id=patient.id,

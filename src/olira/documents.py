@@ -85,14 +85,12 @@ class DocumentHandle:
             if doc.status.is_terminal:
                 return doc
             if time.monotonic() >= deadline:
-                raise OliraError(
-                    f"Timed out waiting for document {doc.document_id} (status={doc.status.value})"
-                )
+                raise OliraError(f"Timed out waiting for document {doc.document_id} (status={doc.status.value})")
             time.sleep(poll_interval_s)
 
 
 def upload_document_via_transport(
-    transport: "HttpTransport",
+    transport: HttpTransport,
     *,
     patient_id: str,
     path: str | Path,

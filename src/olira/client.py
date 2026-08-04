@@ -2,12 +2,14 @@
 
 import asyncio
 from collections.abc import Callable
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 import httpx
 
+from .documents import DocumentHandle, DocumentLogType, DocumentResource, upload_document_via_transport
 from .exceptions import ValidationError
 from .http import AsyncHttpTransport, HttpTransport
 from .ingestion_confirm import confirm_ingestion_job_resilient, confirm_ingestion_job_resilient_async
@@ -55,7 +57,6 @@ from .models import (
     _LogWire,
 )
 from .queue import BackgroundWorker
-from .documents import DocumentHandle, DocumentLogType, upload_document_via_transport
 from .signals import SignalJob, SignalJobHandle, SignalSensorType, send_signals_via_transport
 from .validation import validate_ingestion_file, validate_ingestion_records
 from .version import __version__ as _sdk_version
@@ -845,9 +846,7 @@ class OliraClient:
             body["max_event_logs"] = max_event_logs
 
         if documents:
-            return self._create_document_package_job(
-                body=body, records=records or [], documents=documents
-            )
+            return self._create_document_package_job(body=body, records=records or [], documents=documents)
 
         if file is not None:
             try:
@@ -913,7 +912,7 @@ class OliraClient:
         begin = self._transport.begin_ingestion_job({"documents": begin_docs})
         uploads_by_ref = {d["ref_id"]: d for d in begin["documents"]}
 
-        for doc, ref_id, content_type, path in resolved:
+        for _doc, ref_id, content_type, path in resolved:
             upload = uploads_by_ref[ref_id]
             httpx.put(
                 upload["upload_url"],
@@ -1051,8 +1050,8 @@ class OliraClient:
         *,
         patient_id: str,
         path: str | Path,
-        log_type: "DocumentLogType | str",
-        timestamp: "datetime",
+        log_type: DocumentLogType | str,
+        timestamp: datetime,
         idempotency_key: str,
         document_type: str | None = None,
         note_type: str | None = None,
@@ -1060,16 +1059,14 @@ class OliraClient:
         content_type: str | None = None,
         wait: bool = False,
         wait_timeout_s: float = 600.0,
-    ) -> "DocumentHandle":
+    ) -> DocumentHandle:
         """Upload a PDF/image for OCR → EventLog (upload-url + PUT + commit).
 
         ``log_type`` is ``unstructured_report`` (requires ``document_type``) or
         ``clinical_note`` (requires ``note_type`` + ``source``). Types are chosen
         by the caller — the platform does not infer them from the file.
         """
-        from datetime import datetime as _dt  # noqa: PLC0415
-
-        if not isinstance(timestamp, _dt):
+        if not isinstance(timestamp, datetime):
             raise ValidationError("timestamp must be a datetime")
         handle = upload_document_via_transport(
             self._transport,
@@ -1087,10 +1084,8 @@ class OliraClient:
             handle.wait(timeout_s=wait_timeout_s)
         return handle
 
-    def get_document(self, document_id: str) -> "DocumentResource":
+    def get_document(self, document_id: str) -> DocumentResource:
         """Poll document OCR status (GET /v1/documents/{id})."""
-        from .documents import DocumentResource  # noqa: PLC0415
-
         return self._transport.get_document(document_id)
 
     def send_signals(
@@ -1989,7 +1984,7 @@ class AsyncOliraClient:
 
     async def _create_document_package_job_async(
         self,
-        transport: Any,
+        transport: AsyncHttpTransport,
         *,
         body: dict[str, Any],
         records: list[IngestRecord],
@@ -2018,7 +2013,7 @@ class AsyncOliraClient:
         uploads_by_ref = {d["ref_id"]: d for d in begin["documents"]}
 
         async with httpx.AsyncClient() as http:
-            for doc, ref_id, content_type, path in resolved:
+            for _doc, ref_id, content_type, path in resolved:
                 upload = uploads_by_ref[ref_id]
                 await http.put(
                     upload["upload_url"],

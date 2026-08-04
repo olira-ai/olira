@@ -288,9 +288,7 @@ def validate_ingestion_file(
 _DOC_LOG_TYPES = frozenset({"unstructured_report", "clinical_note"})
 
 
-def _validate_document_row(
-    data: dict[str, Any], line: int, known_patient_ids: set[str]
-) -> list[IngestionRowError]:
+def _validate_document_row(data: dict[str, Any], line: int, known_patient_ids: set[str]) -> list[IngestionRowError]:
     errors: list[IngestionRowError] = []
     for field in ("ref_id", "patient_id", "s3_key", "log_type", "timestamp"):
         if not data.get(field):

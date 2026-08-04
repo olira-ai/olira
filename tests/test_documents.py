@@ -39,9 +39,7 @@ class FakeTransport:
             "expires_in": 900,
         }
 
-    def put_presigned(
-        self, url: str, blob: bytes, headers: dict[str, str] | None = None
-    ) -> None:
+    def put_presigned(self, url: str, blob: bytes, headers: dict[str, str] | None = None) -> None:
         self.puts.append((url, blob, headers))
 
     def commit_document(self, document_id: str) -> dict:
