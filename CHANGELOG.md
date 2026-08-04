@@ -5,11 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.10.0] - 2026-07-31
+## [1.11.0] - 2026-08-04
 
 ### Added
 
-- **Historical H1 package upload** — `create_ingestion_job(records=…, documents=[IngestDocument(…)])`
+- **Historical document package upload** — `create_ingestion_job(records=…, documents=[IngestDocument(…)])`
   calls `POST /v1/ingestion/jobs:begin`, PUTs each binary (+ `Content-Type`), builds
   `manifest.jsonl` with `type=document` rows, PUTs the manifest, then creates the job with
   `processing_engine="temporal"`. New `IngestDocument` / `IngestRecord.document()`;
@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `log_emitted` / `ocr_failed`. Intermediate status `ocr_complete` is non-terminal.
   Caller supplies `log_type` + `document_type` or `note_type`/`source`.
   Requires `sdk:event-log`.
+
+### Fixed
+
+- **Presigned document PUT** — send matching `Content-Type` on the S3 PUT (required
+  when upload-url signs `ContentType`; without it S3 returns 403).
+
+## [1.10.0] - 2026-07-31
+
+### Added
+
 - **`IngestionJobStatus`** — `EXTRACTING` / `LOADING` / `REBASING` /
   `EMBEDDING` match worker `IngestionStage` after historical-ingestion cutover.
 - **`IngestionStageWork` / `IngestionJob.stage_work`** — leaf-unit x/N for the active Temporal
@@ -28,11 +38,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Example `04_historical_ingestion.py`** stage list documents the full pipeline
   (extract → replay → load → rebase → embed → backfill).
-
-### Fixed
-
-- **Presigned document PUT** — send matching `Content-Type` on the S3 PUT (required
-  when upload-url signs `ContentType`; without it S3 returns 403).
 
 ### Removed
 
