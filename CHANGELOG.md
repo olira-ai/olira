@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `log_emitted` / `ocr_failed`. Intermediate status `ocr_complete` is non-terminal.
   Caller supplies `log_type` + `document_type` or `note_type`/`source`.
   Requires `sdk:event-log`.
+- **Example notebook** — `examples/12_document_resource_ingestion.ipynb` covers live
+  `upload_document()` and historical `documents=[IngestDocument(…)]` package upload.
 
 ### Fixed
 
