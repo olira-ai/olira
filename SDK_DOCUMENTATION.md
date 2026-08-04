@@ -2880,7 +2880,6 @@ create_ingestion_job(
     records: list[IngestRecord] | None = None,
     idempotency_key: str | None = None,
     require_confirmation: bool = True,
-    rollback_on_cancel: bool = False,
     summary_types: list[str] | None = None,
     max_event_logs: int | None = None,
 ) -> IngestionJob
@@ -2892,7 +2891,6 @@ create_ingestion_job(
 | `records`              | One of `file`/`records` | `list[IngestRecord]` | —       | Inline records (≤ 50,000). For larger datasets use `file=`.                                                                                                                                                                                                                                            |
 | `idempotency_key`      | No                      | `str`                | `None`  | Prevents duplicate jobs on retry. Returns 409 if an active or successfully completed job with this key exists. If the previous job failed, a new job is created instead.                                                                                                                               |
 | `require_confirmation` | No                      | `bool`               | `True`  | Pause at `AWAITING_CONFIRMATION` for review before Phase 2. Set `False` to run straight through.                                                                                                                                                                                                       |
-| `rollback_on_cancel`   | No                      | `bool`               | `False` | Controls what happens to **patients** when the job is cancelled. STALE logs are **always** deleted on cancel regardless of this setting (an unprocessed STALE log with no future replay job is meaningless). Set `True` to also delete created patients on cancel.                                     |
 | `summary_types`        | No                      | `list[str]`          | `None`  | Which view types to backfill in Phase 2. `None` = all view templates active for your org. Valid values are the `summary_type` identifiers on your org's active templates (e.g. `"emotional_state_snapshot"`, `"symptom_snapshot"`). You can update this via `patch_ingestion_job()` before confirming. |
 | `max_event_logs`       | No                      | `int`                | `None`  | **Per-patient** cap on the number of event logs considered during view backfill. Logs above the cap are skipped **for backfill only** — they are fully inserted and permanently stored. This is a cost-control knob for orgs with extremely log-dense patients. Omit for standard use.                 |
 
@@ -2940,12 +2938,10 @@ Only available while the job is paused at `AWAITING_CONFIRMATION`.
 cancel_ingestion_job(*, job_id: str) -> IngestionJob
 ```
 
-Cancel a job. Behaviour depends on the current status:
+Cancel a job. Cleanup is server-defined:
 
-- **`AWAITING_CONFIRMATION`** — immediate cleanup. STALE logs are always deleted. If `rollback_on_cancel=True` was set at job creation, created patients are also deleted; otherwise patients are retained.
-- **`REPLAYING` / `BACKFILLING`** — cooperative stop. The current patient finishes processing before the job stops. Already-replayed patients are **not** rolled back — their state and events persist permanently.
-
-> **STALE log cleanup:** Regardless of `rollback_on_cancel`, cancelling a job always deletes all STALE logs associated with it. An unprocessed STALE log has no replay job to process it and would occupy space indefinitely.
+- **Pre-Load** (review pause / before ontology commit) — leftover STALE logs for the job are deleted, and **job-created** patients with no other EventLog history are hard-deleted. S3 staging zones are left in place.
+- **Post-Load** — soft-stop only. Partial committed ontology (COMPLETED EventLogs / modules / views already written) is **retained**.
 
 ### `delete_ingestion_job_patient`
 
@@ -2985,7 +2981,7 @@ Two terminal error states exist with different recovery paths:
 
 Caused by validation failures (all rows invalid), a missing S3 file, or an unrecoverable system error during Stages 1–4.
 
-**Data state:** STALE logs inserted before the failure remain in the database. Patient documents created in Stage 2 are retained. (`rollback_on_cancel` has no effect on `FAILED` jobs — it only applies to explicit cancellation.)
+**Data state:** On `FAILED`, patient documents created are retained unless you cancel (pre-Load cancel removes eligible job-created patients).
 
 **Recovery:** Submit a new job. Per-log `idempotency_key` dedup in the retry job skips any logs whose `event_id` already exists from the previous attempt — preventing duplicates. Patients from the failed job are upserted rather than re-created.
 
