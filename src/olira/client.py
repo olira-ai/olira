@@ -810,7 +810,6 @@ class OliraClient:
         require_confirmation: bool = True,
         summary_types: list[str] | None = None,
         max_event_logs: int | None = None,
-        processing_engine: str | None = None,
     ) -> IngestionJob:
         """Create a historical data ingestion job. Requires sdk:historical-ingest scope.
 
@@ -819,8 +818,7 @@ class OliraClient:
         ``documents`` (document-package binaries — multi-PUT via ``jobs:begin``).
 
         When ``documents`` is set, the SDK builds a ``manifest.jsonl`` (records + document
-        rows), requires ``processing_engine="temporal"`` (defaulted when omitted), and
-        uploads via the package path.
+        rows) and uploads via the package path.
 
         The job starts automatically. Poll with :meth:`get_ingestion_job` until
         ``status`` reaches ``awaiting_confirmation`` (default) or ``completed``.
@@ -845,8 +843,6 @@ class OliraClient:
             body["summary_types"] = summary_types
         if max_event_logs is not None:
             body["max_event_logs"] = max_event_logs
-        if processing_engine is not None:
-            body["processing_engine"] = processing_engine
 
         if documents:
             return self._create_document_package_job(
@@ -889,10 +885,7 @@ class OliraClient:
         records: list[IngestRecord],
         documents: list[IngestDocument],
     ) -> IngestionJob:
-        """jobs:begin → PUT documents → PUT manifest.jsonl → POST jobs (temporal)."""
-        if body.get("processing_engine") not in (None, "temporal"):
-            raise ValidationError("Document packages require processing_engine='temporal'")
-        body["processing_engine"] = "temporal"
+        """jobs:begin → PUT documents → PUT manifest.jsonl → POST jobs."""
 
         for rec in records:
             if rec.type == "document":
@@ -1938,7 +1931,6 @@ class AsyncOliraClient:
         require_confirmation: bool = True,
         summary_types: list[str] | None = None,
         max_event_logs: int | None = None,
-        processing_engine: str | None = None,
     ) -> IngestionJob:
         """Async version of create_ingestion_job. Requires sdk:historical-ingest scope."""
         if file is None and records is None and not documents:
@@ -1959,8 +1951,6 @@ class AsyncOliraClient:
             body["summary_types"] = summary_types
         if max_event_logs is not None:
             body["max_event_logs"] = max_event_logs
-        if processing_engine is not None:
-            body["processing_engine"] = processing_engine
 
         if documents:
             return await self._create_document_package_job_async(
@@ -2005,10 +1995,6 @@ class AsyncOliraClient:
         records: list[IngestRecord],
         documents: list[IngestDocument],
     ) -> IngestionJob:
-        if body.get("processing_engine") not in (None, "temporal"):
-            raise ValidationError("Document packages require processing_engine='temporal'")
-        body["processing_engine"] = "temporal"
-
         begin_docs: list[dict[str, Any]] = []
         resolved: list[tuple[IngestDocument, str, str, Path]] = []
         for i, doc in enumerate(documents):

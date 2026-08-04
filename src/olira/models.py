@@ -595,7 +595,7 @@ class IngestionRowError(BaseModel):
 
 
 class IngestionStageWork(BaseModel):
-    """Leaf-unit progress for the active Temporal stage (aggregated across patients)."""
+    """Leaf-unit progress for the active ingestion stage (aggregated across patients)."""
 
     key: str
     label: str
@@ -679,7 +679,7 @@ class IngestDocument:
     """A document binary for a historical document-package ingestion job.
 
     Uploaded via ``jobs:begin`` multi-PUT; OCR runs post-confirm inside
-    ``HistoricalIngestionWorkflow`` (requires ``processing_engine="temporal"``).
+    ``HistoricalIngestionWorkflow``.
     """
 
     path: str  # local filesystem path

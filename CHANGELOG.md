@@ -11,9 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Historical document package upload** — `create_ingestion_job(records=…, documents=[IngestDocument(…)])`
   calls `POST /v1/ingestion/jobs:begin`, PUTs each binary (+ `Content-Type`), builds
-  `manifest.jsonl` with `type=document` rows, PUTs the manifest, then creates the job with
-  `processing_engine="temporal"`. New `IngestDocument` / `IngestRecord.document()`;
-  local validation accepts document rows; `IngestionJob` exposes `documents_*` counters.
+  `manifest.jsonl` with `type=document` rows, PUTs the manifest, then creates the job.
+  New `IngestDocument` / `IngestRecord.document()`; local validation accepts document rows;
+  `IngestionJob` exposes `documents_*` counters.
 - **Document upload + OCR** — `OliraClient.upload_document()` / `get_document()`
   (`documents.py`): upload-url → presigned PUT → commit → poll until
   `log_emitted` / `ocr_failed`. Intermediate status `ocr_complete` is non-terminal.
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`IngestionJobStatus`** — `EXTRACTING` / `LOADING` / `REBASING` /
   `EMBEDDING` match worker `IngestionStage` after historical-ingestion cutover.
-- **`IngestionStageWork` / `IngestionJob.stage_work`** — leaf-unit x/N for the active Temporal
+- **`IngestionStageWork` / `IngestionJob.stage_work`** — leaf-unit x/N for the active ingestion
   stage (`logs` / `docs` / `blocks`), plus raw ``progress`` on ``IngestionJob``.
 
 ### Changed
