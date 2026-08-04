@@ -702,7 +702,7 @@ class IngestRecord(BaseModel):
 
         IngestRecord.patient(CreatePatientRequest(...))
         IngestRecord.log(IngestLogSpec(...))
-        IngestRecord.document(IngestDocument(...), s3_key="…/documents/d1.pdf")
+        IngestRecord.document(IngestDocument(...), s3_key="…/documents/d1.pdf", ref_id="d1")
     """
 
     type: str

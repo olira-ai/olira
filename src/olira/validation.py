@@ -316,14 +316,23 @@ def _validate_document_row(data: dict[str, Any], line: int, known_patient_ids: s
                 message="document_type is required for unstructured_report",
             )
         )
-    elif log_type == "clinical_note" and not data.get("note_type"):
-        errors.append(
-            IngestionRowError(
-                line=line,
-                code="missing_note_type",
-                message="note_type is required for clinical_note",
+    elif log_type == "clinical_note":
+        if not data.get("note_type"):
+            errors.append(
+                IngestionRowError(
+                    line=line,
+                    code="missing_note_type",
+                    message="note_type is required for clinical_note",
+                )
             )
-        )
+        if data.get("source") is None:
+            errors.append(
+                IngestionRowError(
+                    line=line,
+                    code="missing_source",
+                    message="source is required for clinical_note",
+                )
+            )
     if data.get("timestamp") and not _parse_iso(str(data["timestamp"])):
         errors.append(
             IngestionRowError(

@@ -156,16 +156,20 @@ def test_validate_document_record_ok(tmp_path: Path) -> None:
     assert errors == []
 
 
+def _patient_record() -> IngestRecord:
+    return IngestRecord.patient(
+        CreatePatientRequest(
+            first_name="A",
+            last_name="B",
+            external_identifiers=[ExternalIdentifier(system="x", value="ext-1")],
+        )
+    )
+
+
 def test_validate_document_requires_document_type(tmp_path: Path) -> None:
     pdf = _pdf(tmp_path)
     records = [
-        IngestRecord.patient(
-            CreatePatientRequest(
-                first_name="A",
-                last_name="B",
-                external_identifiers=[ExternalIdentifier(system="x", value="ext-1")],
-            )
-        ),
+        _patient_record(),
         IngestRecord.document(
             IngestDocument(
                 path=str(pdf),
@@ -179,6 +183,66 @@ def test_validate_document_requires_document_type(tmp_path: Path) -> None:
     ]
     codes = {e.code for e in validate_ingestion_records(records)}
     assert "missing_document_type" in codes
+
+
+def test_validate_clinical_note_requires_note_type_and_source(tmp_path: Path) -> None:
+    pdf = _pdf(tmp_path)
+    records = [
+        _patient_record(),
+        IngestRecord.document(
+            IngestDocument(
+                path=str(pdf),
+                patient_id="ext-1",
+                log_type="clinical_note",
+                timestamp="2024-03-15T10:00:00Z",
+            ),
+            s3_key="documents/d1.pdf",
+            ref_id="d1",
+        ),
+    ]
+    codes = {e.code for e in validate_ingestion_records(records)}
+    assert "missing_note_type" in codes
+    assert "missing_source" in codes
+
+
+def test_validate_clinical_note_requires_source_when_note_type_set(tmp_path: Path) -> None:
+    pdf = _pdf(tmp_path)
+    records = [
+        _patient_record(),
+        IngestRecord.document(
+            IngestDocument(
+                path=str(pdf),
+                patient_id="ext-1",
+                log_type="clinical_note",
+                note_type="progress_note",
+                timestamp="2024-03-15T10:00:00Z",
+            ),
+            s3_key="documents/d1.pdf",
+            ref_id="d1",
+        ),
+    ]
+    codes = {e.code for e in validate_ingestion_records(records)}
+    assert "missing_source" in codes
+    assert "missing_note_type" not in codes
+
+
+def test_validate_document_rejects_invalid_log_type(tmp_path: Path) -> None:
+    pdf = _pdf(tmp_path)
+    records = [
+        _patient_record(),
+        IngestRecord.document(
+            IngestDocument(
+                path=str(pdf),
+                patient_id="ext-1",
+                log_type="lab_result",
+                timestamp="2024-03-15T10:00:00Z",
+            ),
+            s3_key="documents/d1.pdf",
+            ref_id="d1",
+        ),
+    ]
+    codes = {e.code for e in validate_ingestion_records(records)}
+    assert "invalid_log_type" in codes
 
 
 def test_create_document_package_uses_put_presigned(tmp_path: Path) -> None:
