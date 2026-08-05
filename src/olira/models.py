@@ -313,6 +313,10 @@ class UpdatePatientRequest(BaseModel):
     last_name: str | None = None
     email: str | None = None
     phone_number: str | None = None
+    date_of_birth: str | None = Field(
+        default=None,
+        description="ISO 8601 datetime string, e.g. '1985-03-22T00:00:00Z'",
+    )
     sex: str | None = None
     timezone: str | None = None
     primary_disease_site: str | None = None
