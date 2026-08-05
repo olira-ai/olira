@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `update_patient` / `UpdatePatientRequest` accept optional `date_of_birth`
 
+### Fixed
+- Incomplete `trace` on live logs and missing patient-anchor fields on `CreatePatientRequest` raise `olira.ValidationError` (not pydantic `ValidationError`), matching the .NET SDK and other client-side validators
+- Historical JSONL file upload uses `put_presigned` (status-checked, no Content-Type) instead of a bare `httpx.put`
+
 ## [1.11.0] - 2026-08-04
 
 ### Added

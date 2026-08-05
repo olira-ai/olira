@@ -237,7 +237,7 @@ class _LogWire(BaseModel):
     def check_payload_size(self) -> Self:
         if self.trace is not None:
             if not self.trace.object_type or not self.trace.object_id:
-                raise ValueError("trace requires both object_type and object_id")
+                raise ValidationError("trace requires both object_type and object_id")
         body = self.model_dump_json()
         if len(body.encode("utf-8")) > MAX_EVENT_PAYLOAD_BYTES:
             raise ValidationError(
@@ -296,7 +296,7 @@ class CreatePatientRequest(BaseModel):
         has_name = self.first_name is not None or self.last_name is not None
         has_dob = bool(self.date_of_birth and str(self.date_of_birth).strip())
         if not any((has_ext, has_email, has_phone, has_name, has_dob)):
-            raise ValueError(
+            raise ValidationError(
                 "Provide at least one of: external_identifiers, email, phone_number, "
                 "first_name, last_name, or date_of_birth"
             )

@@ -1,9 +1,9 @@
 """Tests for SDK models."""
 
 import pytest
-from pydantic import ValidationError
 
-from olira.models import LogsResult, OliraTrace, _LogWire
+from olira.exceptions import ValidationError
+from olira.models import CreatePatientRequest, LogsResult, OliraTrace, _LogWire
 
 
 def test_default_base_url():
@@ -81,6 +81,11 @@ def test_log_wire_requires_complete_trace():
             context={"environment": "production", "service": "", "sdk_version": "0.1.0", "sdk_language": "python"},
             trace=OliraTrace(object_type=None, object_id="conv_789"),
         )
+
+
+def test_create_patient_request_requires_anchor_field():
+    with pytest.raises(ValidationError, match="at least one of"):
+        CreatePatientRequest()
 
 
 def test_log_wire_accepts_complete_trace():
