@@ -7,8 +7,6 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-import httpx
-
 from .documents import DocumentHandle, DocumentLogType, DocumentResource, upload_document_via_transport
 from .exceptions import ValidationError
 from .http import AsyncHttpTransport, HttpTransport
@@ -334,6 +332,7 @@ class OliraClient:
         last_name: str | None = None,
         email: str | None = None,
         phone_number: str | None = None,
+        date_of_birth: str | None = None,
         sex: str | None = None,
         timezone: str | None = None,
         primary_disease_site: str | None = None,
@@ -352,6 +351,7 @@ class OliraClient:
             last_name=last_name,
             email=email,
             phone_number=phone_number,
+            date_of_birth=date_of_birth,
             sex=sex,
             timezone=timezone,
             primary_disease_site=primary_disease_site,
@@ -863,7 +863,9 @@ class OliraClient:
                 raise ValidationError(f"JSONL validation failed ({len(blocking)} error(s)): {summary}{suffix}")
             with open(file, "rb") as fh:
                 content = fh.read()
-            httpx.put(url_data["upload_url"], content=content, timeout=120)
+            # No Content-Type — upload URLs are signed without ContentType.
+            # Status checked like put_presigned (documents/signals).
+            self._transport.put_presigned(url_data["upload_url"], content)
             body["s3_key"] = url_data["s3_key"]
         else:
             inline = records or []
@@ -1435,6 +1437,7 @@ class AsyncOliraClient:
         last_name: str | None = None,
         email: str | None = None,
         phone_number: str | None = None,
+        date_of_birth: str | None = None,
         sex: str | None = None,
         timezone: str | None = None,
         primary_disease_site: str | None = None,
@@ -1457,6 +1460,7 @@ class AsyncOliraClient:
             last_name=last_name,
             email=email,
             phone_number=phone_number,
+            date_of_birth=date_of_birth,
             sex=sex,
             timezone=timezone,
             primary_disease_site=primary_disease_site,
@@ -1970,8 +1974,8 @@ class AsyncOliraClient:
                 raise ValidationError(f"JSONL validation failed ({len(blocking)} error(s)): {summary}{suffix}")
             with open(file, "rb") as fh:
                 content = fh.read()
-            async with httpx.AsyncClient() as client:
-                await client.put(url_data["upload_url"], content=content, timeout=120)
+            # No Content-Type — upload URLs are signed without ContentType.
+            await transport.put_presigned(url_data["upload_url"], content)
             body["s3_key"] = url_data["s3_key"]
         else:
             inline = records or []
