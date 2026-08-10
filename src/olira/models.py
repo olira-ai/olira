@@ -658,6 +658,72 @@ class IngestionJobListResult(BaseModel):
     jobs: list[IngestionJob] = Field(default_factory=list)
 
 
+class ExportJobStatus(StrEnum):
+    """Lifecycle status for a batch export job."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ExportInclude(BaseModel):
+    """Which content types to include in a batch export zip."""
+
+    logs: bool | dict[str, Any] | None = None
+    state_modules: bool | dict[str, Any] | None = None
+    view_blocks: bool | dict[str, Any] | None = None
+    events: bool | dict[str, Any] | None = None
+    extracted: bool | dict[str, Any] | None = None
+
+
+class ExportJob(BaseModel):
+    """Batch export job status (GET/POST /v1/exports)."""
+
+    export_id: str
+    status: ExportJobStatus | str
+    stage: str | None = None
+    progress_pct: float = 0.0
+    selection: str | None = None
+    cohort_id: str | None = None
+    patient_count: int = 0
+    start: str | None = None
+    end: str | None = None
+    include: dict[str, Any] | None = None
+    error_message: str | None = None
+    failed_patient_ids: list[str] = Field(default_factory=list)
+    row_counts: dict[str, int] = Field(default_factory=dict)
+    byte_size: int | None = None
+    content_sha256: str | None = None
+    created_at: str | None = None
+    started_at: str | None = None
+    updated_at: str | None = None
+    completed_at: str | None = None
+    downloadable: bool = False
+
+
+class ExportJobListResult(BaseModel):
+    """Result of list_exports()."""
+
+    data: list[ExportJob] = Field(default_factory=list)
+    total: int = 0
+    limit: int = 50
+    offset: int = 0
+
+
+class ExportDownload(BaseModel):
+    """Presigned download response for a completed export."""
+
+    export_id: str
+    download_url: str
+    expires_in_seconds: int
+    byte_size: int | None = None
+    content_sha256: str | None = None
+    s3_key: str | None = None
+
+
 @dataclass
 class IngestLogSpec:
     """Specification for a single log record in a historical ingestion job.
