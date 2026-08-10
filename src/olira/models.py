@@ -34,7 +34,7 @@ def _validate_patient_id(value: str) -> str:
 class OliraLogType(StrEnum):
     """Customer-facing log types. Values match the platform log catalog.
 
-    As of OLI-1943, the platform renamed most verb-suffixed subtypes (e.g.
+    The platform renamed most verb-suffixed subtypes (e.g.
     ``moods_report``, ``conversation_completed``) to noun-only canonical names
     (e.g. ``mood_report``, ``conversation``). Both forms are accepted by the
     platform indefinitely, so members marked "deprecated" below are kept for
@@ -108,7 +108,7 @@ class OliraLogType(StrEnum):
     TREATMENT_PHASE_CHANGED = "treatment_phase_changed"  # deprecated: use TREATMENT_PHASE
 
     # ------------------------------------------------------------------
-    # Canonical noun-only names (OLI-1943). Prefer these for new integrations;
+    # Canonical noun-only names. Prefer these for new integrations;
     # the deprecated members above remain valid and continue to work.
     # ------------------------------------------------------------------
     MOOD_REPORT = "mood_report"
@@ -923,3 +923,36 @@ class SchemaActionResult(BaseModel):
     subtype: str
     version: int
     status: str
+
+
+# ---------------------------------------------------------------------------
+# Log-type catalog (sdk:event-log scope)
+# ---------------------------------------------------------------------------
+
+
+class LogType(BaseModel):
+    """One entry in the platform's log-type catalog, returned by list_log_types()/get_log_type().
+
+    This is the live counterpart to the static :class:`OliraLogType` enum —
+    it always reflects the current server-side catalog, including each type's full
+    payload JSON Schema, and is not limited to the subtypes known when this SDK
+    version was released.
+    """
+
+    subtype: str
+    category: str
+    aliases: list[str] = Field(default_factory=list)
+    display_name: str
+    description: str
+    payload_schema: dict[str, Any] = Field(default_factory=dict)
+    payload_description: str = ""
+    sources: list[str] = Field(default_factory=list)
+    version: int = 1
+    target_modules: list[str] = Field(default_factory=list)
+    user_facing: bool = True
+
+
+class LogTypeListResult(BaseModel):
+    """Result of list_log_types()."""
+
+    data: list[LogType] = Field(default_factory=list)

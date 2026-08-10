@@ -8,7 +8,7 @@ managing patients, backfilling historical data, uploading passive sensor
 Parquet, reading Patient State, and minting patient-scoped tokens for use with
 the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.11.1`
+**Package:** `olira` — **Version:** `1.12.0`
 
 ## Related docs
 
@@ -240,7 +240,7 @@ produced a given data point.
 `StrEnum` of all supported log types. Use these constants as `log_type`
 in `log()` and `log_batch()`.
 
-As of OLI-1943 the platform renamed most verb-suffixed subtypes to noun-only
+The platform renamed most verb-suffixed subtypes to noun-only
 canonical names (e.g. `moods_report` → `mood_report`). The platform accepts
 both forms indefinitely, so the deprecated members below keep working — but
 new integrations should use the canonical name listed alongside each one.
@@ -323,6 +323,31 @@ new integrations should use the canonical name listed alongside each one.
 - `OliraLogType.SOCIAL_DETERMINANTS` → `"social_determinants"` (deprecated alias: `SOCIAL_UPDATED` → `"social_updated"`)
 - `OliraLogType.PHARMACY` → `"pharmacy"` (deprecated alias: `PHARMACY_UPDATED` → `"pharmacy_updated"`)
 - `OliraLogType.TREATMENT_PHASE` → `"treatment_phase"` (deprecated alias: `TREATMENT_PHASE_CHANGED` → `"treatment_phase_changed"`)
+
+### Discovering log types live — `list_log_types()` / `get_log_type()`
+
+`OliraLogType` above is the static reference shipped with this SDK version — accurate
+as of release, but it can lag the platform if new log types ship between SDK releases.
+For agent-guided mapping (matching your own data model to Olira's) or anything
+that needs the current, authoritative catalog — including each type's full payload
+JSON Schema — call the live catalog instead. Requires `sdk:event-log` scope.
+
+```python
+# List every log type in the platform catalog
+for lt in olira.list_log_types():
+    print(lt.subtype, lt.display_name, lt.payload_schema)
+
+# Look up one type by subtype (or a known deprecated alias)
+lt = olira.get_log_type(subtype="mood_report")
+print(lt.payload_schema)
+```
+
+`list_log_types()` returns `list[LogType]`; `get_log_type()` returns a single `LogType`.
+Both raise `ValidationError`-style 404s (via `OliraError`) for an unknown subtype.
+
+**`LogType` fields:** `subtype`, `category`, `aliases`, `display_name`, `description`,
+`payload_schema` (JSON Schema dict), `payload_description`, `sources`, `version`,
+`target_modules`, `user_facing`.
 
 ## Patients
 
