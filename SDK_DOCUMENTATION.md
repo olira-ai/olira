@@ -30,7 +30,7 @@ Each API key carries one or more scopes. Assign only what your integration needs
 | `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                                |
 | `sdk:patient-token`     | `get_patient_token()`                                                                                                                                                                                                                                                  |
 | `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                                                                                                                                                                |
-| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` (query builder), `population_logs()` (query builder), etc.                                                                                                                                               |
+| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` / `population_logs()`, `create_export()` / `get_export()` / `list_exports()` / `download_export()`, etc.                                                                            |
 | `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — EHR write-back requests (also requires platform-side write configuration)                                                                                                                                      |
 | `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [EHR Integrations & Instances](#ehr-integrations--instances)                                                                                                                                   |
 | `mcp:patient-state`     | Query patient state via the MCP Patient State server                                                                                                                                                                                                                   |
@@ -2734,6 +2734,63 @@ presigned PUT.
 
 Poll with `client.get_signal_job(job_id=...)`. Dead-letters and metrics are REST-only
 (`GET /v1/signals/dead-letters`, `GET /v1/signals/metrics`) — see the docs site.
+
+---
+
+## Batch Export
+
+Export patient data as a ZIP of Parquet files for offline analytics. Requires
+`sdk:state-read`. Provide exactly one of `patient_ids`, `cohort_id`, or
+`scope="project"`.
+
+### Create and download
+
+```python
+import time
+from datetime import datetime, timezone
+from olira import Olira, ExportInclude
+
+client = Olira(api_key="olk_...")
+
+job = client.create_export(
+    start=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    end=datetime(2024, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
+    include=ExportInclude(
+        logs=True,
+        state_modules=True,
+        view_blocks=True,
+        events=True,
+        extracted=False,
+    ),
+    patient_ids=["patient_abc123"],
+)
+
+while job.status not in ("completed", "failed", "cancelled"):
+    time.sleep(5)
+    job = client.get_export(export_id=job.export_id)
+
+if job.status != "completed":
+    raise RuntimeError(job.error_message or job.status)
+
+download = client.download_export(export_id=job.export_id)
+# download.download_url is a short-lived presigned HTTPS URL to the ZIP
+```
+
+### ZIP layout
+
+| Member | Contents |
+|--------|----------|
+| `logs/` | Event-log rows as Parquet |
+| `state_modules/` | Patient state modules as Parquet |
+| `view_blocks/` | Summary view blocks as Parquet |
+| `events/` | Derived events as Parquet |
+| `extracted/` | Extracted document text as Parquet (optional) |
+
+Omit a category with `ExportInclude(..., logs=False)` (etc.). List jobs with
+`client.list_exports(limit=20)`.
+
+C# uses the same endpoints via `OliraModule.CreateExport` / `GetExport` /
+`ListExports` / `DownloadExport`.
 
 ---
 
