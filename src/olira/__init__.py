@@ -21,7 +21,9 @@ from ._module_api import (
     duplicate_project,
     edit_schema,
     flush,
+    get_block_confidence_scoring,
     get_cohort,
+    get_confidence_scoring,
     get_event_state_module,
     get_events,
     get_ingestion_job,
@@ -34,7 +36,9 @@ from ._module_api import (
     get_stable_data,
     get_view,
     get_view_block,
+    get_view_confidence_scoring,
     get_view_recent_events,
+    get_view_scorer_params,
     init,
     list_cohort_templates,
     list_cohorts,
@@ -58,6 +62,11 @@ from ._module_api import (
     rename_project,
     restore_project,
     retry_view_backfill,
+    set_block_confidence_scoring,
+    set_confidence_scoring,
+    set_view_confidence_scoring,
+    set_view_confidence_weights,
+    set_view_scorer_params,
     unassign_cohort_template,
     update_cohort,
     update_patient,
@@ -134,6 +143,7 @@ from .models import (
     ViewMeta,
     ViewRecentEventsResult,
     ViewResult,
+    ConfidenceScoringResult,
 )
 from .signals import (
     SignalJob,
@@ -224,6 +234,7 @@ __all__ = [
     "SchemaVersion",
     "SchemaDetail",
     "SchemaSummary",
+    "ConfidenceScoringResult",
     "SchemaRegistrationResult",
     "SchemaActionResult",
     # Historical ingestion models
@@ -300,4 +311,14 @@ __all__ = [
     # Log-type catalog
     "list_log_types",
     "get_log_type",
+    # Confidence scoring config
+    "get_confidence_scoring",
+    "set_confidence_scoring",
+    "get_view_confidence_scoring",
+    "set_view_confidence_scoring",
+    "get_block_confidence_scoring",
+    "set_block_confidence_scoring",
+    "get_view_scorer_params",
+    "set_view_scorer_params",
+    "set_view_confidence_weights",
 ]

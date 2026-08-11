@@ -473,7 +473,17 @@ class ViewBlockResult(BaseModel):
     block_id: str
     content: str | None = None
     confidences: dict[str, float] | None = None
+    confidence_explanations: dict[str, Any] | None = None
     updated_at: str | None = None
+
+
+class ConfidenceScoringResult(BaseModel):
+    """Result of get/set confidence scoring at org, view, or block scope."""
+
+    scope: str
+    summary_type: str | None = None
+    block_id: str | None = None
+    confidence_scoring: dict[str, Any] | None = None
 
 
 class ViewRecentEventsResult(BaseModel):
