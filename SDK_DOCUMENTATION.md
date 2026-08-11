@@ -346,8 +346,7 @@ print(lt.payload_schema)
 Both raise `ValidationError`-style 404s (via `OliraError`) for an unknown subtype.
 
 **`LogType` fields:** `subtype`, `category`, `aliases`, `display_name`, `description`,
-`payload_schema` (JSON Schema dict), `payload_description`, `sources`, `version`,
-`target_modules`, `user_facing`.
+`payload_schema` (JSON Schema dict), `payload_description`, `sources`, `version`.
 
 ## Patients
 

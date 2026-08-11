@@ -948,8 +948,6 @@ class LogType(BaseModel):
     payload_description: str = ""
     sources: list[str] = Field(default_factory=list)
     version: int = 1
-    target_modules: list[str] = Field(default_factory=list)
-    user_facing: bool = True
 
 
 class LogTypeListResult(BaseModel):

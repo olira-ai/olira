@@ -20,8 +20,6 @@ def _make_log_type(subtype: str = "symptom_report") -> LogType:
         payload_description="instrument (required), symptoms[]",
         sources=["logged"],
         version=1,
-        target_modules=["event_state:symptoms"],
-        user_facing=True,
     )
 
 
