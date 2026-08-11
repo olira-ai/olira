@@ -30,6 +30,7 @@ from .models import (
     IngestRecord,
     LogSpec,
     LogsResult,
+    LogType,
     MemoriesResult,
     OliraLogType,
     OliraTrace,
@@ -771,3 +772,19 @@ def activate_schema_version(*, subtype: str, version: int) -> SchemaActionResult
     was previously active.
     """
     return _get_client().activate_schema_version(subtype=subtype, version=version)
+
+
+def list_log_types() -> list[LogType]:
+    """List every log type in the platform catalog. Module-level proxy.
+
+    Requires an API key with the sdk:event-log scope.
+    """
+    return _get_client().list_log_types()
+
+
+def get_log_type(*, subtype: str) -> LogType:
+    """Get one log type by subtype or alias. Module-level proxy.
+
+    Requires an API key with the sdk:event-log scope.
+    """
+    return _get_client().get_log_type(subtype=subtype)

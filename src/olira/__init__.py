@@ -25,6 +25,7 @@ from ._module_api import (
     get_event_state_module,
     get_events,
     get_ingestion_job,
+    get_log_type,
     get_logs,
     get_patient,
     get_patient_token,
@@ -39,6 +40,7 @@ from ._module_api import (
     list_cohorts,
     list_event_state_modules,
     list_ingestion_jobs,
+    list_log_types,
     list_patients,
     list_projects,
     list_schemas,
@@ -285,4 +287,7 @@ __all__ = [
     "edit_schema",
     "deprecate_schema",
     "activate_schema_version",
+    # Log-type catalog
+    "list_log_types",
+    "get_log_type",
 ]

@@ -41,9 +41,11 @@ class _MockTransport:
 
 def _client_with_mock() -> tuple[OliraClient, _MockTransport]:
     client = OliraClient(api_key="olira_test_key", environment=OliraEnv.DEVELOPMENT, async_flush=False)
+    original_transport = client._transport
     transport = _MockTransport()
     client._transport = transport
     client._worker = None
+    original_transport.close()
     return client, transport
 
 
@@ -84,7 +86,9 @@ class _AsyncMockTransport:
 async def test_async_client_list_and_get_log_type():
     transport = _AsyncMockTransport()
     async with AsyncOliraClient(api_key="olira_test_key", environment=OliraEnv.DEVELOPMENT) as client:
+        original_transport = client._transport
         client._transport = transport
+        await original_transport.aclose()
         result = await client.list_log_types()
         assert [t.subtype for t in result] == ["mood_report", "symptom_report"]
 
