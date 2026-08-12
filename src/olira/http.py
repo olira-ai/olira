@@ -22,6 +22,8 @@ from .models import (
     IngestionJobListResult,
     LogQueryResult,
     LogsResult,
+    LogType,
+    LogTypeListResult,
     MemoriesResult,
     Patient,
     PatientBatchResult,
@@ -371,6 +373,16 @@ class HttpTransport:
         """Dry-run a schema/mapping (POST /v1/schemas/check). Requires api:org-config scope."""
         raw = self._request("POST", "/v1/schemas/check", json=body)
         return SchemaCheckResult.model_validate(raw)
+
+    def list_log_types(self) -> list[LogType]:
+        """List the platform's log-type catalog (GET /v1/log-types). Requires sdk:event-log scope."""
+        raw = self._request("GET", "/v1/log-types")
+        return LogTypeListResult.model_validate(raw).data
+
+    def get_log_type(self, subtype: str) -> LogType:
+        """Get one log type by subtype or alias (GET /v1/log-types/{subtype}). Requires sdk:event-log scope."""
+        raw = self._request("GET", f"/v1/log-types/{subtype}")
+        return LogType.model_validate(raw)
 
     def edit_schema(self, subtype: str, body: dict[str, Any]) -> SchemaRegistrationResult:
         """Propose a schema/mapping change (PATCH /v1/schemas/{subtype}). Requires api:org-config scope."""
@@ -750,6 +762,16 @@ class AsyncHttpTransport:
         """Dry-run a schema/mapping (POST /v1/schemas/check). Requires api:org-config scope."""
         raw = await self._request("POST", "/v1/schemas/check", json=body)
         return SchemaCheckResult.model_validate(raw)
+
+    async def list_log_types(self) -> list[LogType]:
+        """List the platform's log-type catalog (GET /v1/log-types). Requires sdk:event-log scope."""
+        raw = await self._request("GET", "/v1/log-types")
+        return LogTypeListResult.model_validate(raw).data
+
+    async def get_log_type(self, subtype: str) -> LogType:
+        """Get one log type by subtype or alias (GET /v1/log-types/{subtype}). Requires sdk:event-log scope."""
+        raw = await self._request("GET", f"/v1/log-types/{subtype}")
+        return LogType.model_validate(raw)
 
     async def edit_schema(self, subtype: str, body: dict[str, Any]) -> SchemaRegistrationResult:
         """Propose a schema/mapping change (PATCH /v1/schemas/{subtype}). Requires api:org-config scope."""

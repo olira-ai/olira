@@ -31,6 +31,7 @@ from .models import (
     IngestRecord,
     LogSpec,
     LogsResult,
+    LogType,
     MemoriesResult,
     OliraLogType,
     OliraTrace,
@@ -614,6 +615,19 @@ class OliraClient:
         if mapping is not None:
             body["mapping"] = mapping
         return self._transport.check_schema(body)
+
+    def list_log_types(self) -> list[LogType]:
+        """List every log type in the platform catalog, with its full payload JSON Schema.
+
+        Requires sdk:event-log scope. This is the live counterpart to the static
+        :class:`OliraLogType` enum — always current, and not limited to the
+        subtypes known when this SDK version was released.
+        """
+        return self._transport.list_log_types()
+
+    def get_log_type(self, *, subtype: str) -> LogType:
+        """Get one log type by subtype or alias. Requires sdk:event-log scope."""
+        return self._transport.get_log_type(subtype)
 
     def edit_schema(
         self,
@@ -1722,6 +1736,19 @@ class AsyncOliraClient:
         if mapping is not None:
             body["mapping"] = mapping
         return await self._require_transport("check_schema").check_schema(body)
+
+    async def list_log_types(self) -> list[LogType]:
+        """List every log type in the platform catalog, with its full payload JSON Schema.
+
+        Requires sdk:event-log scope. This is the live counterpart to the static
+        :class:`OliraLogType` enum — always current, and not limited to the
+        subtypes known when this SDK version was released.
+        """
+        return await self._require_transport("list_log_types").list_log_types()
+
+    async def get_log_type(self, *, subtype: str) -> LogType:
+        """Get one log type by subtype or alias. Requires sdk:event-log scope."""
+        return await self._require_transport("get_log_type").get_log_type(subtype)
 
     async def edit_schema(
         self,
