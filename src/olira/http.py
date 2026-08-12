@@ -18,6 +18,9 @@ from .models import (
     CohortTemplatesResult,
     EventsResult,
     EventStateModuleResult,
+    ExportDownload,
+    ExportJob,
+    ExportJobListResult,
     IngestionJob,
     IngestionJobListResult,
     LogQueryResult,
@@ -488,6 +491,26 @@ class HttpTransport:
         raw = self._request("GET", "/v1/ingestion/jobs", params=params)
         return IngestionJobListResult.model_validate(raw)
 
+    def create_export(self, body: dict[str, Any]) -> ExportJob:
+        """Create a batch export job (POST /v1/exports). Requires sdk:state-read."""
+        raw = self._request("POST", "/v1/exports", json=body)
+        return ExportJob.model_validate(raw)
+
+    def get_export(self, export_id: str) -> ExportJob:
+        """Poll export status (GET /v1/exports/{export_id})."""
+        raw = self._request("GET", f"/v1/exports/{export_id}")
+        return ExportJob.model_validate(raw)
+
+    def list_exports(self, params: dict[str, Any]) -> ExportJobListResult:
+        """List export jobs for the org/project (GET /v1/exports)."""
+        raw = self._request("GET", "/v1/exports", params=params)
+        return ExportJobListResult.model_validate(raw)
+
+    def download_export(self, export_id: str) -> ExportDownload:
+        """Get a presigned download URL (GET /v1/exports/{export_id}/download)."""
+        raw = self._request("GET", f"/v1/exports/{export_id}/download")
+        return ExportDownload.model_validate(raw)
+
     def confirm_ingestion_job(self, job_id: str, *, initialize_missing_templates: bool = False) -> IngestionJob:
         """Confirm a job in AWAITING_CONFIRMATION to trigger Phase 2 (POST /v1/ingestion/jobs/{job_id}/confirm)."""
         body: dict[str, Any] = {}
@@ -886,6 +909,22 @@ class AsyncHttpTransport:
     async def list_ingestion_jobs(self, params: dict[str, Any]) -> IngestionJobListResult:
         raw = await self._request("GET", "/v1/ingestion/jobs", params=params)
         return IngestionJobListResult.model_validate(raw)
+
+    async def create_export(self, body: dict[str, Any]) -> ExportJob:
+        raw = await self._request("POST", "/v1/exports", json=body)
+        return ExportJob.model_validate(raw)
+
+    async def get_export(self, export_id: str) -> ExportJob:
+        raw = await self._request("GET", f"/v1/exports/{export_id}")
+        return ExportJob.model_validate(raw)
+
+    async def list_exports(self, params: dict[str, Any]) -> ExportJobListResult:
+        raw = await self._request("GET", "/v1/exports", params=params)
+        return ExportJobListResult.model_validate(raw)
+
+    async def download_export(self, export_id: str) -> ExportDownload:
+        raw = await self._request("GET", f"/v1/exports/{export_id}/download")
+        return ExportDownload.model_validate(raw)
 
     async def confirm_ingestion_job(self, job_id: str, *, initialize_missing_templates: bool = False) -> IngestionJob:
         body: dict[str, Any] = {}

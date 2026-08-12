@@ -24,6 +24,10 @@ from .models import (
     EventsResult,
     EventStateModuleResult,
     EventStateModuleSummary,
+    ExportDownload,
+    ExportInclude,
+    ExportJob,
+    ExportJobListResult,
     ExternalIdentifier,
     IngestDocument,
     IngestionJob,
@@ -993,6 +997,56 @@ class OliraClient:
         if idempotency_key:
             params["idempotency_key"] = idempotency_key
         return self._transport.list_ingestion_jobs(params)
+
+    def create_export(
+        self,
+        *,
+        start: str | datetime,
+        end: str | datetime,
+        include: ExportInclude | dict[str, Any],
+        patient_ids: list[str] | None = None,
+        cohort_id: str | None = None,
+        scope: str | None = None,
+    ) -> ExportJob:
+        """Start a batch export job. Requires sdk:state-read scope.
+
+        Provide exactly one of ``patient_ids``, ``cohort_id``, or ``scope="project"``.
+        Poll with :meth:`get_export` until ``downloadable`` is true, then
+        :meth:`download_export` for a presigned URL.
+        """
+        body: dict[str, Any] = {
+            "start": start.isoformat() if isinstance(start, datetime) else start,
+            "end": end.isoformat() if isinstance(end, datetime) else end,
+            "include": include.model_dump(exclude_none=True) if isinstance(include, ExportInclude) else include,
+        }
+        if patient_ids is not None:
+            body["patient_ids"] = patient_ids
+        if cohort_id is not None:
+            body["cohort_id"] = cohort_id
+        if scope is not None:
+            body["scope"] = scope
+        return self._transport.create_export(body)
+
+    def get_export(self, *, export_id: str) -> ExportJob:
+        """Poll export job status. Requires sdk:state-read scope."""
+        return self._transport.get_export(export_id)
+
+    def list_exports(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: str | None = None,
+    ) -> ExportJobListResult:
+        """List historical export jobs for the org/project. Requires sdk:state-read."""
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if status:
+            params["status"] = status
+        return self._transport.list_exports(params)
+
+    def download_export(self, *, export_id: str) -> ExportDownload:
+        """Get a presigned download URL for a completed export. Requires sdk:state-read."""
+        return self._transport.download_export(export_id)
 
     def confirm_ingestion_job(
         self,
@@ -2115,6 +2169,55 @@ class AsyncOliraClient:
         if idempotency_key:
             params["idempotency_key"] = idempotency_key
         return await transport.list_ingestion_jobs(params)
+
+    async def create_export(
+        self,
+        *,
+        start: str | datetime,
+        end: str | datetime,
+        include: ExportInclude | dict[str, Any],
+        patient_ids: list[str] | None = None,
+        cohort_id: str | None = None,
+        scope: str | None = None,
+    ) -> ExportJob:
+        """Async version of create_export. Requires sdk:state-read scope."""
+        transport = self._require_transport("create_export")
+        body: dict[str, Any] = {
+            "start": start.isoformat() if isinstance(start, datetime) else start,
+            "end": end.isoformat() if isinstance(end, datetime) else end,
+            "include": include.model_dump(exclude_none=True) if isinstance(include, ExportInclude) else include,
+        }
+        if patient_ids is not None:
+            body["patient_ids"] = patient_ids
+        if cohort_id is not None:
+            body["cohort_id"] = cohort_id
+        if scope is not None:
+            body["scope"] = scope
+        return await transport.create_export(body)
+
+    async def get_export(self, *, export_id: str) -> ExportJob:
+        """Async version of get_export. Requires sdk:state-read scope."""
+        transport = self._require_transport("get_export")
+        return await transport.get_export(export_id)
+
+    async def list_exports(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        status: str | None = None,
+    ) -> ExportJobListResult:
+        """Async version of list_exports. Requires sdk:state-read scope."""
+        transport = self._require_transport("list_exports")
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if status:
+            params["status"] = status
+        return await transport.list_exports(params)
+
+    async def download_export(self, *, export_id: str) -> ExportDownload:
+        """Async version of download_export. Requires sdk:state-read scope."""
+        transport = self._require_transport("download_export")
+        return await transport.download_export(export_id)
 
     async def confirm_ingestion_job(
         self,
