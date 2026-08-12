@@ -20,6 +20,7 @@ from .models import (
     CohortPatientMutationResult,
     CohortTemplateAssignment,
     CohortTemplatesResult,
+    ConfidenceScoringResult,
     CreatePatientRequest,
     EventsResult,
     EventStateModuleResult,
@@ -788,3 +789,101 @@ def get_log_type(*, subtype: str) -> LogType:
     Requires an API key with the sdk:event-log scope.
     """
     return _get_client().get_log_type(subtype=subtype)
+
+
+# ---------------------------------------------------------------------------
+# Confidence scoring config proxies (api:org-config scope)
+# ---------------------------------------------------------------------------
+
+
+def get_confidence_scoring() -> ConfidenceScoringResult:
+    """Get org default confidence scoring. Module-level proxy.
+
+    Requires an API key with the api:org-config scope.
+    """
+    return _get_client().get_confidence_scoring()
+
+
+def set_confidence_scoring(
+    *, confidence_scoring: dict[str, Any] | None
+) -> ConfidenceScoringResult:
+    """Set or clear org default confidence scoring. Module-level proxy.
+
+    Requires an API key with the api:org-config scope. Pass ``None`` to clear
+    and fall back to platform built-ins.
+    """
+    return _get_client().set_confidence_scoring(confidence_scoring=confidence_scoring)
+
+
+def get_view_confidence_scoring(*, summary_type: str) -> ConfidenceScoringResult:
+    """Get view-level confidence scoring override. Module-level proxy.
+
+    Requires an API key with the api:org-config scope.
+    """
+    return _get_client().get_view_confidence_scoring(summary_type=summary_type)
+
+
+def set_view_confidence_scoring(
+    *, summary_type: str, confidence_scoring: dict[str, Any] | None
+) -> ConfidenceScoringResult:
+    """Set or clear view-level confidence scoring. Module-level proxy.
+
+    Requires an API key with the api:org-config scope.
+    """
+    return _get_client().set_view_confidence_scoring(
+        summary_type=summary_type, confidence_scoring=confidence_scoring
+    )
+
+
+def get_block_confidence_scoring(
+    *, summary_type: str, block_id: str
+) -> ConfidenceScoringResult:
+    """Get block-level confidence scoring override. Module-level proxy.
+
+    Requires an API key with the api:org-config scope.
+    """
+    return _get_client().get_block_confidence_scoring(
+        summary_type=summary_type, block_id=block_id
+    )
+
+
+def set_block_confidence_scoring(
+    *, summary_type: str, block_id: str, confidence_scoring: dict[str, Any] | None
+) -> ConfidenceScoringResult:
+    """Set or clear block-level confidence scoring. Module-level proxy.
+
+    Requires an API key with the api:org-config scope.
+    """
+    return _get_client().set_block_confidence_scoring(
+        summary_type=summary_type,
+        block_id=block_id,
+        confidence_scoring=confidence_scoring,
+    )
+
+
+def get_view_scorer_params(*, summary_type: str, scorer_id: str) -> dict[str, Any] | None:
+    """Get params for one scorer on a view. Module-level proxy."""
+    return _get_client().get_view_scorer_params(
+        summary_type=summary_type, scorer_id=scorer_id
+    )
+
+
+def set_view_scorer_params(
+    *,
+    summary_type: str,
+    scorer_id: str,
+    params: dict[str, Any] | None,
+) -> ConfidenceScoringResult:
+    """Set or clear one scorer's params on a view. Module-level proxy."""
+    return _get_client().set_view_scorer_params(
+        summary_type=summary_type, scorer_id=scorer_id, params=params
+    )
+
+
+def set_view_confidence_weights(
+    *, summary_type: str, weights: dict[str, float] | None
+) -> ConfidenceScoringResult:
+    """Set overall confidence weights on a view. Module-level proxy."""
+    return _get_client().set_view_confidence_weights(
+        summary_type=summary_type, weights=weights
+    )

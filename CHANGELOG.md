@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-08-12
+
+### Added
+- Confidence scoring config APIs on `OliraClient`/`AsyncOliraClient` and module-level proxies:
+  `get_confidence_scoring()` / `set_confidence_scoring()`, view- and block-scoped get/set,
+  plus `get_view_scorer_params()` / `set_view_scorer_params()` / `set_view_confidence_weights()`.
+  Requires `api:org-config`. New `ConfidenceScoringResult` model and `_confidence_scoring`
+  helpers for scorers-primary config patches.
+
 ## [1.13.0] - 2026-08-12
 
 ### Added

@@ -44,6 +44,7 @@ from .models import (
     ViewBlocksListResult,
     ViewRecentEventsResult,
     ViewResult,
+    ConfidenceScoringResult,
 )
 
 if TYPE_CHECKING:
@@ -401,6 +402,55 @@ class HttpTransport:
         """Activate a materialized version (POST /v1/schemas/{subtype}/versions/{version}/activate). Requires api:org-config scope."""
         raw = self._request("POST", f"/v1/schemas/{subtype}/versions/{version}/activate")
         return SchemaActionResult.model_validate(raw)
+
+    def get_confidence_scoring(self) -> ConfidenceScoringResult:
+        """Get org default confidence scoring (GET /v1/confidence-scoring). Requires api:org-config."""
+        raw = self._request("GET", "/v1/confidence-scoring")
+        return ConfidenceScoringResult.model_validate(raw)
+
+    def set_confidence_scoring(self, confidence_scoring: dict[str, Any] | None) -> ConfidenceScoringResult:
+        """Set or clear org default confidence scoring (PUT /v1/confidence-scoring). Requires api:org-config."""
+        raw = self._request(
+            "PUT",
+            "/v1/confidence-scoring",
+            json={"confidence_scoring": confidence_scoring},
+        )
+        return ConfidenceScoringResult.model_validate(raw)
+
+    def get_view_confidence_scoring(self, summary_type: str) -> ConfidenceScoringResult:
+        """Get view-level confidence scoring (GET /v1/views/{summary_type}/confidence-scoring)."""
+        raw = self._request("GET", f"/v1/views/{summary_type}/confidence-scoring")
+        return ConfidenceScoringResult.model_validate(raw)
+
+    def set_view_confidence_scoring(
+        self, summary_type: str, confidence_scoring: dict[str, Any] | None
+    ) -> ConfidenceScoringResult:
+        """Set or clear view-level confidence scoring. Requires api:org-config."""
+        raw = self._request(
+            "PUT",
+            f"/v1/views/{summary_type}/confidence-scoring",
+            json={"confidence_scoring": confidence_scoring},
+        )
+        return ConfidenceScoringResult.model_validate(raw)
+
+    def get_block_confidence_scoring(self, summary_type: str, block_id: str) -> ConfidenceScoringResult:
+        """Get block-level confidence scoring. Requires api:org-config."""
+        raw = self._request(
+            "GET",
+            f"/v1/views/{summary_type}/blocks/{block_id}/confidence-scoring",
+        )
+        return ConfidenceScoringResult.model_validate(raw)
+
+    def set_block_confidence_scoring(
+        self, summary_type: str, block_id: str, confidence_scoring: dict[str, Any] | None
+    ) -> ConfidenceScoringResult:
+        """Set or clear block-level confidence scoring. Requires api:org-config."""
+        raw = self._request(
+            "PUT",
+            f"/v1/views/{summary_type}/blocks/{block_id}/confidence-scoring",
+            json={"confidence_scoring": confidence_scoring},
+        )
+        return ConfidenceScoringResult.model_validate(raw)
 
     def create_patients_batch(self, patients: list[dict[str, Any]]) -> PatientBatchResult:
         """Batch-create patients (POST /v1/patients/batch). Requires api:manage-patients scope."""
@@ -810,6 +860,49 @@ class AsyncHttpTransport:
         """Activate a materialized version (POST /v1/schemas/{subtype}/versions/{version}/activate). Requires api:org-config scope."""
         raw = await self._request("POST", f"/v1/schemas/{subtype}/versions/{version}/activate")
         return SchemaActionResult.model_validate(raw)
+
+    async def get_confidence_scoring(self) -> ConfidenceScoringResult:
+        raw = await self._request("GET", "/v1/confidence-scoring")
+        return ConfidenceScoringResult.model_validate(raw)
+
+    async def set_confidence_scoring(self, confidence_scoring: dict[str, Any] | None) -> ConfidenceScoringResult:
+        raw = await self._request(
+            "PUT",
+            "/v1/confidence-scoring",
+            json={"confidence_scoring": confidence_scoring},
+        )
+        return ConfidenceScoringResult.model_validate(raw)
+
+    async def get_view_confidence_scoring(self, summary_type: str) -> ConfidenceScoringResult:
+        raw = await self._request("GET", f"/v1/views/{summary_type}/confidence-scoring")
+        return ConfidenceScoringResult.model_validate(raw)
+
+    async def set_view_confidence_scoring(
+        self, summary_type: str, confidence_scoring: dict[str, Any] | None
+    ) -> ConfidenceScoringResult:
+        raw = await self._request(
+            "PUT",
+            f"/v1/views/{summary_type}/confidence-scoring",
+            json={"confidence_scoring": confidence_scoring},
+        )
+        return ConfidenceScoringResult.model_validate(raw)
+
+    async def get_block_confidence_scoring(self, summary_type: str, block_id: str) -> ConfidenceScoringResult:
+        raw = await self._request(
+            "GET",
+            f"/v1/views/{summary_type}/blocks/{block_id}/confidence-scoring",
+        )
+        return ConfidenceScoringResult.model_validate(raw)
+
+    async def set_block_confidence_scoring(
+        self, summary_type: str, block_id: str, confidence_scoring: dict[str, Any] | None
+    ) -> ConfidenceScoringResult:
+        raw = await self._request(
+            "PUT",
+            f"/v1/views/{summary_type}/blocks/{block_id}/confidence-scoring",
+            json={"confidence_scoring": confidence_scoring},
+        )
+        return ConfidenceScoringResult.model_validate(raw)
 
     async def create_patients_batch(self, patients: list[dict[str, Any]]) -> PatientBatchResult:
         """Batch-create patients (POST /v1/patients/batch). Requires api:manage-patients scope."""

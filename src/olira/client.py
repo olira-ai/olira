@@ -20,6 +20,7 @@ from .models import (
     CohortPatientMutationResult,
     CohortTemplateAssignment,
     CohortTemplatesResult,
+    ConfidenceScoringResult,
     CreatePatientRequest,
     EventsResult,
     EventStateModuleResult,
@@ -675,6 +676,78 @@ class OliraClient:
         Archives whichever version was previously active.
         """
         return self._transport.activate_schema_version(subtype, version)
+
+    def get_confidence_scoring(self) -> ConfidenceScoringResult:
+        """Get org default confidence scoring. Requires api:org-config scope."""
+        return self._transport.get_confidence_scoring()
+
+    def set_confidence_scoring(
+        self, *, confidence_scoring: dict[str, Any] | None
+    ) -> ConfidenceScoringResult:
+        """Set or clear org default confidence scoring. Requires api:org-config scope.
+
+        Pass ``confidence_scoring=None`` to clear and fall back to platform built-ins.
+        """
+        return self._transport.set_confidence_scoring(confidence_scoring)
+
+    def get_view_confidence_scoring(self, *, summary_type: str) -> ConfidenceScoringResult:
+        """Get view-level confidence scoring override. Requires api:org-config scope."""
+        return self._transport.get_view_confidence_scoring(summary_type)
+
+    def set_view_confidence_scoring(
+        self, *, summary_type: str, confidence_scoring: dict[str, Any] | None
+    ) -> ConfidenceScoringResult:
+        """Set or clear view-level confidence scoring. Requires api:org-config scope."""
+        return self._transport.set_view_confidence_scoring(summary_type, confidence_scoring)
+
+    def get_block_confidence_scoring(
+        self, *, summary_type: str, block_id: str
+    ) -> ConfidenceScoringResult:
+        """Get block-level confidence scoring override. Requires api:org-config scope."""
+        return self._transport.get_block_confidence_scoring(summary_type, block_id)
+
+    def set_block_confidence_scoring(
+        self, *, summary_type: str, block_id: str, confidence_scoring: dict[str, Any] | None
+    ) -> ConfidenceScoringResult:
+        """Set or clear block-level confidence scoring. Requires api:org-config scope."""
+        return self._transport.set_block_confidence_scoring(
+            summary_type, block_id, confidence_scoring
+        )
+
+    def get_view_scorer_params(self, *, summary_type: str, scorer_id: str) -> dict[str, Any] | None:
+        """Get params for one scorer on a view (None if unset / inheriting)."""
+        from olira._confidence_scoring import get_scorer_params_from_config
+
+        res = self.get_view_confidence_scoring(summary_type=summary_type)
+        return get_scorer_params_from_config(res.confidence_scoring, scorer_id)
+
+    def set_view_scorer_params(
+        self,
+        *,
+        summary_type: str,
+        scorer_id: str,
+        params: dict[str, Any] | None,
+    ) -> ConfidenceScoringResult:
+        """Set or clear one scorer's params on a view (scorers-primary write)."""
+        from olira._confidence_scoring import patch_scorer_in_config
+
+        current = self.get_view_confidence_scoring(summary_type=summary_type)
+        next_cfg = patch_scorer_in_config(current.confidence_scoring, scorer_id, params)
+        return self.set_view_confidence_scoring(
+            summary_type=summary_type, confidence_scoring=next_cfg
+        )
+
+    def set_view_confidence_weights(
+        self, *, summary_type: str, weights: dict[str, float] | None
+    ) -> ConfidenceScoringResult:
+        """Set overall confidence weights on a view (first-order; not a scorer)."""
+        from olira._confidence_scoring import set_weights_in_config
+
+        current = self.get_view_confidence_scoring(summary_type=summary_type)
+        next_cfg = set_weights_in_config(current.confidence_scoring, weights)
+        return self.set_view_confidence_scoring(
+            summary_type=summary_type, confidence_scoring=next_cfg
+        )
 
     def get_patient_token(self, *, patient_id: str) -> PatientToken:
         """Mint a short-lived patient-scoped JWT. Requires sdk:patient-token scope.
@@ -1846,6 +1919,85 @@ class AsyncOliraClient:
         Archives whichever version was previously active.
         """
         return await self._require_transport("activate_schema_version").activate_schema_version(subtype, version)
+
+    async def get_confidence_scoring(self) -> ConfidenceScoringResult:
+        """Get org default confidence scoring. Requires api:org-config scope."""
+        return await self._require_transport("get_confidence_scoring").get_confidence_scoring()
+
+    async def set_confidence_scoring(
+        self, *, confidence_scoring: dict[str, Any] | None
+    ) -> ConfidenceScoringResult:
+        """Set or clear org default confidence scoring. Requires api:org-config scope."""
+        return await self._require_transport("set_confidence_scoring").set_confidence_scoring(
+            confidence_scoring
+        )
+
+    async def get_view_confidence_scoring(self, *, summary_type: str) -> ConfidenceScoringResult:
+        """Get view-level confidence scoring override. Requires api:org-config scope."""
+        return await self._require_transport("get_view_confidence_scoring").get_view_confidence_scoring(
+            summary_type
+        )
+
+    async def set_view_confidence_scoring(
+        self, *, summary_type: str, confidence_scoring: dict[str, Any] | None
+    ) -> ConfidenceScoringResult:
+        """Set or clear view-level confidence scoring. Requires api:org-config scope."""
+        return await self._require_transport("set_view_confidence_scoring").set_view_confidence_scoring(
+            summary_type, confidence_scoring
+        )
+
+    async def get_block_confidence_scoring(
+        self, *, summary_type: str, block_id: str
+    ) -> ConfidenceScoringResult:
+        """Get block-level confidence scoring override. Requires api:org-config scope."""
+        return await self._require_transport("get_block_confidence_scoring").get_block_confidence_scoring(
+            summary_type, block_id
+        )
+
+    async def set_block_confidence_scoring(
+        self, *, summary_type: str, block_id: str, confidence_scoring: dict[str, Any] | None
+    ) -> ConfidenceScoringResult:
+        """Set or clear block-level confidence scoring. Requires api:org-config scope."""
+        return await self._require_transport("set_block_confidence_scoring").set_block_confidence_scoring(
+            summary_type, block_id, confidence_scoring
+        )
+
+    async def get_view_scorer_params(
+        self, *, summary_type: str, scorer_id: str
+    ) -> dict[str, Any] | None:
+        """Get params for one scorer on a view (None if unset / inheriting)."""
+        from olira._confidence_scoring import get_scorer_params_from_config
+
+        res = await self.get_view_confidence_scoring(summary_type=summary_type)
+        return get_scorer_params_from_config(res.confidence_scoring, scorer_id)
+
+    async def set_view_scorer_params(
+        self,
+        *,
+        summary_type: str,
+        scorer_id: str,
+        params: dict[str, Any] | None,
+    ) -> ConfidenceScoringResult:
+        """Set or clear one scorer's params on a view (scorers-primary write)."""
+        from olira._confidence_scoring import patch_scorer_in_config
+
+        current = await self.get_view_confidence_scoring(summary_type=summary_type)
+        next_cfg = patch_scorer_in_config(current.confidence_scoring, scorer_id, params)
+        return await self.set_view_confidence_scoring(
+            summary_type=summary_type, confidence_scoring=next_cfg
+        )
+
+    async def set_view_confidence_weights(
+        self, *, summary_type: str, weights: dict[str, float] | None
+    ) -> ConfidenceScoringResult:
+        """Set overall confidence weights on a view (first-order; not a scorer)."""
+        from olira._confidence_scoring import set_weights_in_config
+
+        current = await self.get_view_confidence_scoring(summary_type=summary_type)
+        next_cfg = set_weights_in_config(current.confidence_scoring, weights)
+        return await self.set_view_confidence_scoring(
+            summary_type=summary_type, confidence_scoring=next_cfg
+        )
 
     async def get_patient_token(self, *, patient_id: str) -> PatientToken:
         """Mint a short-lived patient-scoped JWT. Requires sdk:patient-token scope."""
