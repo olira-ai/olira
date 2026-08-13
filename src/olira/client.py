@@ -238,7 +238,7 @@ class OliraClient:
         """Enqueue a log for background delivery. Returns immediately.
 
         ``write_back=True`` additionally requests that the log be written back
-        into the org's connected EHR (requires the ``sdk:integration-write``
+        into the org's connected system (requires the ``sdk:integration-write``
         scope and platform-side write configuration; silently ignored
         otherwise). With several write-configured integrations of the same
         type, ``write_back_integration_id`` names the target instance.
@@ -1581,7 +1581,7 @@ class AsyncOliraClient:
         """Enqueue a log for background delivery.
 
         ``write_back=True`` additionally requests that the log be written back
-        into the org's connected EHR (requires the ``sdk:integration-write``
+        into the org's connected system (requires the ``sdk:integration-write``
         scope and platform-side write configuration; silently ignored
         otherwise). With several write-configured integrations of the same
         type, ``write_back_integration_id`` names the target instance.

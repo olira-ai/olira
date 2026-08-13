@@ -185,7 +185,7 @@ class LogSpec:
     timestamp: str | None = None
     idempotency_key: str | None = None
     metadata: dict[str, Any] | None = None
-    #: Request write-back of this log into the org's connected EHR. A request,
+    #: Request write-back of this log into the org's connected system. A request,
     #: not a grant: silently ignored unless the API key carries
     #: ``sdk:integration-write`` AND the integration passes the platform write
     #: gate. The log ingests normally either way.
