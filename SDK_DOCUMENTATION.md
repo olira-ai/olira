@@ -1590,7 +1590,7 @@ See the full runnable walkthrough in [`examples/13_outbound_actions.py`](example
 | `ingestion.completed`                   | A historical ingestion job you started finished successfully.                                                  |
 | `ingestion.failed`                      | A historical ingestion job you started did not finish successfully.                                            |
 
-Pass `["*"]` (or `ActionTrigger.ALL`) as `subscribed_triggers` to subscribe to every currently available trigger in the table above. `ActionTrigger` mirrors this table as a `StrEnum`; passing it instead of a plain string gets you autocomplete and catches a typo'd trigger client-side instead of a 422 at request time. A plain string still works everywhere an `ActionTrigger` is accepted. Because `"*"` is evaluated by the platform rather than by this list, a `"*"` subscription could start receiving additional trigger types later without another call on your part.
+Pass `["*"]` (or `ActionTrigger.ALL`) as `subscribed_triggers` to subscribe to every currently available trigger in the table above. `ActionTrigger` mirrors this table as a `StrEnum`; passing it instead of a plain string gets you autocomplete. A plain string still works everywhere an `ActionTrigger` is accepted (nothing validates it client-side, so a typo'd string still reaches the server as a 422). Because `"*"` is evaluated by the platform rather than by this list, a `"*"` subscription could start receiving additional trigger types later without another call on your part.
 
 **Delivery volume: one delivery per trigger, by default.** Subscribing a destination to `patient.state.changed` (or any other high-frequency trigger) does not batch anything on its own: if 50 patients change state within the same minute, that's 50 separate deliveries, meaning 50 separate webhook calls or 50 separate emails, not one summary. This is rarely what you want for an email destination, and it can look like flooding even on a webhook pointed at a chat tool. If you're subscribing to a high-frequency trigger, decide up front whether you want immediate, one-per-event delivery (the default; correct for a pipeline that reacts to each change) or batched, one-per-day delivery (opt in via `digest_schedule`; see [Digest scheduling](#digest-scheduling) below) before you go live, not after the volume surprises you.
 
@@ -1852,18 +1852,24 @@ Every delivery carries an `Olira-Signature` header: `t=<unix_ts>,v1=<hex_hmac>`.
 ```python
 import hashlib
 import hmac
+import time
 
 
-def verify_signature(secret: str, header: str, raw_body: bytes) -> bool:
+def verify_signature(secret: str, header: str, raw_body: bytes, *, max_skew_seconds: int = 300) -> bool:
     fields = dict(part.split("=", 1) for part in header.split(",") if part.startswith("t="))
-    timestamp = fields["t"]
+    try:
+        timestamp = int(fields["t"])
+    except (KeyError, ValueError):
+        return False
+    if abs(time.time() - timestamp) > max_skew_seconds:
+        return False
     signatures = [part.split("=", 1)[1] for part in header.split(",") if part.startswith("v1=")]
     signed_payload = f"{timestamp}.".encode() + raw_body
     expected = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
     return any(hmac.compare_digest(expected, sig) for sig in signatures)
 ```
 
-During secret rotation the header carries **two** `v1=` entries; check if _any_ matches, don't assume there's exactly one. The timestamp is fresh on every attempt (including retries), so reject signatures whose timestamp is too far in the past as a replay-attack defense.
+During secret rotation the header carries **two** `v1=` entries; check if _any_ matches, don't assume there's exactly one. The timestamp is fresh on every attempt (including retries); reject a missing/malformed timestamp, one too far in the past (replay), or one unreasonably far in the future (clock skew or forgery) before checking the signature at all.
 
 ### Digest scheduling
 

@@ -60,17 +60,23 @@ POLL_INTERVAL_SECONDS = 5
 POLL_TIMEOUT_SECONDS = 120
 
 
-def verify_signature(secret: str, header: str, raw_body: bytes) -> bool:
+def verify_signature(secret: str, header: str, raw_body: bytes, *, max_skew_seconds: int = 300) -> bool:
     """Recompute the HMAC your receiver should check against the `Olira-Signature` header.
 
     Format: ``t=<unix_ts>,v1=<hex_hmac>[,v1=<hex_hmac>...]``. Multiple ``v1``
     entries appear only during secret rotation (dual-signing); accept if ANY
     matches, don't assume there's exactly one. The timestamp is fresh on every
-    attempt (including retries), so reject signatures with a timestamp too far
-    in the past as a replay-attack defense.
+    attempt (including retries); reject a missing/malformed timestamp, one too
+    far in the past (replay), or one unreasonably far in the future (clock
+    skew or forgery) before checking the signature at all.
     """
     fields = dict(part.split("=", 1) for part in header.split(",") if part.startswith("t="))
-    timestamp = fields["t"]
+    try:
+        timestamp = int(fields["t"])
+    except (KeyError, ValueError):
+        return False
+    if abs(time.time() - timestamp) > max_skew_seconds:
+        return False
     signatures = [part.split("=", 1)[1] for part in header.split(",") if part.startswith("v1=")]
     signed_payload = f"{timestamp}.".encode() + raw_body
     expected = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
@@ -175,11 +181,10 @@ try:
         # signs; a real receiver verifies the raw bytes it received instead.
         if detail.payload is not None:
             raw_body = json.dumps(detail.payload, separators=(",", ":")).encode()
+            now = int(time.time())
             fake_header = (
-                f"t={int(time.time())},v1="
-                + hmac.new(
-                    signing_secret.encode(), f"{int(time.time())}.".encode() + raw_body, hashlib.sha256
-                ).hexdigest()
+                f"t={now},v1="
+                + hmac.new(signing_secret.encode(), f"{now}.".encode() + raw_body, hashlib.sha256).hexdigest()
             )
             print(f"  signature self-check: {verify_signature(signing_secret, fake_header, raw_body)}")
 
