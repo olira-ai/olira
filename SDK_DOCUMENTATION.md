@@ -1327,7 +1327,7 @@ Enqueue an event for background delivery. Module-level proxy to the singleton cl
 | `write_back_integration_id` | No       | `Optional[str]`            | `None`  |
 
 `write_back=True` requests that this log also be **written back into the org's connected
-EHR** (e.g. a vitals reading pushed into Epic as an `Observation`). It is a request, not a
+system** (e.g. a vitals reading pushed into Epic as an `Observation`). It is a request, not a
 grant: the write fires only when the API key carries the `sdk:integration-write` scope AND
 Olira has write-configured the integration for this `log_type` — otherwise it is a silent
 no-op and the log ingests normally either way.
@@ -1504,7 +1504,7 @@ Lightweight event specification for log_batch(). Not persisted internally.
 | `timestamp`                 | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
 | `idempotency_key`           | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
 | `metadata`                  | No       | `Optional[dict[str, Any]]` | Arbitrary key/value context stored separately from the typed payload. Surfaced in the Olira Console event detail panel. (default: `None`) |
-| `write_back`                | No       | `bool`                     | Request write-back of this log into the org's connected EHR — see [`log`](#log). (default: `False`)                                       |
+| `write_back`                | No       | `bool`                     | Request write-back of this log into the org's connected system — see [`log`](#log). (default: `False`)                                       |
 | `write_back_integration_id` | No       | `Optional[str]`            | Target integration instance for `write_back` when several are write-configured. (default: `None`)                                         |
 
 ### `BatchResult`
@@ -2879,7 +2879,7 @@ events) and is what logs are sorted by for a patient's timeline. `ingested_at` i
 and non-overridable — the moment app-api actually wrote the row — and is only ever populated
 by the platform, never by a caller. The two commonly differ: a backfilled historical event
 might have a `timestamp` from months ago but an `ingested_at` from today's import job; a
-delayed EHR sync might report a `timestamp` from the integration's roster pull with
+delayed integration sync might report a `timestamp` from the integration's roster pull with
 `ingested_at` lagging by minutes or hours. Use `timestamp` to place events on the patient's
 clinical timeline; use `ingested_at` to page/audit by when data actually landed on the
 platform (e.g. "give me everything ingested since my last poll," which `timestamp` alone
