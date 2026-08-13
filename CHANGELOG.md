@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `update_action_destination()`, `delete_action_destination()`,
   `rotate_action_destination_secret()`, `list_action_deliveries()`, `get_action_delivery()`,
   `redeliver_action_delivery()`. Requires the new `sdk:actions` scope. New models:
-  `ActionTrigger` (a `StrEnum` of subscribable triggers, for autocomplete),
+  `ActionTrigger` (a `StrEnum` of subscribable triggers, for autocomplete —
+  includes `integration.sync.failed`),
   `ActionDestination`, `ActionDestinationListResult`,
   `ActionDestinationDeleteResult`, `WebhookDestinationConfig`, `EmailDestinationConfig`,
   `DigestSchedule`, `ActionDelivery`, `ActionDeliveryListResult`, `DeliveryAttempt`,

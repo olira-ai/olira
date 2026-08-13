@@ -31,8 +31,8 @@ Each API key carries one or more scopes. Assign only what your integration needs
 | `sdk:patient-token`     | `get_patient_token()`                                                                                                                                                                                                                                                                                                                                                                   |
 | `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                                                                                                                                                                                                                                                                                 |
 | `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` / `population_logs()`, `create_export()` / `get_export()` / `list_exports()` / `download_export()`, etc.                                                                                                                                                                                                                  |
-| `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — EHR write-back requests (also requires platform-side write configuration)                                                                                                                                                                                                                                                       |
-| `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [EHR Integrations & Instances](#ehr-integrations--instances)                                                                                                                                                                                                                                                    |
+| `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — write-back requests to a connected system (also requires platform-side write configuration)                                                                                                                                                                                                                                                       |
+| `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [Integrations & Instances](#integrations--instances)                                                                                                                                                                                                                                                    |
 | `sdk:actions`           | Outbound-actions destination management and delivery ledger: `create_action_destination()`, `list_action_destinations()`, `get_action_destination()`, `update_action_destination()`, `delete_action_destination()`, `rotate_action_destination_secret()`, `list_action_deliveries()`, `get_action_delivery()`, `redeliver_action_delivery()`. See [Outbound Actions](#outbound-actions) |
 | `mcp:patient-state`     | Query patient state via the MCP Patient State server                                                                                                                                                                                                                                                                                                                                    |
 
@@ -533,12 +533,12 @@ olira.update_patient(
 ```
 
 > **Identifier namespaces are scoped per integration instance.** Identifiers created by an
-> EHR integration sync carry the specific integration's id and belong to that instance's
+> integration sync carry the specific integration's id and belong to that instance's
 > namespace; identifiers you supply through the SDK (MRNs, SSNs) live in their own
 > namespace. The two never collide — an SDK-supplied `("epic", "MRN-12345")` is not
 > rejected just because an Epic instance assigned the same value to another patient, and
 > duplicate checks apply only within each namespace. See
-> [EHR integrations & instances](#ehr-integrations--instances).
+> [Integrations & Instances](#integrations--instances).
 
 ### Delete a patient
 
@@ -564,7 +564,7 @@ symptoms, memories, etc. **Irreversible.**
 
 Use `permanent=True` to clean up a duplicate or erroneously-created patient — e.g. one
 whose external identifier collides with another patient's (see
-[EHR integrations & instances](#ehr-integrations--instances) for how identifiers are
+[Integrations & Instances](#integrations--instances) for how identifiers are
 scoped per integration instance). Soft-deleting is enough to free up the identifier for
 reuse (duplicate checks skip `status=deleted` patients), but its logs stick around until
 you hard-delete it.
@@ -1336,7 +1336,7 @@ An organization may hold **several integrations of the same type** (e.g. Epic fo
 Hospital A and Hospital B). With a single write-configured integration the target is
 inferred; otherwise the patient's integration-linked identifiers disambiguate, and
 `write_back_integration_id` (the integration's id from `GET /v1/integrations`) settles
-ties explicitly — see [EHR integrations & instances](#ehr-integrations--instances).
+ties explicitly — see [Integrations & Instances](#integrations--instances).
 
 Events are enqueued and flushed in the background. Call `olira.flush()` before
 process exit to ensure delivery.
@@ -1527,9 +1527,9 @@ Per-event error from a batch response.
 | `code`    | Yes      | `str` | —           |
 | `message` | Yes      | `str` | —           |
 
-## EHR Integrations & Instances
+## Integrations & Instances
 
-Olira connects to a growing pool of EHR and clinical-data providers — Epic, Healthie,
+Olira connects to a growing pool of integration providers — Epic, Healthie,
 Vivlio, and more (`GET /v1/integrations/catalog` lists what's available). Every provider
 follows the same connect → subscribe → sync → write-back pattern; the examples below use
 Epic. An organization may connect **multiple integrations of the same type** — e.g. Epic
@@ -1566,7 +1566,7 @@ Key rules for SDK users:
   implicitly). Your SDK-created patients and identifiers are untouched by this — see
   [External Identifiers](#external-identifiers).
 - **Chart lookup per instance:** `GET /v1/integrations/{id}/patients/{patient_id}` returns
-  the patient's EHR-side id _at that instance_ (404 if the patient isn't known there).
+  the patient's integration-side id _at that instance_ (404 if the patient isn't known there).
 - **Write-back targets an instance:** the `write_back` flag on [`log`](#log) /
   [`log_batch`](#log_batch) resolves its target integration automatically when
   unambiguous; pass `write_back_integration_id` when your org has several
@@ -1576,7 +1576,7 @@ Key rules for SDK users:
 
 All outbound-actions functions require an API key with the **`sdk:actions`** scope.
 
-**Outbound actions** is how Olira notifies your systems when something happens on the platform: a patient's data updated, a log arrived that changed nothing, a mapping error, or an ingestion job finished. You register a **destination** (a signed HTTPS webhook, or an email) and subscribe it to the triggers you care about. A failed webhook delivery retries automatically and eventually stops if it keeps failing; every attempt is recorded in a durable **delivery ledger** you can inspect and manually resend from. Everything you can do with destinations and deliveries in the Olira Console is available here.
+**Outbound actions** is how Olira notifies your systems when something happens on the platform: a patient's data updated, a log arrived that changed nothing, a mapping error, an ingestion job finished, or an integration failed to sync. You register a **destination** (a signed HTTPS webhook, or an email) and subscribe it to the triggers you care about. A failed webhook delivery retries automatically and eventually stops if it keeps failing; every attempt is recorded in a durable **delivery ledger** you can inspect and manually resend from. Everything you can do with destinations and deliveries in the Olira Console is available here.
 
 See the full runnable walkthrough in [`examples/13_outbound_actions.py`](examples/13_outbound_actions.py).
 
@@ -1589,6 +1589,7 @@ See the full runnable walkthrough in [`examples/13_outbound_actions.py`](example
 | `org.mapping.failed`                    | One of your incoming logs could not be translated into Olira's data model.                                     |
 | `ingestion.completed`                   | A historical ingestion job you started finished successfully.                                                  |
 | `ingestion.failed`                      | A historical ingestion job you started did not finish successfully.                                            |
+| `integration.sync.failed`               | A sync of one of your connected integrations did not finish successfully.                                      |
 
 Pass `["*"]` (or `ActionTrigger.ALL`) as `subscribed_triggers` to subscribe to every currently available trigger in the table above. `ActionTrigger` mirrors this table as a `StrEnum`; passing it instead of a plain string gets you autocomplete. A plain string still works everywhere an `ActionTrigger` is accepted (nothing validates it client-side, so a typo'd string still reaches the server as a 422). Because `"*"` is evaluated by the platform rather than by this list, a `"*"` subscription could start receiving additional trigger types later without another call on your part.
 
@@ -1842,6 +1843,7 @@ The body your webhook endpoint receives (or the JSON in `ActionDelivery.payload`
 | `log.no_state_change` | `event_log_id`, `log_type` |
 | `org.mapping.failed` | `source_subtype`, `error_code` |
 | `ingestion.completed` / `ingestion.failed` | `job_id`, `status`, `patient_count`, `record_count`, `failure_summary` (present only on partial failures) |
+| `integration.sync.failed` | `integration_id`, `data_point_id`, `data_point_name`, `error`, `hint` (when known), `total_records`, `accepted`, `failed`, `unresolved` |
 
 ---
 
@@ -2871,7 +2873,7 @@ for m in memories.results:
 | `trace`       | `OliraTrace \| None` | Provenance trace                                              |
 
 **`timestamp` vs. `ingested_at`:** `timestamp` is the event's own clock — when it actually
-occurred (e.g. when a patient reported a symptom, or the EHR's recorded observation time).
+occurred (e.g. when a patient reported a symptom, or the source system's recorded observation time).
 It's caller-supplied on write (see `log()`'s `timestamp` param, used to backdate historical
 events) and is what logs are sorted by for a patient's timeline. `ingested_at` is server-set
 and non-overridable — the moment app-api actually wrote the row — and is only ever populated

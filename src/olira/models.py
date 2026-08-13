@@ -1046,6 +1046,7 @@ class ActionTrigger(StrEnum):
     ORG_MAPPING_FAILED = "org.mapping.failed"
     INGESTION_COMPLETED = "ingestion.completed"
     INGESTION_FAILED = "ingestion.failed"
+    INTEGRATION_SYNC_FAILED = "integration.sync.failed"
 
 
 RECOMMENDED_DIGEST_TRIGGERS: frozenset[ActionTrigger] = frozenset({ActionTrigger.PATIENT_STATE_CHANGED})

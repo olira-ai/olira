@@ -195,3 +195,7 @@ def test_digest_schedule_time_of_day_defaults_to_nine_am():
 def test_recommended_digest_triggers_matches_console():
     """The Console defaults exactly this trigger to digest batching when subscribed."""
     assert RECOMMENDED_DIGEST_TRIGGERS == {ActionTrigger.PATIENT_STATE_CHANGED}
+
+
+def test_action_trigger_includes_integration_sync_failed():
+    assert ActionTrigger.INTEGRATION_SYNC_FAILED == "integration.sync.failed"
