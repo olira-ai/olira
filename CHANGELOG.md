@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-08-13
+
+### Added
+- Outbound-actions APIs on `OliraClient`/`AsyncOliraClient` and module-level proxies:
+  `create_action_destination()`, `list_action_destinations()`, `get_action_destination()`,
+  `update_action_destination()`, `delete_action_destination()`,
+  `rotate_action_destination_secret()`, `list_action_deliveries()`, `get_action_delivery()`,
+  `redeliver_action_delivery()`. Requires the new `sdk:actions` scope. New models:
+  `ActionTrigger` (a `StrEnum` of subscribable triggers, for autocomplete and client-side
+  typo detection), `ActionDestination`, `ActionDestinationListResult`,
+  `ActionDestinationDeleteResult`, `WebhookDestinationConfig`, `EmailDestinationConfig`,
+  `DigestSchedule`, `ActionDelivery`, `ActionDeliveryListResult`, `DeliveryAttempt`,
+  `ActionDestinationStatus`, `ActionDeliveryStatus`. New example:
+  `examples/13_outbound_actions.py`.
+
 ## [1.14.0] - 2026-08-12
 
 ### Added

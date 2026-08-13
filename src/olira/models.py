@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Self
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .exceptions import ValidationError
 
@@ -1030,3 +1030,166 @@ class LogTypeListResult(BaseModel):
     """Result of list_log_types()."""
 
     data: list[LogType] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Outbound actions (sdk:actions scope)
+# ---------------------------------------------------------------------------
+
+
+class ActionTrigger(StrEnum):
+    """Triggers accepted by ``subscribed_triggers`` / ``digest_schedule.triggers``."""
+
+    ALL = "*"
+    PATIENT_STATE_CHANGED = "patient.state.changed"
+    LOG_NO_STATE_CHANGE = "log.no_state_change"
+    ORG_MAPPING_FAILED = "org.mapping.failed"
+    INGESTION_COMPLETED = "ingestion.completed"
+    INGESTION_FAILED = "ingestion.failed"
+
+
+RECOMMENDED_DIGEST_TRIGGERS: frozenset[ActionTrigger] = frozenset({ActionTrigger.PATIENT_STATE_CHANGED})
+"""Triggers frequent enough that sending every one immediately risks flooding the
+destination. The Olira Console defaults this trigger to digest batching when
+subscribed; every other currently available trigger defaults to send-immediately.
+A suggested starting point, not a hard rule."""
+
+
+class ActionDestinationStatus(StrEnum):
+    """Status of an ``ActionDestination``."""
+
+    ACTIVE = "active"
+    DISABLED = "disabled"
+    AUTO_DISABLED = "auto_disabled"
+
+
+class ActionDeliveryStatus(StrEnum):
+    """Status of an ``ActionDelivery``."""
+
+    PENDING = "pending"
+    MAPPING = "mapping"
+    SENDING = "sending"
+    DELIVERED = "delivered"
+    SKIPPED = "skipped"
+    RETRYING = "retrying"
+    DEAD_LETTER = "dead_letter"
+    BUFFERED = "buffered"
+
+
+class WebhookDestinationConfig(BaseModel):
+    """Config for a webhook destination. Pass as ``config`` to ``create_action_destination()``.
+
+    ``url`` must be public HTTPS; ``http://``, ``localhost``, and private/internal
+    addresses are rejected, both when you set the URL and again every time Olira
+    sends to it.
+    """
+
+    destination_type: str = "webhook"
+    url: str
+    api_version: str = "2026-08-01"
+
+
+class EmailDestinationConfig(BaseModel):
+    """Config for an email destination. Pass as ``config`` to ``create_action_destination()``."""
+
+    destination_type: str = "email"
+    to_email: str
+    subject: str | None = None
+    from_name: str | None = None
+
+
+class DigestSchedule(BaseModel):
+    """Opt-in daily batching for high-frequency triggers on a destination.
+
+    ``triggers`` must be a subset of the destination's ``subscribed_triggers``.
+    ``last_sent_date`` is server-managed and ignored on write. ``time_of_day``
+    defaults to ``"09:00"``, matching the default in the Olira Console.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    time_of_day: str = "09:00"
+    timezone: str = "UTC"
+    triggers: list[ActionTrigger | str] = Field(default_factory=list, alias="event_types")
+    last_sent_date: str | None = None
+
+
+class ActionDestination(BaseModel):
+    """A registered outbound-actions destination (webhook or email)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    project_id: str | None = None
+    destination_type: str
+    status: ActionDestinationStatus
+    description: str | None = None
+    subscribed_triggers: list[ActionTrigger | str] = Field(default_factory=list, alias="subscribed_event_types")
+    config: dict[str, Any] = Field(default_factory=dict)
+    signing_secret_last4: str | None = None
+    rate_limit_per_minute: int | None = None
+    digest_schedule: DigestSchedule | None = None
+    consecutive_failures: int = 0
+    failure_streak_started_at: str | None = None
+    auto_disabled_at: str | None = None
+    rotated_at: str | None = None
+    signing_secret: str | None = None
+    """Plaintext signing secret. Present only on create/rotate responses. Store it now; it is never returned again."""
+
+
+class ActionDestinationListResult(BaseModel):
+    """Result of list_action_destinations()."""
+
+    data: list[ActionDestination] = Field(default_factory=list)
+    total: int = 0
+
+
+class ActionDestinationDeleteResult(BaseModel):
+    """Result of delete_action_destination(): disables the destination."""
+
+    message: str
+    dead_lettered_deliveries: int = 0
+
+
+class DeliveryAttempt(BaseModel):
+    """One delivery attempt within an ``ActionDelivery``."""
+
+    attempt: int
+    at: str
+    outcome: str
+    http_status: int | None = None
+    error_code: str | None = None
+    response_snippet: str | None = None
+    duration_ms: int | None = None
+
+
+class ActionDelivery(BaseModel):
+    """One delivery ledger record: one send of one trigger to one destination."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    project_id: str | None = None
+    destination_id: str
+    destination_type: str
+    trigger: str = Field(alias="event_type")
+    event_id: str
+    status: ActionDeliveryStatus
+    attempts: list[DeliveryAttempt] = Field(default_factory=list)
+    next_attempt_at: str | None = None
+    first_attempted_at: str | None = None
+    delivered_at: str | None = None
+    dead_lettered_at: str | None = None
+    last_error: str | None = None
+    redelivery_of: str | None = None
+    requested_by: str | None = None
+    batched_into: str | None = None
+    payload: dict[str, Any] | None = None
+    """The exact JSON sent to the destination. Present only on get_action_delivery()."""
+
+
+class ActionDeliveryListResult(BaseModel):
+    """Result of list_action_deliveries(): cursor-paginated, newest first."""
+
+    data: list[ActionDelivery] = Field(default_factory=list)
+    next_cursor: str | None = None

@@ -13,6 +13,12 @@ from .http import AsyncHttpTransport, HttpTransport
 from .ingestion_confirm import confirm_ingestion_job_resilient, confirm_ingestion_job_resilient_async
 from .log_query import AsyncLogQuery, LogQuery
 from .models import (
+    ActionDelivery,
+    ActionDeliveryListResult,
+    ActionDestination,
+    ActionDestinationDeleteResult,
+    ActionDestinationListResult,
+    ActionTrigger,
     BatchResult,
     Cohort,
     CohortDeleteResult,
@@ -22,6 +28,8 @@ from .models import (
     CohortTemplatesResult,
     ConfidenceScoringResult,
     CreatePatientRequest,
+    DigestSchedule,
+    EmailDestinationConfig,
     EventsResult,
     EventStateModuleResult,
     EventStateModuleSummary,
@@ -58,6 +66,7 @@ from .models import (
     ViewMeta,
     ViewRecentEventsResult,
     ViewResult,
+    WebhookDestinationConfig,
     _LogWire,
 )
 from .queue import BackgroundWorker
@@ -89,6 +98,31 @@ _CONTENT_TYPE_BY_SUFFIX = {
 
 def _guess_content_type(path: Path) -> str:
     return _CONTENT_TYPE_BY_SUFFIX.get(path.suffix.lower(), "application/pdf")
+
+
+def _dump_action_model(
+    value: "WebhookDestinationConfig | EmailDestinationConfig | dict[str, Any]",
+) -> dict[str, Any]:
+    """Serialize a destination config, or pass a plain dict through unchanged.
+
+    The dict escape hatch is for destination types not yet modeled by this SDK
+    version; those have no renamed fields, so a raw dict is safe to forward as-is.
+    """
+    if isinstance(value, dict):
+        return value
+    dumped: dict[str, Any] = value.model_dump(exclude_none=True)
+    return dumped
+
+
+def _dump_digest_schedule(value: "DigestSchedule", *, exclude: set[str] | None = None) -> dict[str, Any]:
+    """Serialize a DigestSchedule. Unlike ``config``, a raw dict is not accepted:
+    DigestSchedule's ``triggers`` field is not the same name the server expects, so a
+    raw dict would be sent unchanged and silently misread.
+    """
+    if not isinstance(value, DigestSchedule):
+        raise TypeError("digest_schedule must be a DigestSchedule, not a dict.")
+    dumped: dict[str, Any] = value.model_dump(exclude_none=True, exclude=exclude, by_alias=True)
+    return dumped
 
 
 def _build_context(
@@ -495,6 +529,140 @@ class OliraClient:
         """
         self._transport.delete_project(project)
 
+    def create_action_destination(
+        self,
+        *,
+        config: WebhookDestinationConfig | EmailDestinationConfig | dict[str, Any],
+        subscribed_triggers: list[ActionTrigger | str] | None = None,
+        description: str | None = None,
+        static_headers: dict[str, str] | None = None,
+        rate_limit_per_minute: int | None = None,
+        digest_schedule: DigestSchedule | None = None,
+    ) -> ActionDestination:
+        """Register an outbound-actions destination (webhook or email). Requires sdk:actions scope.
+
+        ``config`` selects the destination type: pass a :class:`WebhookDestinationConfig`
+        or :class:`EmailDestinationConfig` (or an equivalent dict for forward-compatibility
+        with destination types not yet modeled by this SDK version). The returned
+        destination's ``signing_secret`` is shown in plaintext exactly once. Store it
+        immediately; it cannot be retrieved again (only rotated).
+        """
+        body: dict[str, Any] = {"config": _dump_action_model(config)}
+        if subscribed_triggers is not None:
+            body["subscribed_event_types"] = subscribed_triggers
+        if description is not None:
+            body["description"] = description
+        if static_headers is not None:
+            body["static_headers"] = static_headers
+        if rate_limit_per_minute is not None:
+            body["rate_limit_per_minute"] = rate_limit_per_minute
+        if digest_schedule is not None:
+            body["digest_schedule"] = _dump_digest_schedule(digest_schedule, exclude={"last_sent_date"})
+        return self._transport.create_action_destination(body)
+
+    def list_action_destinations(self) -> ActionDestinationListResult:
+        """List the organisation's outbound-actions destinations. Requires sdk:actions scope."""
+        return self._transport.list_action_destinations()
+
+    def get_action_destination(self, *, destination_id: str) -> ActionDestination:
+        """Get one outbound-actions destination by id. Requires sdk:actions scope."""
+        return self._transport.get_action_destination(destination_id)
+
+    def update_action_destination(
+        self,
+        *,
+        destination_id: str,
+        url: str | None = None,
+        to_email: str | None = None,
+        subject: str | None = None,
+        description: str | None = None,
+        subscribed_triggers: list[ActionTrigger | str] | None = None,
+        status: str | None = None,
+        static_headers: dict[str, str] | None = None,
+        digest_schedule: DigestSchedule | None = None,
+        clear_digest_schedule: bool = False,
+    ) -> ActionDestination:
+        """Update a destination's config, subscriptions, or status. Requires sdk:actions scope.
+
+        Only the fields you pass are changed. Pass ``clear_digest_schedule=True`` to
+        turn digest batching off; leave both ``digest_schedule`` and
+        ``clear_digest_schedule`` unset to leave the existing schedule untouched.
+        """
+        if digest_schedule is not None and clear_digest_schedule:
+            raise ValueError("pass digest_schedule or clear_digest_schedule, not both")
+        body: dict[str, Any] = {}
+        if url is not None:
+            body["url"] = url
+        if to_email is not None:
+            body["to_email"] = to_email
+        if subject is not None:
+            body["subject"] = subject
+        if description is not None:
+            body["description"] = description
+        if subscribed_triggers is not None:
+            body["subscribed_event_types"] = subscribed_triggers
+        if status is not None:
+            body["status"] = status
+        if static_headers is not None:
+            body["static_headers"] = static_headers
+        if clear_digest_schedule:
+            body["digest_schedule"] = None
+        elif digest_schedule is not None:
+            body["digest_schedule"] = _dump_digest_schedule(digest_schedule, exclude={"last_sent_date"})
+        return self._transport.update_action_destination(destination_id, body)
+
+    def delete_action_destination(self, *, destination_id: str) -> ActionDestinationDeleteResult:
+        """Disable a destination. In-flight deliveries are stopped and will not be retried. Requires sdk:actions scope."""
+        return self._transport.delete_action_destination(destination_id)
+
+    def rotate_action_destination_secret(self, *, destination_id: str) -> ActionDestination:
+        """Rotate a destination's signing secret. Requires sdk:actions scope.
+
+        The old secret is honored for 24h (dual-signing) so in-flight
+        rotations on the receiving end don't drop deliveries. The new
+        ``signing_secret`` is shown in plaintext exactly once.
+        """
+        return self._transport.rotate_action_destination_secret(destination_id)
+
+    def list_action_deliveries(
+        self,
+        *,
+        destination_id: str | None = None,
+        status: str | None = None,
+        trigger: ActionTrigger | str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> ActionDeliveryListResult:
+        """List deliveries, newest first, cursor-paginated. Requires sdk:actions scope.
+
+        Pass the previous call's ``next_cursor`` back in as ``cursor`` to fetch the
+        next page; ``next_cursor`` is ``None`` once you've reached the last page.
+        """
+        params: dict[str, Any] = {}
+        if destination_id is not None:
+            params["destination_id"] = destination_id
+        if status is not None:
+            params["status"] = status
+        if trigger is not None:
+            params["event_type"] = trigger
+        if cursor is not None:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = limit
+        return self._transport.list_action_deliveries(params)
+
+    def get_action_delivery(self, *, delivery_id: str) -> ActionDelivery:
+        """Get one delivery's full attempt history, including the exact JSON that was sent. Requires sdk:actions scope."""
+        return self._transport.get_action_delivery(delivery_id)
+
+    def redeliver_action_delivery(self, *, delivery_id: str) -> ActionDelivery:
+        """Resend a delivery's exact original bytes. Requires sdk:actions scope.
+
+        Raises :class:`ServerError` (HTTP 409) if the destination is currently disabled;
+        re-enable it first.
+        """
+        return self._transport.redeliver_action_delivery(delivery_id)
+
     def list_cohorts(self) -> CohortListResult:
         """List all cohorts in the organisation. Requires api:manage-patients scope."""
         return self._transport.list_cohorts()
@@ -681,9 +849,7 @@ class OliraClient:
         """Get org default confidence scoring. Requires api:org-config scope."""
         return self._transport.get_confidence_scoring()
 
-    def set_confidence_scoring(
-        self, *, confidence_scoring: dict[str, Any] | None
-    ) -> ConfidenceScoringResult:
+    def set_confidence_scoring(self, *, confidence_scoring: dict[str, Any] | None) -> ConfidenceScoringResult:
         """Set or clear org default confidence scoring. Requires api:org-config scope.
 
         Pass ``confidence_scoring=None`` to clear and fall back to platform built-ins.
@@ -700,9 +866,7 @@ class OliraClient:
         """Set or clear view-level confidence scoring. Requires api:org-config scope."""
         return self._transport.set_view_confidence_scoring(summary_type, confidence_scoring)
 
-    def get_block_confidence_scoring(
-        self, *, summary_type: str, block_id: str
-    ) -> ConfidenceScoringResult:
+    def get_block_confidence_scoring(self, *, summary_type: str, block_id: str) -> ConfidenceScoringResult:
         """Get block-level confidence scoring override. Requires api:org-config scope."""
         return self._transport.get_block_confidence_scoring(summary_type, block_id)
 
@@ -710,9 +874,7 @@ class OliraClient:
         self, *, summary_type: str, block_id: str, confidence_scoring: dict[str, Any] | None
     ) -> ConfidenceScoringResult:
         """Set or clear block-level confidence scoring. Requires api:org-config scope."""
-        return self._transport.set_block_confidence_scoring(
-            summary_type, block_id, confidence_scoring
-        )
+        return self._transport.set_block_confidence_scoring(summary_type, block_id, confidence_scoring)
 
     def get_view_scorer_params(self, *, summary_type: str, scorer_id: str) -> dict[str, Any] | None:
         """Get params for one scorer on a view (None if unset / inheriting)."""
@@ -733,9 +895,7 @@ class OliraClient:
 
         current = self.get_view_confidence_scoring(summary_type=summary_type)
         next_cfg = patch_scorer_in_config(current.confidence_scoring, scorer_id, params)
-        return self.set_view_confidence_scoring(
-            summary_type=summary_type, confidence_scoring=next_cfg
-        )
+        return self.set_view_confidence_scoring(summary_type=summary_type, confidence_scoring=next_cfg)
 
     def set_view_confidence_weights(
         self, *, summary_type: str, weights: dict[str, float] | None
@@ -745,9 +905,7 @@ class OliraClient:
 
         current = self.get_view_confidence_scoring(summary_type=summary_type)
         next_cfg = set_weights_in_config(current.confidence_scoring, weights)
-        return self.set_view_confidence_scoring(
-            summary_type=summary_type, confidence_scoring=next_cfg
-        )
+        return self.set_view_confidence_scoring(summary_type=summary_type, confidence_scoring=next_cfg)
 
     def get_patient_token(self, *, patient_id: str) -> PatientToken:
         """Mint a short-lived patient-scoped JWT. Requires sdk:patient-token scope.
@@ -1740,6 +1898,144 @@ class AsyncOliraClient:
         """
         await self._require_transport("delete_project").delete_project(project)
 
+    async def create_action_destination(
+        self,
+        *,
+        config: WebhookDestinationConfig | EmailDestinationConfig | dict[str, Any],
+        subscribed_triggers: list[ActionTrigger | str] | None = None,
+        description: str | None = None,
+        static_headers: dict[str, str] | None = None,
+        rate_limit_per_minute: int | None = None,
+        digest_schedule: DigestSchedule | None = None,
+    ) -> ActionDestination:
+        """Register an outbound-actions destination (webhook or email). Requires sdk:actions scope.
+
+        ``config`` selects the destination type: pass a :class:`WebhookDestinationConfig`
+        or :class:`EmailDestinationConfig` (or an equivalent dict for forward-compatibility
+        with destination types not yet modeled by this SDK version). The returned
+        destination's ``signing_secret`` is shown in plaintext exactly once. Store it
+        immediately; it cannot be retrieved again (only rotated).
+        """
+        body: dict[str, Any] = {"config": _dump_action_model(config)}
+        if subscribed_triggers is not None:
+            body["subscribed_event_types"] = subscribed_triggers
+        if description is not None:
+            body["description"] = description
+        if static_headers is not None:
+            body["static_headers"] = static_headers
+        if rate_limit_per_minute is not None:
+            body["rate_limit_per_minute"] = rate_limit_per_minute
+        if digest_schedule is not None:
+            body["digest_schedule"] = _dump_digest_schedule(digest_schedule, exclude={"last_sent_date"})
+        return await self._require_transport("create_action_destination").create_action_destination(body)
+
+    async def list_action_destinations(self) -> ActionDestinationListResult:
+        """List the organisation's outbound-actions destinations. Requires sdk:actions scope."""
+        return await self._require_transport("list_action_destinations").list_action_destinations()
+
+    async def get_action_destination(self, *, destination_id: str) -> ActionDestination:
+        """Get one outbound-actions destination by id. Requires sdk:actions scope."""
+        return await self._require_transport("get_action_destination").get_action_destination(destination_id)
+
+    async def update_action_destination(
+        self,
+        *,
+        destination_id: str,
+        url: str | None = None,
+        to_email: str | None = None,
+        subject: str | None = None,
+        description: str | None = None,
+        subscribed_triggers: list[ActionTrigger | str] | None = None,
+        status: str | None = None,
+        static_headers: dict[str, str] | None = None,
+        digest_schedule: DigestSchedule | None = None,
+        clear_digest_schedule: bool = False,
+    ) -> ActionDestination:
+        """Update a destination's config, subscriptions, or status. Requires sdk:actions scope.
+
+        Only the fields you pass are changed. Pass ``clear_digest_schedule=True`` to
+        turn digest batching off; leave both ``digest_schedule`` and
+        ``clear_digest_schedule`` unset to leave the existing schedule untouched.
+        """
+        if digest_schedule is not None and clear_digest_schedule:
+            raise ValueError("pass digest_schedule or clear_digest_schedule, not both")
+        body: dict[str, Any] = {}
+        if url is not None:
+            body["url"] = url
+        if to_email is not None:
+            body["to_email"] = to_email
+        if subject is not None:
+            body["subject"] = subject
+        if description is not None:
+            body["description"] = description
+        if subscribed_triggers is not None:
+            body["subscribed_event_types"] = subscribed_triggers
+        if status is not None:
+            body["status"] = status
+        if static_headers is not None:
+            body["static_headers"] = static_headers
+        if clear_digest_schedule:
+            body["digest_schedule"] = None
+        elif digest_schedule is not None:
+            body["digest_schedule"] = _dump_digest_schedule(digest_schedule, exclude={"last_sent_date"})
+        return await self._require_transport("update_action_destination").update_action_destination(
+            destination_id, body
+        )
+
+    async def delete_action_destination(self, *, destination_id: str) -> ActionDestinationDeleteResult:
+        """Disable a destination. In-flight deliveries are stopped and will not be retried. Requires sdk:actions scope."""
+        return await self._require_transport("delete_action_destination").delete_action_destination(destination_id)
+
+    async def rotate_action_destination_secret(self, *, destination_id: str) -> ActionDestination:
+        """Rotate a destination's signing secret. Requires sdk:actions scope.
+
+        The old secret is honored for 24h (dual-signing) so in-flight
+        rotations on the receiving end don't drop deliveries. The new
+        ``signing_secret`` is shown in plaintext exactly once.
+        """
+        return await self._require_transport("rotate_action_destination_secret").rotate_action_destination_secret(
+            destination_id
+        )
+
+    async def list_action_deliveries(
+        self,
+        *,
+        destination_id: str | None = None,
+        status: str | None = None,
+        trigger: ActionTrigger | str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> ActionDeliveryListResult:
+        """List deliveries, newest first, cursor-paginated. Requires sdk:actions scope.
+
+        Pass the previous call's ``next_cursor`` back in as ``cursor`` to fetch the
+        next page; ``next_cursor`` is ``None`` once you've reached the last page.
+        """
+        params: dict[str, Any] = {}
+        if destination_id is not None:
+            params["destination_id"] = destination_id
+        if status is not None:
+            params["status"] = status
+        if trigger is not None:
+            params["event_type"] = trigger
+        if cursor is not None:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = limit
+        return await self._require_transport("list_action_deliveries").list_action_deliveries(params)
+
+    async def get_action_delivery(self, *, delivery_id: str) -> ActionDelivery:
+        """Get one delivery's full attempt history, including the exact JSON that was sent. Requires sdk:actions scope."""
+        return await self._require_transport("get_action_delivery").get_action_delivery(delivery_id)
+
+    async def redeliver_action_delivery(self, *, delivery_id: str) -> ActionDelivery:
+        """Resend a delivery's exact original bytes. Requires sdk:actions scope.
+
+        Raises :class:`ServerError` (HTTP 409) if the destination is currently disabled;
+        re-enable it first.
+        """
+        return await self._require_transport("redeliver_action_delivery").redeliver_action_delivery(delivery_id)
+
     async def list_cohorts(self) -> CohortListResult:
         """List all cohorts in the organisation. Requires api:manage-patients scope."""
         return await self._require_transport("list_cohorts").list_cohorts()
@@ -1924,19 +2220,13 @@ class AsyncOliraClient:
         """Get org default confidence scoring. Requires api:org-config scope."""
         return await self._require_transport("get_confidence_scoring").get_confidence_scoring()
 
-    async def set_confidence_scoring(
-        self, *, confidence_scoring: dict[str, Any] | None
-    ) -> ConfidenceScoringResult:
+    async def set_confidence_scoring(self, *, confidence_scoring: dict[str, Any] | None) -> ConfidenceScoringResult:
         """Set or clear org default confidence scoring. Requires api:org-config scope."""
-        return await self._require_transport("set_confidence_scoring").set_confidence_scoring(
-            confidence_scoring
-        )
+        return await self._require_transport("set_confidence_scoring").set_confidence_scoring(confidence_scoring)
 
     async def get_view_confidence_scoring(self, *, summary_type: str) -> ConfidenceScoringResult:
         """Get view-level confidence scoring override. Requires api:org-config scope."""
-        return await self._require_transport("get_view_confidence_scoring").get_view_confidence_scoring(
-            summary_type
-        )
+        return await self._require_transport("get_view_confidence_scoring").get_view_confidence_scoring(summary_type)
 
     async def set_view_confidence_scoring(
         self, *, summary_type: str, confidence_scoring: dict[str, Any] | None
@@ -1946,9 +2236,7 @@ class AsyncOliraClient:
             summary_type, confidence_scoring
         )
 
-    async def get_block_confidence_scoring(
-        self, *, summary_type: str, block_id: str
-    ) -> ConfidenceScoringResult:
+    async def get_block_confidence_scoring(self, *, summary_type: str, block_id: str) -> ConfidenceScoringResult:
         """Get block-level confidence scoring override. Requires api:org-config scope."""
         return await self._require_transport("get_block_confidence_scoring").get_block_confidence_scoring(
             summary_type, block_id
@@ -1962,9 +2250,7 @@ class AsyncOliraClient:
             summary_type, block_id, confidence_scoring
         )
 
-    async def get_view_scorer_params(
-        self, *, summary_type: str, scorer_id: str
-    ) -> dict[str, Any] | None:
+    async def get_view_scorer_params(self, *, summary_type: str, scorer_id: str) -> dict[str, Any] | None:
         """Get params for one scorer on a view (None if unset / inheriting)."""
         from olira._confidence_scoring import get_scorer_params_from_config
 
@@ -1983,9 +2269,7 @@ class AsyncOliraClient:
 
         current = await self.get_view_confidence_scoring(summary_type=summary_type)
         next_cfg = patch_scorer_in_config(current.confidence_scoring, scorer_id, params)
-        return await self.set_view_confidence_scoring(
-            summary_type=summary_type, confidence_scoring=next_cfg
-        )
+        return await self.set_view_confidence_scoring(summary_type=summary_type, confidence_scoring=next_cfg)
 
     async def set_view_confidence_weights(
         self, *, summary_type: str, weights: dict[str, float] | None
@@ -1995,9 +2279,7 @@ class AsyncOliraClient:
 
         current = await self.get_view_confidence_scoring(summary_type=summary_type)
         next_cfg = set_weights_in_config(current.confidence_scoring, weights)
-        return await self.set_view_confidence_scoring(
-            summary_type=summary_type, confidence_scoring=next_cfg
-        )
+        return await self.set_view_confidence_scoring(summary_type=summary_type, confidence_scoring=next_cfg)
 
     async def get_patient_token(self, *, patient_id: str) -> PatientToken:
         """Mint a short-lived patient-scoped JWT. Requires sdk:patient-token scope."""

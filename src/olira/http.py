@@ -9,6 +9,11 @@ import httpx
 
 from .exceptions import AuthError, NetworkError, RateLimitError, ServerError, ValidationError
 from .models import (
+    ActionDelivery,
+    ActionDeliveryListResult,
+    ActionDestination,
+    ActionDestinationDeleteResult,
+    ActionDestinationListResult,
     BatchResult,
     Cohort,
     CohortDeleteResult,
@@ -16,6 +21,7 @@ from .models import (
     CohortPatientMutationResult,
     CohortTemplateAssignment,
     CohortTemplatesResult,
+    ConfidenceScoringResult,
     EventsResult,
     EventStateModuleResult,
     ExportDownload,
@@ -44,7 +50,6 @@ from .models import (
     ViewBlocksListResult,
     ViewRecentEventsResult,
     ViewResult,
-    ConfidenceScoringResult,
 )
 
 if TYPE_CHECKING:
@@ -594,6 +599,55 @@ class HttpTransport:
         return BatchResult.model_validate(raw)
 
     # ------------------------------------------------------------------
+    # Outbound actions (requires sdk:actions scope)
+    # ------------------------------------------------------------------
+
+    def create_action_destination(self, body: dict[str, Any]) -> ActionDestination:
+        """Create an action destination (POST /v1/actions/destinations). Requires sdk:actions scope."""
+        raw = self._request("POST", "/v1/actions/destinations", json=body, retryable=False)
+        return ActionDestination.model_validate(raw)
+
+    def list_action_destinations(self) -> ActionDestinationListResult:
+        """List action destinations (GET /v1/actions/destinations). Requires sdk:actions scope."""
+        raw = self._request("GET", "/v1/actions/destinations")
+        return ActionDestinationListResult.model_validate(raw)
+
+    def get_action_destination(self, destination_id: str) -> ActionDestination:
+        """Get one action destination (GET /v1/actions/destinations/{id}). Requires sdk:actions scope."""
+        raw = self._request("GET", f"/v1/actions/destinations/{destination_id}")
+        return ActionDestination.model_validate(raw)
+
+    def update_action_destination(self, destination_id: str, body: dict[str, Any]) -> ActionDestination:
+        """Update an action destination (PATCH /v1/actions/destinations/{id}). Requires sdk:actions scope."""
+        raw = self._request("PATCH", f"/v1/actions/destinations/{destination_id}", json=body)
+        return ActionDestination.model_validate(raw)
+
+    def delete_action_destination(self, destination_id: str) -> ActionDestinationDeleteResult:
+        """Disable an action destination (DELETE /v1/actions/destinations/{id}). Requires sdk:actions scope."""
+        raw = self._request("DELETE", f"/v1/actions/destinations/{destination_id}")
+        return ActionDestinationDeleteResult.model_validate(raw)
+
+    def rotate_action_destination_secret(self, destination_id: str) -> ActionDestination:
+        """Rotate a destination's signing secret (POST .../rotate-secret). Requires sdk:actions scope."""
+        raw = self._request("POST", f"/v1/actions/destinations/{destination_id}/rotate-secret", retryable=False)
+        return ActionDestination.model_validate(raw)
+
+    def list_action_deliveries(self, params: dict[str, Any]) -> ActionDeliveryListResult:
+        """List deliveries, cursor-paginated (GET /v1/actions/deliveries). Requires sdk:actions scope."""
+        raw = self._request("GET", "/v1/actions/deliveries", params=params)
+        return ActionDeliveryListResult.model_validate(raw)
+
+    def get_action_delivery(self, delivery_id: str) -> ActionDelivery:
+        """Get one delivery, including its payload (GET /v1/actions/deliveries/{id})."""
+        raw = self._request("GET", f"/v1/actions/deliveries/{delivery_id}")
+        return ActionDelivery.model_validate(raw)
+
+    def redeliver_action_delivery(self, delivery_id: str) -> ActionDelivery:
+        """Redeliver the exact original bytes (POST .../redeliver). 409 if the destination is disabled."""
+        raw = self._request("POST", f"/v1/actions/deliveries/{delivery_id}/redeliver", retryable=False)
+        return ActionDelivery.model_validate(raw)
+
+    # ------------------------------------------------------------------
     # Passive signal ingestion (requires sdk:event-log scope)
     # ------------------------------------------------------------------
 
@@ -1045,6 +1099,55 @@ class AsyncHttpTransport:
         """Submit a single FHIR R4 resource (POST /v1/fhir/resource). Requires sdk:event-log scope."""
         raw = await self._request("POST", "/v1/fhir/resource", json={"patient_id": patient_id, "resource": resource})
         return BatchResult.model_validate(raw)
+
+    # ------------------------------------------------------------------
+    # Outbound actions (requires sdk:actions scope)
+    # ------------------------------------------------------------------
+
+    async def create_action_destination(self, body: dict[str, Any]) -> ActionDestination:
+        """Create an action destination (POST /v1/actions/destinations). Requires sdk:actions scope."""
+        raw = await self._request("POST", "/v1/actions/destinations", json=body, retryable=False)
+        return ActionDestination.model_validate(raw)
+
+    async def list_action_destinations(self) -> ActionDestinationListResult:
+        """List action destinations (GET /v1/actions/destinations). Requires sdk:actions scope."""
+        raw = await self._request("GET", "/v1/actions/destinations")
+        return ActionDestinationListResult.model_validate(raw)
+
+    async def get_action_destination(self, destination_id: str) -> ActionDestination:
+        """Get one action destination (GET /v1/actions/destinations/{id}). Requires sdk:actions scope."""
+        raw = await self._request("GET", f"/v1/actions/destinations/{destination_id}")
+        return ActionDestination.model_validate(raw)
+
+    async def update_action_destination(self, destination_id: str, body: dict[str, Any]) -> ActionDestination:
+        """Update an action destination (PATCH /v1/actions/destinations/{id}). Requires sdk:actions scope."""
+        raw = await self._request("PATCH", f"/v1/actions/destinations/{destination_id}", json=body)
+        return ActionDestination.model_validate(raw)
+
+    async def delete_action_destination(self, destination_id: str) -> ActionDestinationDeleteResult:
+        """Disable an action destination (DELETE /v1/actions/destinations/{id}). Requires sdk:actions scope."""
+        raw = await self._request("DELETE", f"/v1/actions/destinations/{destination_id}")
+        return ActionDestinationDeleteResult.model_validate(raw)
+
+    async def rotate_action_destination_secret(self, destination_id: str) -> ActionDestination:
+        """Rotate a destination's signing secret (POST .../rotate-secret). Requires sdk:actions scope."""
+        raw = await self._request("POST", f"/v1/actions/destinations/{destination_id}/rotate-secret", retryable=False)
+        return ActionDestination.model_validate(raw)
+
+    async def list_action_deliveries(self, params: dict[str, Any]) -> ActionDeliveryListResult:
+        """List deliveries, cursor-paginated (GET /v1/actions/deliveries). Requires sdk:actions scope."""
+        raw = await self._request("GET", "/v1/actions/deliveries", params=params)
+        return ActionDeliveryListResult.model_validate(raw)
+
+    async def get_action_delivery(self, delivery_id: str) -> ActionDelivery:
+        """Get one delivery, including its payload (GET /v1/actions/deliveries/{id})."""
+        raw = await self._request("GET", f"/v1/actions/deliveries/{delivery_id}")
+        return ActionDelivery.model_validate(raw)
+
+    async def redeliver_action_delivery(self, delivery_id: str) -> ActionDelivery:
+        """Redeliver the exact original bytes (POST .../redeliver). 409 if the destination is disabled."""
+        raw = await self._request("POST", f"/v1/actions/deliveries/{delivery_id}/redeliver", retryable=False)
+        return ActionDelivery.model_validate(raw)
 
     async def _request(
         self,
