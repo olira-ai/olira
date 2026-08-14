@@ -165,6 +165,39 @@ client.close()
 
 ---
 
+## Outbound Actions
+
+Get notified when something happens on the platform: a patient's data updated, a log arrived that changed nothing, a mapping error, an ingestion job finished, or an integration failed to sync. Register a **destination** (a signed HTTPS webhook, or an email) and subscribe it to the triggers you care about. Failed webhook deliveries retry automatically and eventually stop if they keep failing; every delivery attempt is recorded in a durable ledger you can inspect and manually resend. Requires the `sdk:actions` scope.
+
+```python
+from olira import OliraClient, WebhookDestinationConfig
+
+client = OliraClient(api_key="olira_prod_...")
+
+# Register a destination (the signing secret is shown once, store it now)
+destination = client.create_action_destination(
+    config=WebhookDestinationConfig(url="https://hooks.example.com/olira"),
+    subscribed_triggers=["patient.state.changed", "ingestion.failed"],
+)
+print(destination.signing_secret)
+
+# Inspect the delivery ledger
+deliveries = client.list_action_deliveries(destination_id=destination.id, status="delivered")
+for d in deliveries.data:
+    print(d.id, d.trigger, d.status)
+
+# Resend a delivery's exact original bytes
+client.redeliver_action_delivery(delivery_id=deliveries.data[0].id)
+
+# Rotate the signing secret (old one stays valid 24h for dual-signing)
+client.rotate_action_destination_secret(destination_id=destination.id)
+client.close()
+```
+
+Full reference, including the HMAC verification snippet, digest batching, and cursor pagination, in [`SDK_DOCUMENTATION.md`](SDK_DOCUMENTATION.md#outbound-actions) and the runnable [`examples/13_outbound_actions.py`](examples/13_outbound_actions.py).
+
+---
+
 ## Logging
 
 Log a single event in the background (fire-and-forget):

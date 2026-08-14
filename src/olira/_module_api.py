@@ -13,6 +13,12 @@ from .client import DEFAULT_BASE_URL, OliraClient, OliraEnv
 from .exceptions import OliraError
 from .log_query import LogQuery
 from .models import (
+    ActionDelivery,
+    ActionDeliveryListResult,
+    ActionDestination,
+    ActionDestinationDeleteResult,
+    ActionDestinationListResult,
+    ActionTrigger,
     BatchResult,
     Cohort,
     CohortDeleteResult,
@@ -22,6 +28,8 @@ from .models import (
     CohortTemplatesResult,
     ConfidenceScoringResult,
     CreatePatientRequest,
+    DigestSchedule,
+    EmailDestinationConfig,
     EventsResult,
     EventStateModuleResult,
     EventStateModuleSummary,
@@ -52,6 +60,7 @@ from .models import (
     ViewMeta,
     ViewRecentEventsResult,
     ViewResult,
+    WebhookDestinationConfig,
 )
 
 _client: OliraClient | None = None
@@ -587,6 +596,112 @@ def delete_project(*, project: str) -> None:
     _get_client().delete_project(project=project)
 
 
+def create_action_destination(
+    *,
+    config: WebhookDestinationConfig | EmailDestinationConfig | dict[str, Any],
+    subscribed_triggers: list[ActionTrigger | str] | None = None,
+    description: str | None = None,
+    static_headers: dict[str, str] | None = None,
+    rate_limit_per_minute: int | None = None,
+    digest_schedule: DigestSchedule | None = None,
+) -> ActionDestination:
+    """Register an outbound-actions destination (webhook or email). Module-level proxy.
+
+    Requires sdk:actions scope. The returned destination's ``signing_secret`` is
+    shown in plaintext exactly once. Store it immediately.
+    """
+    return _get_client().create_action_destination(
+        config=config,
+        subscribed_triggers=subscribed_triggers,
+        description=description,
+        static_headers=static_headers,
+        rate_limit_per_minute=rate_limit_per_minute,
+        digest_schedule=digest_schedule,
+    )
+
+
+def list_action_destinations() -> ActionDestinationListResult:
+    """List the organisation's outbound-actions destinations. Module-level proxy."""
+    return _get_client().list_action_destinations()
+
+
+def get_action_destination(*, destination_id: str) -> ActionDestination:
+    """Get one outbound-actions destination by id. Module-level proxy."""
+    return _get_client().get_action_destination(destination_id=destination_id)
+
+
+def update_action_destination(
+    *,
+    destination_id: str,
+    url: str | None = None,
+    to_email: str | None = None,
+    subject: str | None = None,
+    description: str | None = None,
+    subscribed_triggers: list[ActionTrigger | str] | None = None,
+    status: str | None = None,
+    static_headers: dict[str, str] | None = None,
+    digest_schedule: DigestSchedule | None = None,
+    clear_digest_schedule: bool = False,
+) -> ActionDestination:
+    """Update a destination's config, subscriptions, or status. Module-level proxy.
+
+    Pass ``clear_digest_schedule=True`` to turn digest batching off; leave both
+    ``digest_schedule`` and ``clear_digest_schedule`` unset to leave it untouched.
+    """
+    return _get_client().update_action_destination(
+        destination_id=destination_id,
+        url=url,
+        to_email=to_email,
+        subject=subject,
+        description=description,
+        subscribed_triggers=subscribed_triggers,
+        status=status,
+        static_headers=static_headers,
+        digest_schedule=digest_schedule,
+        clear_digest_schedule=clear_digest_schedule,
+    )
+
+
+def delete_action_destination(*, destination_id: str) -> ActionDestinationDeleteResult:
+    """Disable a destination. Module-level proxy."""
+    return _get_client().delete_action_destination(destination_id=destination_id)
+
+
+def rotate_action_destination_secret(*, destination_id: str) -> ActionDestination:
+    """Rotate a destination's signing secret. Module-level proxy.
+
+    The new ``signing_secret`` is shown in plaintext exactly once.
+    """
+    return _get_client().rotate_action_destination_secret(destination_id=destination_id)
+
+
+def list_action_deliveries(
+    *,
+    destination_id: str | None = None,
+    status: str | None = None,
+    trigger: ActionTrigger | str | None = None,
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> ActionDeliveryListResult:
+    """List deliveries, newest first, cursor-paginated. Module-level proxy."""
+    return _get_client().list_action_deliveries(
+        destination_id=destination_id, status=status, trigger=trigger, cursor=cursor, limit=limit
+    )
+
+
+def get_action_delivery(*, delivery_id: str) -> ActionDelivery:
+    """Get one delivery's full attempt history, including the JSON Olira sent. Module-level proxy."""
+    return _get_client().get_action_delivery(delivery_id=delivery_id)
+
+
+def redeliver_action_delivery(*, delivery_id: str) -> ActionDelivery:
+    """Resend a delivery's exact original bytes. Module-level proxy.
+
+    Raises :class:`ServerError` (HTTP 409) if the destination is currently disabled.
+    """
+    return _get_client().redeliver_action_delivery(delivery_id=delivery_id)
+
+
 def create_cohort(*, name: str, description: str | None = None) -> Cohort:
     """Create a named patient cohort. Module-level proxy to the singleton client.
 
@@ -804,9 +919,7 @@ def get_confidence_scoring() -> ConfidenceScoringResult:
     return _get_client().get_confidence_scoring()
 
 
-def set_confidence_scoring(
-    *, confidence_scoring: dict[str, Any] | None
-) -> ConfidenceScoringResult:
+def set_confidence_scoring(*, confidence_scoring: dict[str, Any] | None) -> ConfidenceScoringResult:
     """Set or clear org default confidence scoring. Module-level proxy.
 
     Requires an API key with the api:org-config scope. Pass ``None`` to clear
@@ -830,21 +943,15 @@ def set_view_confidence_scoring(
 
     Requires an API key with the api:org-config scope.
     """
-    return _get_client().set_view_confidence_scoring(
-        summary_type=summary_type, confidence_scoring=confidence_scoring
-    )
+    return _get_client().set_view_confidence_scoring(summary_type=summary_type, confidence_scoring=confidence_scoring)
 
 
-def get_block_confidence_scoring(
-    *, summary_type: str, block_id: str
-) -> ConfidenceScoringResult:
+def get_block_confidence_scoring(*, summary_type: str, block_id: str) -> ConfidenceScoringResult:
     """Get block-level confidence scoring override. Module-level proxy.
 
     Requires an API key with the api:org-config scope.
     """
-    return _get_client().get_block_confidence_scoring(
-        summary_type=summary_type, block_id=block_id
-    )
+    return _get_client().get_block_confidence_scoring(summary_type=summary_type, block_id=block_id)
 
 
 def set_block_confidence_scoring(
@@ -863,9 +970,7 @@ def set_block_confidence_scoring(
 
 def get_view_scorer_params(*, summary_type: str, scorer_id: str) -> dict[str, Any] | None:
     """Get params for one scorer on a view. Module-level proxy."""
-    return _get_client().get_view_scorer_params(
-        summary_type=summary_type, scorer_id=scorer_id
-    )
+    return _get_client().get_view_scorer_params(summary_type=summary_type, scorer_id=scorer_id)
 
 
 def set_view_scorer_params(
@@ -875,15 +980,9 @@ def set_view_scorer_params(
     params: dict[str, Any] | None,
 ) -> ConfidenceScoringResult:
     """Set or clear one scorer's params on a view. Module-level proxy."""
-    return _get_client().set_view_scorer_params(
-        summary_type=summary_type, scorer_id=scorer_id, params=params
-    )
+    return _get_client().set_view_scorer_params(summary_type=summary_type, scorer_id=scorer_id, params=params)
 
 
-def set_view_confidence_weights(
-    *, summary_type: str, weights: dict[str, float] | None
-) -> ConfidenceScoringResult:
+def set_view_confidence_weights(*, summary_type: str, weights: dict[str, float] | None) -> ConfidenceScoringResult:
     """Set overall confidence weights on a view. Module-level proxy."""
-    return _get_client().set_view_confidence_weights(
-        summary_type=summary_type, weights=weights
-    )
+    return _get_client().set_view_confidence_weights(summary_type=summary_type, weights=weights)

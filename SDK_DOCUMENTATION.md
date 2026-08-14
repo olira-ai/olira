@@ -8,7 +8,7 @@ managing patients, backfilling historical data, uploading passive sensor
 Parquet, reading Patient State, and minting patient-scoped tokens for use with
 the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.14.0`
+**Package:** `olira` — **Version:** `1.15.0`
 
 ## Related docs
 
@@ -22,18 +22,19 @@ the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
 Each API key carries one or more scopes. Assign only what your integration needs.
 
-| Scope                   | What it unlocks                                                                                                                                                                                                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`, `upload_document()`, `get_document()`, `OliraClient.send_signals()`, `get_signal_job()`                                                                                                                                           |
-| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc.                                                                                                                                                        |
-| `api:manage-projects`   | `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`, `rename_project()`, `deprecate_project()`, `restore_project()`, `delete_project()` — **requires an org-wide key** (a project-locked key is confined to its own workspace and gets 403). |
-| `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                                |
-| `sdk:patient-token`     | `get_patient_token()`                                                                                                                                                                                                                                                  |
-| `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                                                                                                                                                                |
-| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` / `population_logs()`, `create_export()` / `get_export()` / `list_exports()` / `download_export()`, etc.                                                                            |
-| `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — EHR write-back requests (also requires platform-side write configuration)                                                                                                                                      |
-| `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [EHR Integrations & Instances](#ehr-integrations--instances)                                                                                                                                   |
-| `mcp:patient-state`     | Query patient state via the MCP Patient State server                                                                                                                                                                                                                   |
+| Scope                   | What it unlocks                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sdk:event-log`         | `log()`, `log_batch()`, `log_fhir()`, `upload_document()`, `get_document()`, `OliraClient.send_signals()`, `get_signal_job()`                                                                                                                                                                                                                                                           |
+| `api:manage-patients`   | `create_patient()`, `update_patient()`, `delete_patient()`, `create_cohort()`, `add_patients_to_cohort()`, etc.                                                                                                                                                                                                                                                                         |
+| `api:manage-projects`   | `create_project()`, `list_projects()`, `get_project()`, `duplicate_project()`, `rename_project()`, `deprecate_project()`, `restore_project()`, `delete_project()` — **requires an org-wide key** (a project-locked key is confined to its own workspace and gets 403).                                                                                                                  |
+| `api:org-config`        | Schema/mapping management — `register_schema()`, `list_schemas()`, `get_schema()`, `check_schema()`, `edit_schema()`, `deprecate_schema()`, `activate_schema_version()`                                                                                                                                                                                                                 |
+| `sdk:patient-token`     | `get_patient_token()`                                                                                                                                                                                                                                                                                                                                                                   |
+| `sdk:historical-ingest` | `create_ingestion_job()` and all job management methods                                                                                                                                                                                                                                                                                                                                 |
+| `sdk:state-read`        | All `get_stable_data()`, `get_view()`, `get_logs()`, `logs()` / `population_logs()`, `create_export()` / `get_export()` / `list_exports()` / `download_export()`, etc.                                                                                                                                                                                                                  |
+| `sdk:integration-write` | Honors the `write_back` flag on `log()`/`log_batch()` — write-back requests to a connected system (also requires platform-side write configuration)                                                                                                                                                                                                                                                       |
+| `sdk:integrations`      | Integration management via the raw `/v1/integrations` REST routes — see [Integrations & Instances](#integrations--instances)                                                                                                                                                                                                                                                    |
+| `sdk:actions`           | Outbound-actions destination management and delivery ledger: `create_action_destination()`, `list_action_destinations()`, `get_action_destination()`, `update_action_destination()`, `delete_action_destination()`, `rotate_action_destination_secret()`, `list_action_deliveries()`, `get_action_delivery()`, `redeliver_action_delivery()`. See [Outbound Actions](#outbound-actions) |
+| `mcp:patient-state`     | Query patient state via the MCP Patient State server                                                                                                                                                                                                                                                                                                                                    |
 
 ## Getting Started
 
@@ -532,12 +533,12 @@ olira.update_patient(
 ```
 
 > **Identifier namespaces are scoped per integration instance.** Identifiers created by an
-> EHR integration sync carry the specific integration's id and belong to that instance's
+> integration sync carry the specific integration's id and belong to that instance's
 > namespace; identifiers you supply through the SDK (MRNs, SSNs) live in their own
 > namespace. The two never collide — an SDK-supplied `("epic", "MRN-12345")` is not
 > rejected just because an Epic instance assigned the same value to another patient, and
 > duplicate checks apply only within each namespace. See
-> [EHR integrations & instances](#ehr-integrations--instances).
+> [Integrations & Instances](#integrations--instances).
 
 ### Delete a patient
 
@@ -563,7 +564,7 @@ symptoms, memories, etc. **Irreversible.**
 
 Use `permanent=True` to clean up a duplicate or erroneously-created patient — e.g. one
 whose external identifier collides with another patient's (see
-[EHR integrations & instances](#ehr-integrations--instances) for how identifiers are
+[Integrations & Instances](#integrations--instances) for how identifiers are
 scoped per integration instance). Soft-deleting is enough to free up the identifier for
 reuse (duplicate checks skip `status=deleted` patients), but its logs stick around until
 you hard-delete it.
@@ -1326,7 +1327,7 @@ Enqueue an event for background delivery. Module-level proxy to the singleton cl
 | `write_back_integration_id` | No       | `Optional[str]`            | `None`  |
 
 `write_back=True` requests that this log also be **written back into the org's connected
-EHR** (e.g. a vitals reading pushed into Epic as an `Observation`). It is a request, not a
+system** (e.g. a vitals reading pushed into Epic as an `Observation`). It is a request, not a
 grant: the write fires only when the API key carries the `sdk:integration-write` scope AND
 Olira has write-configured the integration for this `log_type` — otherwise it is a silent
 no-op and the log ingests normally either way.
@@ -1335,7 +1336,7 @@ An organization may hold **several integrations of the same type** (e.g. Epic fo
 Hospital A and Hospital B). With a single write-configured integration the target is
 inferred; otherwise the patient's integration-linked identifiers disambiguate, and
 `write_back_integration_id` (the integration's id from `GET /v1/integrations`) settles
-ties explicitly — see [EHR integrations & instances](#ehr-integrations--instances).
+ties explicitly — see [Integrations & Instances](#integrations--instances).
 
 Events are enqueued and flushed in the background. Call `olira.flush()` before
 process exit to ensure delivery.
@@ -1503,7 +1504,7 @@ Lightweight event specification for log_batch(). Not persisted internally.
 | `timestamp`                 | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
 | `idempotency_key`           | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
 | `metadata`                  | No       | `Optional[dict[str, Any]]` | Arbitrary key/value context stored separately from the typed payload. Surfaced in the Olira Console event detail panel. (default: `None`) |
-| `write_back`                | No       | `bool`                     | Request write-back of this log into the org's connected EHR — see [`log`](#log). (default: `False`)                                       |
+| `write_back`                | No       | `bool`                     | Request write-back of this log into the org's connected system — see [`log`](#log). (default: `False`)                                       |
 | `write_back_integration_id` | No       | `Optional[str]`            | Target integration instance for `write_back` when several are write-configured. (default: `None`)                                         |
 
 ### `BatchResult`
@@ -1526,9 +1527,9 @@ Per-event error from a batch response.
 | `code`    | Yes      | `str` | —           |
 | `message` | Yes      | `str` | —           |
 
-## EHR Integrations & Instances
+## Integrations & Instances
 
-Olira connects to a growing pool of EHR and clinical-data providers — Epic, Healthie,
+Olira connects to a growing pool of integration providers — Epic, Healthie,
 Vivlio, and more (`GET /v1/integrations/catalog` lists what's available). Every provider
 follows the same connect → subscribe → sync → write-back pattern; the examples below use
 Epic. An organization may connect **multiple integrations of the same type** — e.g. Epic
@@ -1565,11 +1566,423 @@ Key rules for SDK users:
   implicitly). Your SDK-created patients and identifiers are untouched by this — see
   [External Identifiers](#external-identifiers).
 - **Chart lookup per instance:** `GET /v1/integrations/{id}/patients/{patient_id}` returns
-  the patient's EHR-side id _at that instance_ (404 if the patient isn't known there).
+  the patient's integration-side id _at that instance_ (404 if the patient isn't known there).
 - **Write-back targets an instance:** the `write_back` flag on [`log`](#log) /
   [`log_batch`](#log_batch) resolves its target integration automatically when
   unambiguous; pass `write_back_integration_id` when your org has several
   write-configured instances.
+
+## Outbound Actions
+
+All outbound-actions functions require an API key with the **`sdk:actions`** scope.
+
+**Outbound actions** is how Olira notifies your systems when something happens on the platform: a patient's data updated, a log arrived that changed nothing, a mapping error, an ingestion job finished, or an integration failed to sync. You register a **destination** (a signed HTTPS webhook, or an email) and subscribe it to the triggers you care about. A failed webhook delivery retries automatically and eventually stops if it keeps failing; every attempt is recorded in a durable **delivery ledger** you can inspect and manually resend from. Everything you can do with destinations and deliveries in the Olira Console is available here.
+
+See the full runnable walkthrough in [`examples/13_outbound_actions.py`](examples/13_outbound_actions.py).
+
+### Triggers
+
+| Trigger                                | Fires when                                                                                                     |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `patient.state.changed`                 | Something changed about a patient, such as new symptoms, lab results, or medications.                          |
+| `log.no_state_change`                   | Olira received a log for a patient, but it didn't change anything we know about them.                          |
+| `org.mapping.failed`                    | One of your incoming logs could not be translated into Olira's data model.                                     |
+| `ingestion.completed`                   | A historical ingestion job you started finished successfully.                                                  |
+| `ingestion.failed`                      | A historical ingestion job you started did not finish successfully.                                            |
+| `integration.sync.failed`               | A sync of one of your connected integrations did not finish successfully.                                      |
+
+Pass `["*"]` (or `ActionTrigger.ALL`) as `subscribed_triggers` to subscribe to every currently available trigger in the table above. `ActionTrigger` mirrors this table as a `StrEnum`; passing it instead of a plain string gets you autocomplete. A plain string still works everywhere an `ActionTrigger` is accepted (nothing validates it client-side, so a typo'd string still reaches the server as a 422). Because `"*"` is evaluated by the platform rather than by this list, a `"*"` subscription could start receiving additional trigger types later without another call on your part.
+
+**Delivery volume: one delivery per trigger, by default.** Subscribing a destination to `patient.state.changed` (or any other high-frequency trigger) does not batch anything on its own: if 50 patients change state within the same minute, that's 50 separate deliveries, meaning 50 separate webhook calls or 50 separate emails, not one summary. This is rarely what you want for an email destination, and it can look like flooding even on a webhook pointed at a chat tool. If you're subscribing to a high-frequency trigger, decide up front whether you want immediate, one-per-event delivery (the default; correct for a pipeline that reacts to each change) or batched, one-per-day delivery (opt in via `digest_schedule`; see [Digest scheduling](#digest-scheduling) below) before you go live, not after the volume surprises you.
+
+`RECOMMENDED_DIGEST_TRIGGERS` (a set containing `ActionTrigger.PATIENT_STATE_CHANGED`) flags the trigger frequent enough that the Olira Console itself defaults it to digest batching when you subscribe to it there. It's a suggested starting point, not a hard rule; every other currently available trigger is fine to leave on immediate delivery.
+
+### Creating a destination
+
+```python
+from olira import ActionTrigger, WebhookDestinationConfig, EmailDestinationConfig
+
+destination = client.create_action_destination(
+    config=WebhookDestinationConfig(url="https://hooks.example.com/olira"),
+    subscribed_triggers=[ActionTrigger.PATIENT_STATE_CHANGED, ActionTrigger.INGESTION_FAILED],
+)
+print(destination.signing_secret)  # shown once, store it now
+```
+
+`config` selects the destination type: pass a `WebhookDestinationConfig` (`url`, optional `api_version`) or an `EmailDestinationConfig` (`to_email`, optional `subject`/`from_name`). The returned `signing_secret` is shown in plaintext **exactly once**; it can be rotated (see `rotate_action_destination_secret`) but never retrieved again.
+
+Your webhook `url` must be public HTTPS. `http://`, `localhost`, and private/internal addresses are rejected, both when you set the URL and again every time Olira sends to it.
+
+---
+
+### `create_action_destination`
+
+```python
+destination = client.create_action_destination(
+    config=WebhookDestinationConfig(url="https://hooks.example.com/olira"),
+    subscribed_triggers=[ActionTrigger.PATIENT_STATE_CHANGED],
+    description="Acme webhook",
+    rate_limit_per_minute=600,
+)
+# module-level: olira.create_action_destination(config=..., subscribed_triggers=..., ...)
+```
+
+**Parameters**
+
+| Name                    | Type                                                         | Required | Description                                                                                                                       |
+| ----------------------- | ------------------------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `config`                | `WebhookDestinationConfig \| EmailDestinationConfig \| dict` | Yes      | Destination type and its config. A raw `dict` is accepted for destination types not yet modeled by this SDK version. |
+| `subscribed_triggers`   | `list[ActionTrigger \| str] \| None`                         | No       | Triggers this destination receives. `["*"]` = every currently available trigger in the table above.                               |
+| `description`           | `str \| None`                                                | No       | Free-text description.                                                                                                            |
+| `static_headers`        | `dict[str, str] \| None`                                     | No       | Extra headers replayed on every request (e.g. an API key your endpoint expects). Write-only, never read back.                     |
+| `rate_limit_per_minute` | `int \| None`                                                | No       | Per-destination cap, 1 to 6000. Default 600.                                                                                      |
+| `digest_schedule`       | `DigestSchedule \| None`                             | No       | Opt in to daily batching for high-frequency triggers; see [Digest scheduling](#digest-scheduling).                                |
+
+**Returns** `ActionDestination`, including `signing_secret` (plaintext, shown once).
+
+---
+
+### `list_action_destinations`
+
+```python
+result = client.list_action_destinations()
+for d in result.data:
+    print(d.id, d.destination_type, d.status)
+```
+
+**Returns** `ActionDestinationListResult`: `data: list[ActionDestination]`, `total: int`. Secrets are never included, only `signing_secret_last4`.
+
+---
+
+### `get_action_destination`
+
+```python
+destination = client.get_action_destination(destination_id="dest_123")
+```
+
+**Parameters**
+
+| Name             | Type  | Required | Description           |
+| ---------------- | ----- | -------- | --------------------- |
+| `destination_id` | `str` | Yes      | The destination's id. |
+
+**Returns** `ActionDestination`.
+
+---
+
+### `update_action_destination`
+
+```python
+destination = client.update_action_destination(
+    destination_id="dest_123",
+    subscribed_triggers=["patient.state.changed", "ingestion.failed"],
+)
+```
+
+Only the fields you pass are changed. `url`/`to_email`/`subject` must match the destination's own type.
+
+Turning digest batching off needs its own flag, since simply omitting `digest_schedule` means "leave it as-is," not "remove it":
+
+```python
+# Turn digest batching OFF:
+client.update_action_destination(destination_id="dest_123", clear_digest_schedule=True)
+
+# Change the schedule:
+client.update_action_destination(destination_id="dest_123", digest_schedule=DigestSchedule(time_of_day="09:00"))
+
+# Leave the existing schedule untouched: omit both digest_schedule and clear_digest_schedule.
+```
+
+Passing both `digest_schedule` and `clear_digest_schedule=True` raises `ValueError`.
+
+**Parameters**
+
+| Name                    | Type                                 | Required | Description                                                                         |
+| ----------------------- | ------------------------------------ | -------- | ----------------------------------------------------------------------------------- |
+| `destination_id`        | `str`                                | Yes      | The destination's id.                                                               |
+| `url`                   | `str \| None`                        | No       | New URL (webhook destinations only).                                                |
+| `to_email`              | `str \| None`                        | No       | New recipient (email destinations only).                                            |
+| `subject`               | `str \| None`                        | No       | New subject (email destinations only).                                              |
+| `description`           | `str \| None`                        | No       | New description.                                                                    |
+| `subscribed_triggers`   | `list[ActionTrigger \| str] \| None` | No       | Replaces the full subscription list.                                                |
+| `status`                | `str \| None`                        | No       | `"active"` or `"disabled"`. Re-enabling clears the failure streak.                  |
+| `static_headers`        | `dict[str, str] \| None`             | No       | Replaces the stored static headers.                                                 |
+| `digest_schedule`       | `DigestSchedule \| None`     | No       | New digest schedule.                                                                |
+| `clear_digest_schedule` | `bool`                               | No       | Pass `True` to turn digest batching off. Mutually exclusive with `digest_schedule`. |
+
+**Returns** `ActionDestination`.
+
+---
+
+### `delete_action_destination`
+
+```python
+result = client.delete_action_destination(destination_id="dest_123")
+print(result.dead_lettered_deliveries)
+```
+
+Disables the destination. Deliveries currently `pending`/`mapping`/`retrying` are stopped and will not be retried.
+
+**Parameters**
+
+| Name             | Type  | Required | Description           |
+| ---------------- | ----- | -------- | --------------------- |
+| `destination_id` | `str` | Yes      | The destination's id. |
+
+**Returns** `ActionDestinationDeleteResult`.
+
+---
+
+### `rotate_action_destination_secret`
+
+```python
+destination = client.rotate_action_destination_secret(destination_id="dest_123")
+print(destination.signing_secret)  # new secret, shown once
+```
+
+Generates a new signing secret. The **old secret stays valid for 24h** (dual-signing: the `Olira-Signature` header carries both during the overlap) so an in-progress rotation on the receiving end never drops a delivery.
+
+**Parameters**
+
+| Name             | Type  | Required | Description           |
+| ---------------- | ----- | -------- | --------------------- |
+| `destination_id` | `str` | Yes      | The destination's id. |
+
+**Returns** `ActionDestination`, including the new `signing_secret` (plaintext, shown once).
+
+---
+
+### `list_action_deliveries`
+
+```python
+result = client.list_action_deliveries(destination_id="dest_123", status="delivered", limit=50)
+for d in result.data:
+    print(d.id, d.trigger, d.status)
+
+# Paginate with the returned cursor:
+cursor = result.next_cursor
+while cursor is not None:
+    page = client.list_action_deliveries(destination_id="dest_123", cursor=cursor)
+    cursor = page.next_cursor
+```
+
+Newest first. `next_cursor` is `None` once you've reached the last page.
+
+**Parameters**
+
+| Name             | Type                           | Required | Description                                             |
+| ---------------- | ------------------------------ | -------- | ------------------------------------------------------- |
+| `destination_id` | `str \| None`                  | No       | Filter to one destination.                              |
+| `status`         | `str \| None`                  | No       | Filter by delivery status.                              |
+| `trigger`        | `ActionTrigger \| str \| None` | No       | Filter by trigger.                                      |
+| `cursor`         | `str \| None`                  | No       | Pass the previous call's `next_cursor` to page forward. |
+| `limit`          | `int \| None`                  | No       | Page size, 1 to 200. Default 50.                        |
+
+**Returns** `ActionDeliveryListResult`: `data: list[ActionDelivery]` (no `payload` field on list rows; fetch one delivery for that), `next_cursor: str | None`.
+
+---
+
+### `get_action_delivery`
+
+```python
+delivery = client.get_action_delivery(delivery_id="del_123")
+for attempt in delivery.attempts:
+    print(attempt.attempt, attempt.outcome, attempt.http_status)
+print(delivery.payload)  # the exact bytes sent
+```
+
+**Parameters**
+
+| Name          | Type  | Required | Description        |
+| ------------- | ----- | -------- | ------------------ |
+| `delivery_id` | `str` | Yes      | The delivery's id. |
+
+**Returns** `ActionDelivery`, including `payload`, the exact JSON Olira sent (or will send).
+
+---
+
+### `redeliver_action_delivery`
+
+```python
+new_delivery = client.redeliver_action_delivery(delivery_id="del_123")
+```
+
+Resends the same body as the original delivery, not a newly generated one. Creates a new delivery record with `redelivery_of` set to the original id. Works for up to 30 days after the original delivery.
+
+Raises `ServerError` (HTTP 409) if the destination is currently disabled; re-enable it first.
+
+**Parameters**
+
+| Name          | Type  | Required | Description             |
+| ------------- | ----- | -------- | ----------------------- |
+| `delivery_id` | `str` | Yes      | The delivery to resend. |
+
+**Returns** `ActionDelivery` (the new delivery record).
+
+---
+
+### Delivery payload
+
+The body your webhook endpoint receives (or the JSON in `ActionDelivery.payload`) is a fixed envelope:
+
+```json
+{
+  "id": "del_123",
+  "type": "patient.state.changed",
+  "created": "2026-08-12T09:14:05Z",
+  "api_version": "2026-08-01",
+  "data": { "...": "..." }
+}
+```
+
+`type` carries the trigger you subscribed with, e.g. `"patient.state.changed"`; it's called `trigger` on `ActionDelivery` (the ledger record you read back through this SDK) and `type` in the payload itself (the envelope your endpoint parses). `data` is trigger-specific and holds ids and counts, not clinical field values:
+
+| Trigger | `data` fields |
+| --- | --- |
+| `patient.state.changed` | `event_log_id`, `log_type`, `changed_paths`, `change_count`, `coalesced_count` (present when several updates for the same patient were folded into one delivery) |
+| `log.no_state_change` | `event_log_id`, `log_type` |
+| `org.mapping.failed` | `source_subtype`, `error_code` |
+| `ingestion.completed` / `ingestion.failed` | `job_id`, `status`, `patient_count`, `record_count`, `failure_summary` (present only on partial failures) |
+| `integration.sync.failed` | `integration_id`, `data_point_id`, `data_point_name`, `error`, `hint` (when known), `total_records`, `accepted`, `failed`, `unresolved` |
+
+---
+
+### Verifying the signature
+
+Every delivery carries an `Olira-Signature` header: `t=<unix_ts>,v1=<hex_hmac>`. Recompute it with your destination's signing secret and compare; this proves the request came from Olira and wasn't altered in transit:
+
+```python
+import hashlib
+import hmac
+import time
+
+
+def verify_signature(secret: str, header: str, raw_body: bytes, *, max_skew_seconds: int = 300) -> bool:
+    fields = dict(part.split("=", 1) for part in header.split(",") if part.startswith("t="))
+    try:
+        timestamp = int(fields["t"])
+    except (KeyError, ValueError):
+        return False
+    if abs(time.time() - timestamp) > max_skew_seconds:
+        return False
+    signatures = [part.split("=", 1)[1] for part in header.split(",") if part.startswith("v1=")]
+    signed_payload = f"{timestamp}.".encode() + raw_body
+    expected = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, sig) for sig in signatures)
+```
+
+During secret rotation the header carries **two** `v1=` entries; check if _any_ matches, don't assume there's exactly one. The timestamp is fresh on every attempt (including retries); reject a missing/malformed timestamp, one too far in the past (replay), or one unreasonably far in the future (clock skew or forgery) before checking the signature at all.
+
+### Digest scheduling
+
+A destination subscribed to a high-frequency trigger like `patient.state.changed` gets one delivery per event by default (see [Delivery volume](#triggers) above). `digest_schedule` opts a destination into batching those triggers into one delivery per day instead of one per event, correcting for exactly the flood scenario above:
+
+```python
+from olira import DigestSchedule
+
+client.update_action_destination(
+    destination_id="dest_123",
+    digest_schedule=DigestSchedule(
+        time_of_day="09:00",             # "HH:MM", on a :00 or :30 boundary; defaults to "09:00"
+        timezone="America/New_York",     # IANA name; defaults to "UTC" if you don't set it
+        triggers=["patient.state.changed"],  # must be a subset of subscribed_triggers
+    ),
+)
+```
+
+`time_of_day` defaults to `"09:00"` if you omit it. `timezone` defaults to `"UTC"`; set it explicitly to your organization's own timezone so the digest actually lands at a sensible local hour.
+
+Only the listed `triggers` batch; anything else the destination is subscribed to still delivers immediately.
+
+**Digested deliveries are not fast.** A digested trigger doesn't deliver right after it fires: it sits at `status: buffered` until your destination's `time_of_day` next arrives in its `timezone`, at which point every buffered delivery for that destination folds into a single delivery for the day. Depending on when the trigger fired relative to `time_of_day`, that can be close to a full day later, not a few minutes. If you're testing digest batching, don't poll `list_action_deliveries()` expecting a quick result the way you would for an immediate trigger.
+
+### Outbound actions response models
+
+### `ActionDestination`
+
+| Field                       | Type                         | Description                                                                                                                   |
+| --------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `id`                        | `str`                        | Olira-assigned destination id.                                                                                                |
+| `project_id`                | `str \| None`                | Project this destination watches. `None` = the org's default project.                                                         |
+| `destination_type`          | `str`                        | `"webhook"` or `"email"`.                                                                               |
+| `status`                    | `ActionDestinationStatus`    | `"active"`, `"disabled"`, or `"auto_disabled"`.                                                                               |
+| `description`               | `str \| None`                | Free-text description.                                                                                                        |
+| `subscribed_triggers`       | `list[ActionTrigger \| str]` | Triggers this destination receives.                                                                                           |
+| `config`                    | `dict`                       | Type-specific config, as returned by the server (URL, api_version, etc).                                                      |
+| `signing_secret_last4`      | `str \| None`                | Last 4 characters of the current signing secret.                                                                              |
+| `rate_limit_per_minute`     | `int \| None`                | Per-destination delivery rate cap.                                                                                            |
+| `digest_schedule`           | `DigestSchedule \| None`     | Digest batching config, if enabled.                                                                                           |
+| `consecutive_failures`      | `int`                        | Running failure streak. Resets to 0 on any successful delivery.                                                               |
+| `failure_streak_started_at` | `str \| None`                | When the current failure streak began.                                                                                        |
+| `auto_disabled_at`          | `str \| None`                | When the destination was auto-disabled (20+ consecutive failures over 72h+), if applicable.                                   |
+| `rotated_at`                | `str \| None`                | When the signing secret was last rotated.                                                                                     |
+| `signing_secret`            | `str \| None`                | Plaintext signing secret, present **only** on `create_action_destination()` / `rotate_action_destination_secret()` responses. |
+
+`ActionDestinationListResult`: `data: list[ActionDestination]`, `total: int`.
+
+`ActionDestinationDeleteResult`: `message: str`, `dead_lettered_deliveries: int`.
+
+### `WebhookDestinationConfig`
+
+| Field         | Type  | Description                            |
+| ------------- | ----- | -------------------------------------- |
+| `url`         | `str` | Must be HTTPS and publicly resolvable. |
+| `api_version` | `str` | Defaults to the current API version.   |
+
+### `EmailDestinationConfig`
+
+| Field       | Type          | Description                   |
+| ----------- | ------------- | ----------------------------- |
+| `to_email`  | `str`         | Recipient address.            |
+| `subject`   | `str \| None` | Optional subject override.    |
+| `from_name` | `str \| None` | Optional sender display name. |
+
+### `DigestSchedule`
+
+| Field            | Type                         | Description                                                   |
+| ---------------- | ---------------------------- | ------------------------------------------------------------- |
+| `time_of_day`    | `str`                        | `"HH:MM"`, must land on a `:00` or `:30` boundary. Defaults to `"09:00"`. |
+| `timezone`       | `str`                        | IANA timezone name. Defaults to `"UTC"`.                      |
+| `triggers`       | `list[ActionTrigger \| str]` | Which subscribed triggers batch. |
+| `last_sent_date` | `str \| None`                | Server-managed, ignored on write.                             |
+
+### `ActionDelivery`
+
+| Field                | Type                    | Description                                                                                        |
+| -------------------- | ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `id`                 | `str`                   | Olira-assigned delivery id.                                                                        |
+| `project_id`         | `str \| None`           | Project the source event belongs to.                                                               |
+| `destination_id`     | `str`                   | The destination this delivery targets.                                                             |
+| `destination_type`   | `str`                   | `"webhook"` or `"email"`.                                                                     |
+| `trigger`            | `str`                   | The trigger that produced this delivery.                                                           |
+| `event_id`           | `str`                   | Id of the occurrence that produced this delivery.                                                  |
+| `status`             | `ActionDeliveryStatus`  | `pending`/`mapping`/`sending` (in flight), `delivered`, `skipped` (nothing to send), `retrying`, `dead_letter`, or `buffered` (parked for this destination's daily digest; see [Digest scheduling](#digest-scheduling) — it can sit here for up to a day, not just a few minutes). |
+| `attempts`           | `list[DeliveryAttempt]` | Every attempt made so far, in order.                                                               |
+| `next_attempt_at`    | `str \| None`           | When the next retry is scheduled, if `status == "retrying"`.                                       |
+| `first_attempted_at` | `str \| None`           | Timestamp of the first attempt.                                                                    |
+| `delivered_at`       | `str \| None`           | Timestamp of successful delivery.                                                                  |
+| `dead_lettered_at`   | `str \| None`           | Timestamp when delivery stopped being retried, if applicable.                                                        |
+| `last_error`         | `str \| None`           | The most recent error, if any.                                                                     |
+| `redelivery_of`      | `str \| None`           | The original delivery id, if this record was created by `redeliver_action_delivery()`.             |
+| `requested_by`       | `str \| None`           | Who initiated the delivery: `"redeliver:<actor>"` when a user manually resent it via `redeliver_action_delivery()`, some other value for an automatic delivery. |
+| `batched_into`       | `str \| None`           | The daily digest this was included in, if any.                                          |
+| `payload`            | `dict \| None`          | The exact JSON Olira sent, present **only** on `get_action_delivery()` responses.                 |
+
+`ActionDeliveryListResult`: `data: list[ActionDelivery]`, `next_cursor: str | None`.
+
+### `DeliveryAttempt`
+
+| Field              | Type          | Description                                                |
+| ------------------ | ------------- | ---------------------------------------------------------- |
+| `attempt`          | `int`         | 1-based attempt number.                                    |
+| `at`               | `str`         | Timestamp of this attempt.                                 |
+| `outcome`          | `str`         | `"delivered"`, `"retryable_error"`, or `"terminal_error"`. |
+| `http_status`      | `int \| None` | HTTP status code received, if any.                         |
+| `error_code`       | `str \| None` | Error classification, if the attempt failed.               |
+| `response_snippet` | `str \| None` | First 512 characters of the response body.                 |
+| `duration_ms`      | `int \| None` | Attempt duration in milliseconds.                          |
+
+---
 
 ## Patient Token
 
@@ -2460,13 +2873,13 @@ for m in memories.results:
 | `trace`       | `OliraTrace \| None` | Provenance trace                                              |
 
 **`timestamp` vs. `ingested_at`:** `timestamp` is the event's own clock — when it actually
-occurred (e.g. when a patient reported a symptom, or the EHR's recorded observation time).
+occurred (e.g. when a patient reported a symptom, or the source system's recorded observation time).
 It's caller-supplied on write (see `log()`'s `timestamp` param, used to backdate historical
 events) and is what logs are sorted by for a patient's timeline. `ingested_at` is server-set
 and non-overridable — the moment app-api actually wrote the row — and is only ever populated
 by the platform, never by a caller. The two commonly differ: a backfilled historical event
 might have a `timestamp` from months ago but an `ingested_at` from today's import job; a
-delayed EHR sync might report a `timestamp` from the integration's roster pull with
+delayed integration sync might report a `timestamp` from the integration's roster pull with
 `ingested_at` lagging by minutes or hours. Use `timestamp` to place events on the patient's
 clinical timeline; use `ingested_at` to page/audit by when data actually landed on the
 platform (e.g. "give me everything ingested since my last poll," which `timestamp` alone
@@ -2778,13 +3191,13 @@ download = client.download_export(export_id=job.export_id)
 
 ### ZIP layout
 
-| Member | Contents |
-|--------|----------|
-| `logs/` | Event-log rows as Parquet |
-| `state_modules/` | Patient state modules as Parquet |
-| `view_blocks/` | Summary view blocks as Parquet |
-| `events/` | Derived events as Parquet |
-| `extracted/` | Extracted document text as Parquet (optional) |
+| Member           | Contents                                      |
+| ---------------- | --------------------------------------------- |
+| `logs/`          | Event-log rows as Parquet                     |
+| `state_modules/` | Patient state modules as Parquet              |
+| `view_blocks/`   | Summary view blocks as Parquet                |
+| `events/`        | Derived events as Parquet                     |
+| `extracted/`     | Extracted document text as Parquet (optional) |
 
 Omit a category with `ExportInclude(..., logs=False)` (etc.). List jobs with
 `client.list_exports(limit=20)`.

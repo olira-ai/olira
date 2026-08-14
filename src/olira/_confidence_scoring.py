@@ -64,9 +64,7 @@ def normalize_scoring_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     return {"scorers": scorers, "weights": weights, "params": None}
 
 
-def get_scorer_params_from_config(
-    raw: dict[str, Any] | None, scorer_id: str
-) -> dict[str, Any] | None:
+def get_scorer_params_from_config(raw: dict[str, Any] | None, scorer_id: str) -> dict[str, Any] | None:
     cfg = normalize_scoring_config(raw)
     for entry in cfg.get("scorers") or []:
         if isinstance(entry, dict) and str(entry.get("scorer_id")) == scorer_id:
