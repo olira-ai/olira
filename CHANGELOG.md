@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Makes the call safe to retry after a network error or 5xx. One FHIR resource can map to
   several Olira events; pass one key for the call — the server applies it to each mapped event.
 
+### Fixed
+- `log_fhir()` no longer retries automatically on a transport-level network error or 5xx when
+  no `idempotency_key` is supplied. Without a key, the server has no stable dedup anchor, so
+  replaying a request whose response was lost could create a duplicate event — the transport's
+  own retry now only fires when a key makes that replay safe.
+
 ## [1.15.0] - 2026-08-13
 
 ### Added

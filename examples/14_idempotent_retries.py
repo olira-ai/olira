@@ -83,7 +83,9 @@ treatment_plan = {
     "status": "active",
     "intent": "plan",
     "subject": {"reference": f"Patient/{PID}"},
-    "category": [{"coding": [{"system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category", "code": "assess-plan"}]}],
+    "category": [
+        {"coding": [{"system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category", "code": "assess-plan"}]}
+    ],
     "activity": [{"detail": {"description": "Follow-up oncology visit in 4 weeks"}}],
 }
 plan_key = "plan-2026-01-10"

@@ -36,7 +36,7 @@ A **project** is an isolated workspace within your org (its own patients, logs, 
 
 ```python
 # module-level
-olira.init(api_key=API_KEY, project="dev-sandbox")   # or set OLIRA_PROJECT
+olira.init(api_key=API_KEY, project="dev-sandbox")  # or set OLIRA_PROJECT
 
 # or with the client class
 client = OliraClient(api_key=API_KEY, project="dev-sandbox")

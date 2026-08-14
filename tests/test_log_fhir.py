@@ -10,9 +10,7 @@ def test_log_fhir_forwards_idempotency_key():
 
     class MockTransport:
         def log_fhir(self, patient_id, resource, idempotency_key=None):
-            calls.append(
-                {"patient_id": patient_id, "resource": resource, "idempotency_key": idempotency_key}
-            )
+            calls.append({"patient_id": patient_id, "resource": resource, "idempotency_key": idempotency_key})
             return BatchResult(accepted=1, failed=0)
 
         def close(self):
@@ -60,9 +58,7 @@ async def test_async_log_fhir_forwards_idempotency_key():
 
     class MockTransport:
         async def log_fhir(self, patient_id, resource, idempotency_key=None):
-            calls.append(
-                {"patient_id": patient_id, "resource": resource, "idempotency_key": idempotency_key}
-            )
+            calls.append({"patient_id": patient_id, "resource": resource, "idempotency_key": idempotency_key})
             return BatchResult(accepted=1, failed=0)
 
         async def aclose(self):

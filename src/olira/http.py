@@ -593,14 +593,12 @@ class HttpTransport:
         raw = self._request("POST", f"/v1/ingestion/jobs/{job_id}/retry-backfill")
         return IngestionJob.model_validate(raw)
 
-    def log_fhir(
-        self, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None
-    ) -> BatchResult:
+    def log_fhir(self, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None) -> BatchResult:
         """Submit a single FHIR R4 resource (POST /v1/fhir/resource). Requires sdk:event-log scope."""
         body: dict[str, Any] = {"patient_id": patient_id, "resource": resource}
         if idempotency_key:
             body["idempotency_key"] = idempotency_key
-        raw = self._request("POST", "/v1/fhir/resource", json=body)
+        raw = self._request("POST", "/v1/fhir/resource", json=body, retryable=bool(idempotency_key))
         return BatchResult.model_validate(raw)
 
     # ------------------------------------------------------------------
@@ -1107,7 +1105,7 @@ class AsyncHttpTransport:
         body: dict[str, Any] = {"patient_id": patient_id, "resource": resource}
         if idempotency_key:
             body["idempotency_key"] = idempotency_key
-        raw = await self._request("POST", "/v1/fhir/resource", json=body)
+        raw = await self._request("POST", "/v1/fhir/resource", json=body, retryable=bool(idempotency_key))
         return BatchResult.model_validate(raw)
 
     # ------------------------------------------------------------------

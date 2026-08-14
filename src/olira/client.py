@@ -254,9 +254,7 @@ class OliraClient:
             write_back_integration_id=write_back_integration_id,
         )
 
-    def log_fhir(
-        self, *, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None
-    ) -> BatchResult:
+    def log_fhir(self, *, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None) -> BatchResult:
         """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
 
         Olira maps the resource to one or more platform log types via the FHIR absorber

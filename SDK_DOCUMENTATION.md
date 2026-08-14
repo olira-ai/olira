@@ -116,6 +116,7 @@ olira.init(api_key="YOUR_KEY", project="dev-sandbox")
 
 # Or with the client class
 from olira import OliraClient
+
 client = OliraClient(api_key="YOUR_KEY", project="dev-sandbox")
 ```
 
@@ -227,7 +228,7 @@ olira.log(
     },
     trace=OliraTrace(
         object_type="conversation",
-        object_id="conv-abc-123",   # your conversation ID
+        object_id="conv-abc-123",  # your conversation ID
     ),
 )
 ```
@@ -599,18 +600,20 @@ Returns a `PatientBatchResult` with items (successes) and errors (failures).
 ```python
 from olira import CreatePatientRequest, ExternalIdentifier
 
-result = olira.create_patients_batch([
-    CreatePatientRequest(
-        first_name="Alice",
-        last_name="Jones",
-        date_of_birth="1990-01-15T00:00:00Z",
-        sex="female",
-        timezone="UTC",
-    ),
-    CreatePatientRequest(
-        external_identifiers=[ExternalIdentifier(system="epic", value="Patient/shell-1")],
-    ),
-])
+result = olira.create_patients_batch(
+    [
+        CreatePatientRequest(
+            first_name="Alice",
+            last_name="Jones",
+            date_of_birth="1990-01-15T00:00:00Z",
+            sex="female",
+            timezone="UTC",
+        ),
+        CreatePatientRequest(
+            external_identifiers=[ExternalIdentifier(system="epic", value="Patient/shell-1")],
+        ),
+    ]
+)
 print(f"Created {result.count}, errors: {len(result.errors)}")
 ```
 
@@ -884,7 +887,7 @@ Reactivate a deprecated project, fully intact.
 
 ```python
 client.deprecate_project(project="dev-sandbox")  # must be deprecated first
-client.delete_project(project="dev-sandbox")     # permanent, no recovery
+client.delete_project(project="dev-sandbox")  # permanent, no recovery
 ```
 
 Permanently delete a **deprecated** project and its scoped configuration (cohorts, view templates, pipelines, config). **Irreversible.**
@@ -1195,7 +1198,11 @@ for v in detail.versions:
 result = client.check_schema(
     examples=[{"reading_value": 42, "unit": "lux"}],
     schema={"type": "object", "required": ["reading_value"], "properties": {"reading_value": {"type": "number"}}},
-    mapping={"targets": [{"target_subtype": "heart_rate_data", "field_mappings": [{"target": "avg_bpm", "source": "reading_value"}]}]},
+    mapping={
+        "targets": [
+            {"target_subtype": "heart_rate_data", "field_mappings": [{"target": "avg_bpm", "source": "reading_value"}]}
+        ]
+    },
 )
 print(result.ok)
 ```
@@ -1398,28 +1405,35 @@ Send a batch of events directly. Module-level proxy to the singleton client.
 ```python
 from olira import LogSpec, OliraLogType
 
-result = olira.log_batch([
-    LogSpec(
-        log_type=OliraLogType.VITALS_MEASUREMENT,
-        patient_id="patient-uuid",
-        payload={
-            "measurements": {"systolic_bp_mmhg": 128, "diastolic_bp_mmhg": 82,
-                               "heart_rate_bpm": 72, "spo2_percent": None,
-                               "weight_kg": None, "temperature_celsius": None,
-                               "respiratory_rate_bpm": None},
-            "context": {"position": "sitting", "fasting": None},
-            "source": "manual_entry",
-            "collection_datetime": "2026-03-18T09:00:00Z",
-        },
-    ),
-    LogSpec(
-        log_type=OliraLogType.MEDICATION_DOSE_UPDATE,
-        patient_id="patient-uuid",
-        payload={
-            "medication_adherence": [{"status": "taken", "medication_name": "Ondansetron 4mg"}],
-        },
-    ),
-])
+result = olira.log_batch(
+    [
+        LogSpec(
+            log_type=OliraLogType.VITALS_MEASUREMENT,
+            patient_id="patient-uuid",
+            payload={
+                "measurements": {
+                    "systolic_bp_mmhg": 128,
+                    "diastolic_bp_mmhg": 82,
+                    "heart_rate_bpm": 72,
+                    "spo2_percent": None,
+                    "weight_kg": None,
+                    "temperature_celsius": None,
+                    "respiratory_rate_bpm": None,
+                },
+                "context": {"position": "sitting", "fasting": None},
+                "source": "manual_entry",
+                "collection_datetime": "2026-03-18T09:00:00Z",
+            },
+        ),
+        LogSpec(
+            log_type=OliraLogType.MEDICATION_DOSE_UPDATE,
+            patient_id="patient-uuid",
+            payload={
+                "medication_adherence": [{"status": "taken", "medication_name": "Ondansetron 4mg"}],
+            },
+        ),
+    ]
+)
 print(f"Accepted: {result.accepted}, Failed: {result.failed}")
 ```
 
@@ -1445,7 +1459,7 @@ Requires `sdk:event-log` scope.
 
 `resource` must be a valid FHIR R4 JSON object with a `resourceType` field. Supported types include `Condition`, `MedicationRequest`, `MedicationStatement`, `MedicationAdministration`, `AllergyIntolerance`, `Appointment`, `Encounter`, `Procedure`, `Immunization`, `DiagnosticReport`, `DocumentReference`, `CarePlan`, `CareTeam`, `FamilyMemberHistory`, `Goal`, `Observation` (vital-signs), and `Patient`.
 
-`idempotency_key` makes a retry after a network error or 5xx safe: send the same key and the same resource again and Olira will not create a second event. Pass a key whenever you plan to retry — without one, `log_fhir()` does not reliably treat a resend as a duplicate. If the FHIR resource has no date the absorber can use, Olira timestamps the event at processing time, so two calls without a key are stored separately.
+`idempotency_key` makes a retry after a network error or 5xx safe: send the same key and the same resource again and Olira will not create a second event. Pass a key whenever you plan to retry — without one, `log_fhir()` does not reliably treat a resend as a duplicate. If the FHIR resource has no date the absorber can use, Olira timestamps the event at processing time, so two calls without a key are stored separately. Because of this, the SDK's own transport does not automatically retry a `log_fhir()` call on a network error or 5xx unless you pass `idempotency_key` — without one, an automatic retry could itself create the duplicate this parameter exists to prevent.
 
 One FHIR resource can map to several Olira events. For example, a treatment plan from an EHR can produce both a follow-up item and a treatment-phase update. Pass **one** key for the call; do not add a log type or a key per event. Olira records `your-key:clinical_plan_item` and `your-key:treatment_phase` internally so each mapped event can be retried on its own. A patient demographics update is recorded as `your-key:demographics`. `log_batch()` keeps the key you send unchanged, so the same string on both methods does not collide.
 
@@ -1908,8 +1922,8 @@ from olira import DigestSchedule
 client.update_action_destination(
     destination_id="dest_123",
     digest_schedule=DigestSchedule(
-        time_of_day="09:00",             # "HH:MM", on a :00 or :30 boundary; defaults to "09:00"
-        timezone="America/New_York",     # IANA name; defaults to "UTC" if you don't set it
+        time_of_day="09:00",  # "HH:MM", on a :00 or :30 boundary; defaults to "09:00"
+        timezone="America/New_York",  # IANA name; defaults to "UTC" if you don't set it
         triggers=["patient.state.changed"],  # must be a subset of subscribed_triggers
     ),
 )
@@ -2048,7 +2062,7 @@ token = olira.get_patient_token(patient_id="patient-uuid")
 
 print(token.access_token)  # forward to the agent or device
 print(f"Expires in {token.expires_in}s")  # 900
-print(token.scopes)        # e.g. ["sdk:state-read", "sdk:event-log"]
+print(token.scopes)  # e.g. ["sdk:state-read", "sdk:event-log"]
 ```
 
 **Forwarding to an MCP client (httpx example):**
@@ -2058,9 +2072,11 @@ import httpx, olira
 
 olira.init(api_key="YOUR_API_KEY")
 
+
 def get_fresh_token(patient_id: str) -> str:
     tok = olira.get_patient_token(patient_id=patient_id)
     return tok.access_token
+
 
 # Mint per session — tokens expire in 15 minutes
 bearer = get_fresh_token("patient-uuid")
@@ -2079,6 +2095,7 @@ import time, olira
 from olira import AuthError
 
 olira.init(api_key="YOUR_API_KEY")
+
 
 class PatientSession:
     def __init__(self, patient_id: str) -> None:
@@ -2584,11 +2601,11 @@ olira.init(api_key="YOUR_API_KEY")
 # Filter + order + limit
 rows = (
     olira.logs("patient-uuid")
-        .eq("type", "symptom_report")
-        .gt("payload.score", 4)
-        .order("timestamp", desc=True)
-        .limit(25)
-        .execute()
+    .eq("type", "symptom_report")
+    .gt("payload.score", 4)
+    .order("timestamp", desc=True)
+    .limit(25)
+    .execute()
 )
 for row in rows:
     print(row["timestamp"], row["payload"])
@@ -2596,60 +2613,40 @@ for row in rows:
 # ilike + IN
 rows = (
     olira.logs("patient-uuid")
-        .ilike("payload.metric_type", "%pain%")
-        .in_("type", ["symptom_report", "health_metric_reported"])
-        .limit(10)
-        .execute()
+    .ilike("payload.metric_type", "%pain%")
+    .in_("type", ["symptom_report", "health_metric_reported"])
+    .limit(10)
+    .execute()
 )
 
 # OR boolean group via F()
-rows = (
-    olira.logs("patient-uuid")
-        .or_(F("payload.score").gt(7), F("type").eq("mood_reported"))
-        .limit(10)
-        .execute()
-)
+rows = olira.logs("patient-uuid").or_(F("payload.score").gt(7), F("type").eq("mood_reported")).limit(10).execute()
 
 # Projection with alias
 rows = (
     olira.logs("patient-uuid")
-        .eq("type", "health_metric_reported")
-        .select("timestamp", score="payload.score")
-        .limit(10)
-        .execute()
+    .eq("type", "health_metric_reported")
+    .select("timestamp", score="payload.score")
+    .limit(10)
+    .execute()
 )
 
 # Count only
 n = olira.logs("patient-uuid").eq("type", "symptom_report").count()
 
 # Aggregation
-agg = (
-    olira.logs("patient-uuid")
-        .group_by("type")
-        .count_agg("n")
-        .avg("payload.score", "avg_score")
-        .execute()
-)
+agg = olira.logs("patient-uuid").group_by("type").count_agg("n").avg("payload.score", "avg_score").execute()
 
 # maybe_single — returns None if empty, raises if > 1 row
 row = (
-    olira.logs("patient-uuid")
-        .eq("type", "demographics_updated")
-        .order("timestamp", desc=True)
-        .limit(1)
-        .maybe_single()
+    olira.logs("patient-uuid").eq("type", "demographics_updated").order("timestamp", desc=True).limit(1).maybe_single()
 )
 
 # Poll for everything the platform has ingested since your last check — use ingested_at,
 # not timestamp: a backfill or delayed integration sync can insert old-timestamp rows at
 # any time, so timestamp alone can silently skip events a timestamp-based cursor already
 # passed. ingested_at only ever moves forward.
-new_rows = (
-    olira.logs("patient-uuid")
-        .gt("ingested_at", last_poll_iso)
-        .order("ingested_at")
-        .execute()
-)
+new_rows = olira.logs("patient-uuid").gt("ingested_at", last_poll_iso).order("ingested_at").execute()
 ```
 
 #### `population_logs`
@@ -2668,29 +2665,13 @@ Returns a builder scoped to the whole organisation (`patient_ids=None`) or an ex
 
 ```python
 # Whole org — recent health_metric_reported events
-rows = (
-    olira.population_logs()
-        .eq("type", "health_metric_reported")
-        .order("timestamp", desc=True)
-        .limit(50)
-        .execute()
-)
+rows = olira.population_logs().eq("type", "health_metric_reported").order("timestamp", desc=True).limit(50).execute()
 
 # Explicit cohort
-rows = (
-    olira.population_logs(patient_ids=["pid-1", "pid-2"])
-        .gt("payload.score", 6)
-        .limit(100)
-        .execute()
-)
+rows = olira.population_logs(patient_ids=["pid-1", "pid-2"]).gt("payload.score", 6).limit(100).execute()
 
 # Org-wide aggregation
-agg = (
-    olira.population_logs()
-        .group_by("type")
-        .count_agg("n")
-        .execute()
-)
+agg = olira.population_logs().group_by("type").count_agg("n").execute()
 ```
 
 #### `F` — field expression helper
@@ -2988,6 +2969,7 @@ All methods are available on `AsyncOliraClient` as coroutines. Use it as an asyn
 import asyncio
 from olira import AsyncOliraClient, OliraLogType
 
+
 async def main():
     async with AsyncOliraClient(api_key="YOUR_API_KEY") as client:
         patient = await client.create_patient(first_name="Ada", last_name="Lovelace")
@@ -2998,6 +2980,7 @@ async def main():
             payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
         )
         await client.flush()
+
 
 asyncio.run(main())
 ```
@@ -3265,7 +3248,7 @@ olira.init(api_key="YOUR_sdk:historical-ingest_KEY")
 # Create the job — SDK streams the file to S3 automatically
 job = olira.create_ingestion_job(
     file="patients_and_logs.jsonl",
-    idempotency_key="initial-onboarding-2026",   # optional but recommended
+    idempotency_key="initial-onboarding-2026",  # optional but recommended
 )
 
 # Phase 1 — poll every 10 s until paused for review (typically seconds to minutes)
@@ -3303,25 +3286,29 @@ from olira import IngestRecord, IngestLogSpec, CreatePatientRequest, ExternalIde
 
 job = olira.create_ingestion_job(
     records=[
-        IngestRecord.patient(CreatePatientRequest(
-            first_name="Jane",
-            last_name="Smith",
-            date_of_birth="1980-03-22T00:00:00Z",
-            external_identifiers=[ExternalIdentifier(system="epic", value="MRN-12345")],
-        )),
-        IngestRecord.log(IngestLogSpec(
-            event_type="symptom_report",
-            # patient_id can be an external_identifier value (any system) or an Olira patient UUID
-            patient_id="MRN-12345",
-            # timestamp backdates the event — this is how historical events are placed correctly
-            # in the patient timeline. Use ISO 8601 with timezone offset or trailing 'Z'.
-            timestamp="2025-01-15T09:00:00Z",
-            payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
-            idempotency_key="report-001",    # strongly recommended — prevents duplicates on retry
-        )),
+        IngestRecord.patient(
+            CreatePatientRequest(
+                first_name="Jane",
+                last_name="Smith",
+                date_of_birth="1980-03-22T00:00:00Z",
+                external_identifiers=[ExternalIdentifier(system="epic", value="MRN-12345")],
+            )
+        ),
+        IngestRecord.log(
+            IngestLogSpec(
+                event_type="symptom_report",
+                # patient_id can be an external_identifier value (any system) or an Olira patient UUID
+                patient_id="MRN-12345",
+                # timestamp backdates the event — this is how historical events are placed correctly
+                # in the patient timeline. Use ISO 8601 with timezone offset or trailing 'Z'.
+                timestamp="2025-01-15T09:00:00Z",
+                payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
+                idempotency_key="report-001",  # strongly recommended — prevents duplicates on retry
+            )
+        ),
     ],
     idempotency_key="lab-backfill-batch-1",
-    require_confirmation=False,              # run straight through without review pause
+    require_confirmation=False,  # run straight through without review pause
 )
 ```
 
