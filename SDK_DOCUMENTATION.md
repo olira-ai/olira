@@ -8,7 +8,7 @@ managing patients, backfilling historical data, uploading passive sensor
 Parquet, reading Patient State, and minting patient-scoped tokens for use with
 the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.15.0`
+**Package:** `olira` — **Version:** `1.15.1`
 
 ## Related docs
 
@@ -1301,7 +1301,7 @@ All log functions require `sdk:event-log` scope.
 
 Use `log()` and `log_batch()` for **ongoing operational traffic**—applications, integrations, and moderate batch sizes where each submission should update patient state through Olira's immediate graph-update path.
 
-Use `log_fhir()` when your source data is already in **FHIR R4 format**. Olira maps the resource to one or more platform log types via the same absorber used by Epic/Cerner integrations, so you don't need to choose a `log_type` or build Olira-shaped payloads yourself.
+Use `log_fhir()` when your source data is already in **FHIR R4 format**. Olira maps the resource to one or more platform log types via the same absorber used by Epic/Cerner integrations, so you don't need to choose a `log_type` or build Olira-shaped payloads yourself. Pass `idempotency_key` on `log_batch()` / `log_fhir()` if you might retry the call.
 
 For **bulk historical data** (e.g. months or years at once, or onboarding backfills before go-live), use **[Historical Data Ingestion](#historical-data-ingestion)** with `create_ingestion_job()` and the **`sdk:historical-ingest`** scope. That pipeline stages rows, replays them in chronological order, and backfills summary views — not `log_batch` at volume.
 
@@ -1428,7 +1428,7 @@ print(f"Accepted: {result.accepted}, Failed: {result.failed}")
 #### `log_fhir`
 
 ```python
-log_fhir(*, patient_id: str, resource: dict[str, Any]) -> BatchResult
+log_fhir(*, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None) -> BatchResult
 ```
 
 Submit a single FHIR R4 resource for immediate ingestion. Module-level proxy to the singleton client.
@@ -1437,17 +1437,41 @@ Olira maps the resource to one or more platform log types via the FHIR absorber 
 
 Requires `sdk:event-log` scope.
 
-| Parameter    | Required | Type             | Default |
-| ------------ | -------- | ---------------- | ------- |
-| `patient_id` | Yes      | `str`            | —       |
-| `resource`   | Yes      | `dict[str, Any]` | —       |
+| Parameter         | Required | Type             | Default |
+| ----------------- | -------- | ---------------- | ------- |
+| `patient_id`       | Yes      | `str`            | —       |
+| `resource`         | Yes      | `dict[str, Any]` | —       |
+| `idempotency_key`  | No       | `Optional[str]`  | `None`  |
 
 `resource` must be a valid FHIR R4 JSON object with a `resourceType` field. Supported types include `Condition`, `MedicationRequest`, `MedicationStatement`, `MedicationAdministration`, `AllergyIntolerance`, `Appointment`, `Encounter`, `Procedure`, `Immunization`, `DiagnosticReport`, `DocumentReference`, `CarePlan`, `CareTeam`, `FamilyMemberHistory`, `Goal`, `Observation` (vital-signs), and `Patient`.
+
+`idempotency_key` makes a retry after a network error or 5xx safe: send the same key and the same resource again and Olira will not create a second event. Pass a key whenever you plan to retry — without one, `log_fhir()` does not reliably treat a resend as a duplicate. If the FHIR resource has no date the absorber can use, Olira timestamps the event at processing time, so two calls without a key are stored separately.
+
+One FHIR resource can map to several Olira events. For example, a treatment plan from an EHR can produce both a follow-up item and a treatment-phase update. Pass **one** key for the call; do not add a log type or a key per event. Olira records `your-key:clinical_plan_item` and `your-key:treatment_phase` internally so each mapped event can be retried on its own. A patient demographics update is recorded as `your-key:demographics`. `log_batch()` keeps the key you send unchanged, so the same string on both methods does not collide.
 
 **Raises `ValidationError`** if:
 
 - `resourceType` is missing (HTTP 422 from the API)
 - The resource maps to zero Olira events — unsupported type, unrecognized fields, or (for `Observation`) unrecognized category/LOINC code. The exception message explains why.
+
+**Example — safe retry:**
+
+```python
+import olira
+
+olira.init(api_key="YOUR_API_KEY")
+
+resource = {
+    "resourceType": "Condition",
+    "id": "condition-1",
+    "code": {"coding": [{"system": "http://snomed.info/sct", "code": "254837009"}]},
+    "subject": {"reference": "Patient/example"},
+}
+
+# If this call's response is lost to a network error, retry it verbatim —
+# the same idempotency_key guarantees no duplicate event is created.
+result = olira.log_fhir(patient_id="patient-uuid", resource=resource, idempotency_key="condition-2026-01-10")
+```
 
 **Example — ingest a Condition:**
 
@@ -1471,6 +1495,7 @@ result = olira.log_fhir(
         "subject": {"reference": "Patient/example"},
         "onsetDateTime": "2025-01-10T00:00:00Z",
     },
+    idempotency_key="condition-2026-01-10",
 )
 print(f"Accepted: {result.accepted}")
 ```
@@ -1502,7 +1527,7 @@ Lightweight event specification for log_batch(). Not persisted internally.
 | `payload`                   | No       | `Optional[dict[str, Any]]` | — (default: `None`)                                                                                                                       |
 | `trace`                     | No       | `Optional[OliraTrace]`     | — (default: `None`)                                                                                                                       |
 | `timestamp`                 | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
-| `idempotency_key`           | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
+| `idempotency_key`           | No       | `Optional[str]`            | Optional key so a retry of the same log is not stored twice. (default: `None`)                                                            |
 | `metadata`                  | No       | `Optional[dict[str, Any]]` | Arbitrary key/value context stored separately from the typed payload. Surfaced in the Olira Console event detail panel. (default: `None`) |
 | `write_back`                | No       | `bool`                     | Request write-back of this log into the org's connected system — see [`log`](#log). (default: `False`)                                       |
 | `write_back_integration_id` | No       | `Optional[str]`            | Target integration instance for `write_back` when several are write-configured. (default: `None`)                                         |

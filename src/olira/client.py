@@ -254,7 +254,9 @@ class OliraClient:
             write_back_integration_id=write_back_integration_id,
         )
 
-    def log_fhir(self, *, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+    def log_fhir(
+        self, *, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None
+    ) -> BatchResult:
         """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
 
         Olira maps the resource to one or more platform log types via the FHIR absorber
@@ -262,10 +264,17 @@ class OliraClient:
         immediately for the patient. You do not choose log_type or build Olira-shaped
         payloads — the absorber handles the mapping.
 
+        idempotency_key makes the call safe to retry after a network error or 5xx: the
+        same key + resource returns the same accepted/failed counts without re-applying
+        graph updates. One resource can map to several Olira events (for example a
+        treatment plan from an EHR can produce both a follow-up item and a
+        treatment-phase update). Pass one key for the call; Olira applies it to
+        each mapped event.
+
         Raises ValidationError if the resource could not be mapped to any Olira events
         (unsupported type, unrecognized fields, or missing resourceType).
         """
-        result = self._transport.log_fhir(patient_id, resource)
+        result = self._transport.log_fhir(patient_id, resource, idempotency_key)
         if result.accepted == 0:
             msg = result.errors[0].message if result.errors else "FHIR resource produced no accepted events"
             raise ValidationError(msg)
@@ -1597,7 +1606,9 @@ class AsyncOliraClient:
             write_back_integration_id=write_back_integration_id,
         )
 
-    async def log_fhir(self, *, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+    async def log_fhir(
+        self, *, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None
+    ) -> BatchResult:
         """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
 
         Olira maps the resource to one or more platform log types via the FHIR absorber
@@ -1605,11 +1616,18 @@ class AsyncOliraClient:
         immediately for the patient. You do not choose log_type or build Olira-shaped
         payloads — the absorber handles the mapping.
 
+        idempotency_key makes the call safe to retry after a network error or 5xx: the
+        same key + resource returns the same accepted/failed counts without re-applying
+        graph updates. One resource can map to several Olira events (for example a
+        treatment plan from an EHR can produce both a follow-up item and a
+        treatment-phase update). Pass one key for the call; Olira applies it to
+        each mapped event.
+
         Raises ValidationError if the resource could not be mapped to any Olira events
         (unsupported type, unrecognized fields, or missing resourceType).
         """
         transport = self._require_transport("log_fhir")
-        result = await transport.log_fhir(patient_id, resource)
+        result = await transport.log_fhir(patient_id, resource, idempotency_key)
         if result.accepted == 0:
             msg = result.errors[0].message if result.errors else "FHIR resource produced no accepted events"
             raise ValidationError(msg)

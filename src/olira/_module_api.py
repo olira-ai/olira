@@ -146,7 +146,7 @@ def log_batch(events: list[LogSpec]) -> BatchResult:
     return _get_client().log_batch(events)
 
 
-def log_fhir(*, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+def log_fhir(*, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None) -> BatchResult:
     """Submit a single FHIR R4 resource for immediate ingestion. Module-level proxy to the singleton client.
 
     Requires an API key with the sdk:event-log scope. Olira maps the resource to one or
@@ -154,9 +154,12 @@ def log_fhir(*, patient_id: str, resource: dict[str, Any]) -> BatchResult:
     integrations) and processes each event immediately. You do not choose log_type or
     build Olira-shaped payloads — the absorber handles the mapping.
 
+    idempotency_key makes the call safe to retry after a network error or 5xx.
+    Pass one key even when the resource maps to several Olira events.
+
     Raises ValidationError if the resource could not be mapped to any Olira events.
     """
-    return _get_client().log_fhir(patient_id=patient_id, resource=resource)
+    return _get_client().log_fhir(patient_id=patient_id, resource=resource, idempotency_key=idempotency_key)
 
 
 def create_patient(
