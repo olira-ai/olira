@@ -443,9 +443,13 @@ Requires an API key with the api:manage-patients scope.
 
 Filters compose as AND on the **same** identifier: `external_system` alone finds every
 patient with an identifier for that system (e.g. every Epic patient);
-`external_system` + `external_value` finds the one patient with that exact identifier;
-`integration_id` alone finds every patient linked to that specific integration instance.
-`external_value` requires `external_system`.
+`external_system` + `external_value` finds every patient with that exact identifier —
+usually one, but not guaranteed: two integration instances of the same system can
+share a value (e.g. Hospital A and Hospital B both using FHIR id `MRN-12345`), so the
+same `(system, value)` pair can resolve to more than one patient. Add `integration_id`
+when you need exactly the row for one specific instance. `integration_id` alone finds
+every patient linked to that specific integration instance. `external_value` requires
+`external_system`.
 
 | Parameter         | Required | Type            | Default |
 | ----------------- | -------- | --------------- | ------- |
