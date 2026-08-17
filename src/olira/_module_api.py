@@ -34,6 +34,8 @@ from .models import (
     EventStateModuleResult,
     EventStateModuleSummary,
     ExternalIdentifier,
+    ExternalIdentifierMatcher,
+    ExternalIdentifierMutationResult,
     IngestionJob,
     IngestionJobListResult,
     IngestRecord,
@@ -221,16 +223,21 @@ def list_patients(
     offset: int = 0,
     external_system: str | None = None,
     external_value: str | None = None,
+    integration_id: str | None = None,
 ) -> PatientListResult:
     """List patients in your organisation. Module-level proxy to the singleton client.
 
-    Requires an API key with the api:manage-patients scope.
+    Requires an API key with the api:manage-patients scope. ``external_system`` alone
+    finds every patient with an identifier for that system; add ``external_value`` to
+    find one exact identifier. ``integration_id`` alone finds every patient linked to
+    that specific integration instance.
     """
     return _get_client().list_patients(
         limit=limit,
         offset=offset,
         external_system=external_system,
         external_value=external_value,
+        integration_id=integration_id,
     )
 
 
@@ -253,6 +260,9 @@ def update_patient(
 
     Requires an API key with the api:manage-patients scope.
     Only supplied fields are changed; omitted fields are left as-is.
+    ``external_identifiers`` is merge/append-only — see
+    :func:`add_patient_external_identifiers` / :func:`remove_patient_external_identifiers`
+    for incremental changes.
     """
     return _get_client().update_patient(
         patient_id=patient_id,
@@ -268,6 +278,33 @@ def update_patient(
         external_identifiers=external_identifiers,
         metadata=metadata,
     )
+
+
+def add_patient_external_identifiers(
+    *, patient_id: str, identifiers: list[ExternalIdentifier]
+) -> ExternalIdentifierMutationResult:
+    """Add one or more external identifiers to a patient. Module-level proxy to the singleton client.
+
+    Requires an API key with the api:manage-patients scope. Idempotent — an identifier
+    already present is skipped, not modified.
+    """
+    return _get_client().add_patient_external_identifiers(patient_id=patient_id, identifiers=identifiers)
+
+
+def remove_patient_external_identifiers(
+    *, patient_id: str, identifiers: list[ExternalIdentifierMatcher]
+) -> ExternalIdentifierMutationResult:
+    """Remove one or more external identifiers from a patient. Module-level proxy to the singleton client.
+
+    Requires an API key with the api:manage-patients scope. Each entry is a matcher:
+    system + value targets one identifier; system alone removes every identifier for that
+    system (``system="epic"`` unlinks every connected Epic instance — use
+    ``integration_id`` alone to drop one hospital); integration_id alone removes every
+    identifier for that instance; system + integration_id narrows to that system on that
+    instance. Can match any identifier, including one owned by a platform integration — a
+    deliberate, irreversible unlink.
+    """
+    return _get_client().remove_patient_external_identifiers(patient_id=patient_id, identifiers=identifiers)
 
 
 def delete_patient(*, patient_id: str, permanent: bool = False) -> None:

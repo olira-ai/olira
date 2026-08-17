@@ -5,18 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.15.1] - 2026-08-14
+## [1.16.0] - 2026-08-17
 
 ### Added
 - Optional `idempotency_key` on `log_fhir()` (sync + async), matching `log_batch`/`LogSpec`.
   Makes the call safe to retry after a network error or 5xx. One FHIR resource can map to
   several Olira events; pass one key for the call — the server applies it to each mapped event.
+- `ExternalIdentifier.integration_id` — the platform-assigned id of the integration that
+  owns an identifier (e.g. an Epic sync). Read-only; present on `get_patient()` /
+  `list_patients()` responses, and safe to omit or echo unchanged on `update_patient()`.
+- `add_patient_external_identifiers()` / `remove_patient_external_identifiers()` (sync +
+  async, plus module-level proxies) — add or remove one or more external identifiers on a
+  patient without a full `update_patient()` replace. Idempotent. `remove_...` takes
+  `ExternalIdentifierMatcher` entries: `system` + `value` (one row), `system` only
+  (every identifier for that system — `system="epic"` unlinks every connected Epic
+  instance), `integration_id` only (that instance), or `system` + `integration_id`.
+  It is the only way to delete an identifier, and can remove one owned by a platform
+  integration — a deliberate, irreversible unlink.
+- `list_patients(integration_id=...)` and `list_patients(external_system=...)` without
+  a value — find every patient linked to one integration instance, or every patient
+  with an identifier for that system. `external_value` still requires `external_system`.
 
 ### Fixed
 - `log_fhir()` no longer retries automatically on a transport-level network error or 5xx when
   no `idempotency_key` is supplied. Without a key, the server has no stable dedup anchor, so
   replaying a request whose response was lost could create a duplicate event — the transport's
   own retry now only fires when a key makes that replay safe.
+- `ExternalIdentifier` previously had no `integration_id` field, so a
+  `get_patient()` → append → `update_patient()` round-trip silently stripped a stored
+  integration link (the identifier's `integration_id` came back `None` on write). The
+  server now also treats `update_patient()`'s `external_identifiers` as merge/append-only,
+  so this can no longer happen even with an older SDK or a raw HTTP client.
+
+### Changed
+- **Breaking:** `update_patient(external_identifiers=...)` no longer replaces the stored
+  list — it merges. New `(system, value)` pairs are added; anything already stored,
+  including a platform-owned identifier, is left untouched whether or not you include it.
+  `external_identifiers=[]` is now rejected (422) instead of clearing every identifier —
+  use `remove_patient_external_identifiers()` to remove one.
 
 ## [1.15.0] - 2026-08-13
 

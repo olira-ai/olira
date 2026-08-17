@@ -27,6 +27,7 @@ from .models import (
     ExportDownload,
     ExportJob,
     ExportJobListResult,
+    ExternalIdentifierMutationResult,
     IngestionJob,
     IngestionJobListResult,
     LogQueryResult,
@@ -263,6 +264,22 @@ class HttpTransport:
         """Update a patient (PUT /v1/patients/{patient_id}). Requires api:manage-patients scope."""
         raw = self._request("PUT", f"/v1/patients/{patient_id}", json=body)
         return _parse_patient(raw)
+
+    def add_patient_external_identifiers(
+        self, patient_id: str, body: dict[str, Any]
+    ) -> ExternalIdentifierMutationResult:
+        """Add external identifiers to a patient (POST /v1/patients/{patient_id}/external-identifiers).
+        Requires api:manage-patients scope."""
+        raw = self._request("POST", f"/v1/patients/{patient_id}/external-identifiers", json=body)
+        return ExternalIdentifierMutationResult.model_validate(raw)
+
+    def remove_patient_external_identifiers(
+        self, patient_id: str, body: dict[str, Any]
+    ) -> ExternalIdentifierMutationResult:
+        """Remove external identifiers from a patient (DELETE /v1/patients/{patient_id}/external-identifiers).
+        Requires api:manage-patients scope."""
+        raw = self._request("DELETE", f"/v1/patients/{patient_id}/external-identifiers", json=body)
+        return ExternalIdentifierMutationResult.model_validate(raw)
 
     def delete_patient(self, patient_id: str, *, permanent: bool = False) -> None:
         """Delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope.
@@ -773,6 +790,22 @@ class AsyncHttpTransport:
         """Update a patient (PUT /v1/patients/{patient_id}). Requires api:manage-patients scope."""
         raw = await self._request("PUT", f"/v1/patients/{patient_id}", json=body)
         return _parse_patient(raw)
+
+    async def add_patient_external_identifiers(
+        self, patient_id: str, body: dict[str, Any]
+    ) -> ExternalIdentifierMutationResult:
+        """Add external identifiers to a patient (POST /v1/patients/{patient_id}/external-identifiers).
+        Requires api:manage-patients scope."""
+        raw = await self._request("POST", f"/v1/patients/{patient_id}/external-identifiers", json=body)
+        return ExternalIdentifierMutationResult.model_validate(raw)
+
+    async def remove_patient_external_identifiers(
+        self, patient_id: str, body: dict[str, Any]
+    ) -> ExternalIdentifierMutationResult:
+        """Remove external identifiers from a patient (DELETE /v1/patients/{patient_id}/external-identifiers).
+        Requires api:manage-patients scope."""
+        raw = await self._request("DELETE", f"/v1/patients/{patient_id}/external-identifiers", json=body)
+        return ExternalIdentifierMutationResult.model_validate(raw)
 
     async def delete_patient(self, patient_id: str, *, permanent: bool = False) -> None:
         """Delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope.

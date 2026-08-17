@@ -8,7 +8,7 @@ managing patients, backfilling historical data, uploading passive sensor
 Parquet, reading Patient State, and minting patient-scoped tokens for use with
 the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.15.1`
+**Package:** `olira` — **Version:** `1.16.0`
 
 ## Related docs
 
@@ -434,12 +434,18 @@ patient = olira.create_patient(
 #### `list_patients`
 
 ```python
-list_patients(*, limit: int = 100, offset: int = 0, external_system: str | None = None, external_value: str | None = None) -> PatientListResult
+list_patients(*, limit: int = 100, offset: int = 0, external_system: str | None = None, external_value: str | None = None, integration_id: str | None = None) -> PatientListResult
 ```
 
 List patients in your organisation. Module-level proxy to the singleton client.
 
 Requires an API key with the api:manage-patients scope.
+
+Filters compose as AND on the **same** identifier: `external_system` alone finds every
+patient with an identifier for that system (e.g. every Epic patient);
+`external_system` + `external_value` finds the one patient with that exact identifier;
+`integration_id` alone finds every patient linked to that specific integration instance.
+`external_value` requires `external_system`.
 
 | Parameter         | Required | Type            | Default |
 | ----------------- | -------- | --------------- | ------- |
@@ -447,6 +453,7 @@ Requires an API key with the api:manage-patients scope.
 | `offset`          | No       | `int`           | `0`     |
 | `external_system` | No       | `Optional[str]` | `None`  |
 | `external_value`  | No       | `Optional[str]` | `None`  |
+| `integration_id`  | No       | `Optional[str]` | `None`  |
 
 **Example:**
 
@@ -454,6 +461,12 @@ Requires an API key with the api:manage-patients scope.
 result = olira.list_patients(limit=20, offset=0)
 for patient in result.patients:
     print(patient.id, patient.first_name, patient.last_name)
+
+# Every patient with an Epic identifier, without knowing the FHIR id:
+epic_patients = olira.list_patients(external_system="epic")
+
+# Every patient linked to one Epic instance:
+linked = olira.list_patients(integration_id="66f0a1...")
 ```
 
 ### Get a patient
@@ -491,6 +504,12 @@ Update a patient. Module-level proxy to the singleton client.
 Requires an API key with the api:manage-patients scope.
 Only supplied fields are changed; omitted fields are left as-is.
 
+`external_identifiers` is **merge/append-only**: any `(system, value)` pair not already
+stored is added, and anything already stored — including an identifier a platform
+integration owns — is left untouched, whether or not you include it in the list. An
+empty list is rejected (422); use [`remove_patient_external_identifiers`](#remove_patient_external_identifiers)
+to remove one.
+
 | Parameter              | Required | Type                                 | Default |
 | ---------------------- | -------- | ------------------------------------ | ------- |
 | `patient_id`           | Yes      | `str`                                | —       |
@@ -519,7 +538,9 @@ olira.update_patient(
 
 ### External Identifiers
 
-Link a patient to their ID in another system using `ExternalIdentifier`:
+Link a patient to their ID in another system using `ExternalIdentifier`. On `update_patient`,
+new identifiers are **added**, not swapped in — this call attaches two identifiers to a
+patient that has none yet:
 
 ```python
 from olira import ExternalIdentifier
@@ -533,13 +554,150 @@ olira.update_patient(
 )
 ```
 
-> **Identifier namespaces are scoped per integration instance.** Identifiers created by an
-> integration sync carry the specific integration's id and belong to that instance's
-> namespace; identifiers you supply through the SDK (MRNs, SSNs) live in their own
-> namespace. The two never collide — an SDK-supplied `("epic", "MRN-12345")` is not
-> rejected just because an Epic instance assigned the same value to another patient, and
-> duplicate checks apply only within each namespace. See
-> [Integrations & Instances](#integrations--instances).
+> **Identifier uniqueness is per project, and a plain SDK id shares a namespace with
+> integration-owned ids of the same `(system, value)`.** Identifiers created by an
+> integration sync carry that instance's id. Identifiers you supply through the SDK
+> (your CRM id, an SSN) have `integration_id: None`. Two Epic *instances* may share a
+> value — Hospital A and Hospital B can both use the same FHIR id. But an SDK-supplied
+> `("epic", "MRN-12345")` **does** conflict with an integration-owned
+> `("epic", "MRN-12345")` on another patient in the same project (409). That stops a
+> roster patient and an SDK patient from splitting the same chart. Duplicate checks do
+> not cross projects. See [Integrations & Instances](#integrations--instances).
+
+**`ExternalIdentifier.integration_id`** is the platform-assigned id of the integration that
+owns an identifier (e.g. an Epic sync). It's read-only — Olira sets it, never you — and is
+`None` for identifiers you supply yourself. It's included on every `get_patient()` /
+`list_patients()` response. You never need to set it: `update_patient()` never clears a
+stored `integration_id`, whether you omit the identifier entirely or echo it back without
+the field. Its main use is telling you what removing an identifier will *do*: any
+identifier can be removed via `remove_patient_external_identifiers()` regardless of
+`integration_id`, but removing one that's non-`None` unlinks the patient from that
+integration — see [`remove_patient_external_identifiers`](#remove_patient_external_identifiers)
+for the full flow.
+
+> **Don't hand-roll a GET → append → PUT.** If you only want to attach your own identifier
+> to a patient — without reading back and re-sending every identifier it already has —
+> use `add_patient_external_identifiers()` below instead of reconstructing the full list
+> yourself:
+>
+> ```python
+> # ✅ Direct — adds one identifier, leaves everything else untouched.
+> olira.add_patient_external_identifiers(
+>     patient_id="patient-uuid",
+>     identifiers=[ExternalIdentifier(system="my-crm", value="CRM-4471")],
+> )
+> ```
+
+#### `add_patient_external_identifiers`
+
+```python
+add_patient_external_identifiers(*, patient_id: str, identifiers: list[ExternalIdentifier]) -> ExternalIdentifierMutationResult
+```
+
+Add one or more external identifiers to a patient. Module-level proxy to the singleton client.
+
+Requires an API key with the api:manage-patients scope. Idempotent — an identifier already
+present (matched on `system` + `value`) is skipped, not modified. Only `system` and `value`
+are sent; `integration_id` is platform-owned and stripped even if set on the objects you
+pass in — you cannot use this call to claim ownership of an identifier on behalf of an
+integration.
+
+| Parameter     | Required | Type                       | Default |
+| ------------- | -------- | --------------------------- | ------- |
+| `patient_id`  | Yes      | `str`                       | —       |
+| `identifiers` | Yes      | `list[ExternalIdentifier]`  | —       |
+
+**Example:**
+
+```python
+result = olira.add_patient_external_identifiers(
+    patient_id="patient-uuid",
+    identifiers=[ExternalIdentifier(system="my-crm", value="CRM-4471")],
+)
+print(result.added, result.skipped)
+```
+
+#### `remove_patient_external_identifiers`
+
+```python
+remove_patient_external_identifiers(*, patient_id: str, identifiers: list[ExternalIdentifierMatcher]) -> ExternalIdentifierMutationResult
+```
+
+Remove one or more external identifiers from a patient. Module-level proxy to the singleton client.
+
+Requires an API key with the api:manage-patients scope. This is the **only** way to remove
+an external identifier — `update_patient()` never removes. Each entry is a
+[`ExternalIdentifierMatcher`](#externalidentifiermatcher), not a full identifier: rows
+are removed if they match every field you set.
+
+- `system` + `value` — exactly one identifier (the common case).
+- `system` only — every identifier for that system. `system="epic"` unlinks the
+  patient from **every** connected Epic instance; use `integration_id` alone to drop
+  one hospital.
+- `integration_id` only — every identifier owned by that specific integration instance.
+- `system` + `integration_id` — that system on that instance only.
+
+It can match **any** identifier, including one owned by a platform integration: doing so
+is a deliberate, irreversible unlink. Under `linked_only` import mode, the patient
+immediately stops receiving further data from that integration. Idempotent — a matcher
+that matches nothing is skipped, not an error. `value` without `system` is rejected.
+
+> **How to find the identifier you're about to delete — and know what removing it does.**
+> Call `get_patient` first. Check `integration_id` for the **consequence**, not for
+> permission: `None` means you supplied the identifier yourself. A non-`None` value
+> means an EHR integration owns it — removing it unlinks the patient from that
+> integration. If you want the human-readable name of that integration, resolve it
+> with `GET /v1/integrations/{integration_id}` (`sdk:integrations` scope) — that's a
+> different API surface than patient management and isn't exposed by this SDK version.
+>
+> ```python
+> from olira import ExternalIdentifierMatcher
+>
+> patient = olira.get_patient(patient_id="patient-uuid")
+> for ident in patient.external_identifiers:
+>     print(ident.system, ident.value, "owned by integration:", ident.integration_id)
+> # epic       MRN-12345   owned by integration: 66f0a1...   ← a platform integration link
+> # my-crm     CRM-4471    owned by integration: None        ← yours
+>
+> # Remove the identifier you added yourself:
+> olira.remove_patient_external_identifiers(
+>     patient_id="patient-uuid",
+>     identifiers=[ExternalIdentifierMatcher(system="my-crm", value="CRM-4471")],
+> )
+>
+> # Drop this patient from one Epic instance (leave other hospitals and your ids):
+> olira.remove_patient_external_identifiers(
+>     patient_id="patient-uuid",
+>     identifiers=[ExternalIdentifierMatcher(integration_id="66f0a1...")],
+> )
+> ```
+
+| Parameter     | Required | Type                              | Default |
+| ------------- | -------- | --------------------------------- | ------- |
+| `patient_id`  | Yes      | `str`                             | —       |
+| `identifiers` | Yes      | `list[ExternalIdentifierMatcher]` | —       |
+
+**Example:**
+
+```python
+from olira import ExternalIdentifierMatcher
+
+result = olira.remove_patient_external_identifiers(
+    patient_id="patient-uuid",
+    identifiers=[ExternalIdentifierMatcher(system="my-crm", value="CRM-4471")],
+)
+print(result.removed, result.skipped)
+```
+
+#### `ExternalIdentifierMutationResult`
+
+| Field                   | Type                       | Notes                                          |
+| ----------------------- | -------------------------- | ----------------------------------------------- |
+| `patient_id`            | `str`                       |                                                  |
+| `added`                 | `int`                       | Defaults to `0`                                 |
+| `removed`               | `int`                       | Defaults to `0`                                 |
+| `skipped`               | `int`                       | Already present (add) or matchers that hit nothing (remove) |
+| `external_identifiers`  | `list[ExternalIdentifier]`  | Full list after the mutation                    |
 
 ### Delete a patient
 
@@ -623,10 +781,21 @@ print(f"Created {result.count}, errors: {len(result.errors)}")
 
 Links a patient to their ID in an external system (e.g. Epic MRN, Flatiron ID, FHIR resource ID).
 
-| Field    | Required | Type  | Description                                  |
-| -------- | -------- | ----- | -------------------------------------------- |
-| `system` | Yes      | `str` | System name, e.g. 'epic', 'flatiron', 'fhir' |
-| `value`  | Yes      | `str` | Patient ID in that system                    |
+| Field            | Required | Type            | Description                                                                 |
+| ---------------- | -------- | --------------- | ---------------------------------------------------------------------------- |
+| `system`         | Yes      | `str`           | System name, e.g. 'epic', 'flatiron', 'fhir'                                 |
+| `value`          | Yes      | `str`           | Patient ID in that system                                                     |
+| `integration_id` | No       | `Optional[str]` | Read-only. Platform-assigned id of the owning integration; `None` if you supplied the identifier yourself. |
+
+### `ExternalIdentifierMatcher`
+
+Selects one or more stored identifiers to remove. Every field is optional; rows match if they satisfy every field you set. At least one field is required. `value` without `system` is rejected.
+
+| Field            | Required | Type            | Description |
+| ---------------- | -------- | --------------- | ----------- |
+| `system`         | No       | `Optional[str]` | System name. Alone: every identifier for that system. `system="epic"` unlinks every connected Epic instance. |
+| `value`          | No       | `Optional[str]` | Value. Requires `system`. With `system`: exactly one identifier. |
+| `integration_id` | No       | `Optional[str]` | Integration instance id. Alone: every identifier owned by that instance. With `system`: that system on that instance only. |
 
 ### `CreatePatientRequest`
 
@@ -664,7 +833,7 @@ Only the fields you set are changed; omitted fields are left as-is.
 | `timezone`             | No       | `Optional[str]`                      | — (default: `None`) |
 | `primary_disease_site` | No       | `Optional[str]`                      | — (default: `None`) |
 | `disease_stage`        | No       | `Optional[str]`                      | — (default: `None`) |
-| `external_identifiers` | No       | `Optional[list[ExternalIdentifier]]` | — (default: `None`) |
+| `external_identifiers` | No       | `Optional[list[ExternalIdentifier]]` | Merge/append-only — see [External Identifiers](#external-identifiers). An empty list is rejected. |
 | `metadata`             | No       | `Optional[dict[str, Any]]`           | — (default: `None`) |
 
 ### `Patient`

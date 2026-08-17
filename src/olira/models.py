@@ -252,6 +252,48 @@ class ExternalIdentifier(BaseModel):
 
     system: str = Field(..., description="System name, e.g. 'epic', 'flatiron', 'fhir'")
     value: str = Field(..., description="Patient ID in that system")
+    integration_id: str | None = Field(
+        default=None,
+        description=(
+            "Platform-assigned id of the integration that owns this identifier (e.g. an Epic "
+            "sync). Read-only — set by Olira, never by you. `None` for identifiers you supply "
+            "yourself (e.g. your own system's patient id). update_patient() only ever adds "
+            "identifiers, so this field is safe to leave as-is when echoing a value you got "
+            "from get_patient() or list_patients(); prefer add_patient_external_identifiers() / "
+            "remove_patient_external_identifiers() for incremental changes."
+        ),
+    )
+
+
+class ExternalIdentifierMatcher(BaseModel):
+    """Selects one or more stored external identifiers to remove from a patient — a
+    filter, not a full identifier. Every field is optional; rows match if they satisfy
+    every field you set. At least one field is required.
+
+    - `system` + `value`: exactly one identifier (the common case).
+    - `system` only: every identifier for that system (e.g. every Epic identifier,
+      across every Epic instance the org has connected). ``system="epic"`` unlinks
+      the patient from every connected Epic instance — use ``integration_id`` alone
+      to drop one hospital.
+    - `integration_id` only: every identifier owned by that specific integration
+      instance, regardless of system or value.
+    - `system` + `integration_id`: that system on that instance only.
+
+    `value` without `system` is rejected — a bare value isn't enough to know which
+    system's namespace it belongs to.
+    """
+
+    system: str | None = None
+    value: str | None = None
+    integration_id: str | None = None
+
+    @model_validator(mode="after")
+    def _require_a_selective_field(self) -> Self:
+        if self.value is not None and self.system is None:
+            raise ValidationError("value requires system — specify which system this value belongs to")
+        if self.system is None and self.value is None and self.integration_id is None:
+            raise ValidationError("specify at least one of: system, value, integration_id")
+        return self
 
 
 class CreatePatientRequest(BaseModel):
@@ -307,6 +349,11 @@ class UpdatePatientRequest(BaseModel):
     """Request body for updating a patient (all fields optional).
 
     Only the fields you set are changed; omitted fields are left as-is.
+
+    `external_identifiers` is merge/append-only: any (system, value) pair not already
+    stored is added, and anything already stored — including an identifier a platform
+    integration owns — is left untouched, whether or not you include it in the list.
+    An empty list is rejected; use remove_patient_external_identifiers() to remove one.
     """
 
     first_name: str | None = None
@@ -323,6 +370,16 @@ class UpdatePatientRequest(BaseModel):
     disease_stage: str | None = None
     external_identifiers: list[ExternalIdentifier] | None = None
     metadata: dict[str, Any] | None = None
+
+    @field_validator("external_identifiers")
+    @classmethod
+    def _reject_empty_identifier_list(cls, v: list["ExternalIdentifier"] | None) -> list["ExternalIdentifier"] | None:
+        if v is not None and len(v) == 0:
+            raise ValidationError(
+                "external_identifiers cannot be emptied via update_patient() — it only adds identifiers. "
+                "Use remove_patient_external_identifiers() to remove one."
+            )
+        return v
 
 
 class Patient(BaseModel):
@@ -370,6 +427,16 @@ class PatientBatchResult(BaseModel):
     count: int
     items: list[PatientBatchItem]
     errors: list[BatchError] = Field(default_factory=list)
+
+
+class ExternalIdentifierMutationResult(BaseModel):
+    """Result of add_patient_external_identifiers() / remove_patient_external_identifiers()."""
+
+    patient_id: str
+    added: int = 0
+    removed: int = 0
+    skipped: int = 0
+    external_identifiers: list[ExternalIdentifier] = Field(default_factory=list)
 
 
 class PatientToken(BaseModel):
