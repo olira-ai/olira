@@ -27,6 +27,7 @@ from .models import (
     ExportDownload,
     ExportJob,
     ExportJobListResult,
+    ExternalIdentifierMutationResult,
     IngestionJob,
     IngestionJobListResult,
     LogQueryResult,
@@ -263,6 +264,22 @@ class HttpTransport:
         """Update a patient (PUT /v1/patients/{patient_id}). Requires api:manage-patients scope."""
         raw = self._request("PUT", f"/v1/patients/{patient_id}", json=body)
         return _parse_patient(raw)
+
+    def add_patient_external_identifiers(
+        self, patient_id: str, body: dict[str, Any]
+    ) -> ExternalIdentifierMutationResult:
+        """Add external identifiers to a patient (POST /v1/patients/{patient_id}/external-identifiers).
+        Requires api:manage-patients scope."""
+        raw = self._request("POST", f"/v1/patients/{patient_id}/external-identifiers", json=body)
+        return ExternalIdentifierMutationResult.model_validate(raw)
+
+    def remove_patient_external_identifiers(
+        self, patient_id: str, body: dict[str, Any]
+    ) -> ExternalIdentifierMutationResult:
+        """Remove external identifiers from a patient (DELETE /v1/patients/{patient_id}/external-identifiers).
+        Requires api:manage-patients scope."""
+        raw = self._request("DELETE", f"/v1/patients/{patient_id}/external-identifiers", json=body)
+        return ExternalIdentifierMutationResult.model_validate(raw)
 
     def delete_patient(self, patient_id: str, *, permanent: bool = False) -> None:
         """Delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope.
@@ -593,9 +610,12 @@ class HttpTransport:
         raw = self._request("POST", f"/v1/ingestion/jobs/{job_id}/retry-backfill")
         return IngestionJob.model_validate(raw)
 
-    def log_fhir(self, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+    def log_fhir(self, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None) -> BatchResult:
         """Submit a single FHIR R4 resource (POST /v1/fhir/resource). Requires sdk:event-log scope."""
-        raw = self._request("POST", "/v1/fhir/resource", json={"patient_id": patient_id, "resource": resource})
+        body: dict[str, Any] = {"patient_id": patient_id, "resource": resource}
+        if idempotency_key:
+            body["idempotency_key"] = idempotency_key
+        raw = self._request("POST", "/v1/fhir/resource", json=body, retryable=bool(idempotency_key))
         return BatchResult.model_validate(raw)
 
     # ------------------------------------------------------------------
@@ -770,6 +790,22 @@ class AsyncHttpTransport:
         """Update a patient (PUT /v1/patients/{patient_id}). Requires api:manage-patients scope."""
         raw = await self._request("PUT", f"/v1/patients/{patient_id}", json=body)
         return _parse_patient(raw)
+
+    async def add_patient_external_identifiers(
+        self, patient_id: str, body: dict[str, Any]
+    ) -> ExternalIdentifierMutationResult:
+        """Add external identifiers to a patient (POST /v1/patients/{patient_id}/external-identifiers).
+        Requires api:manage-patients scope."""
+        raw = await self._request("POST", f"/v1/patients/{patient_id}/external-identifiers", json=body)
+        return ExternalIdentifierMutationResult.model_validate(raw)
+
+    async def remove_patient_external_identifiers(
+        self, patient_id: str, body: dict[str, Any]
+    ) -> ExternalIdentifierMutationResult:
+        """Remove external identifiers from a patient (DELETE /v1/patients/{patient_id}/external-identifiers).
+        Requires api:manage-patients scope."""
+        raw = await self._request("DELETE", f"/v1/patients/{patient_id}/external-identifiers", json=body)
+        return ExternalIdentifierMutationResult.model_validate(raw)
 
     async def delete_patient(self, patient_id: str, *, permanent: bool = False) -> None:
         """Delete a patient (DELETE /v1/patients/{patient_id}). Requires api:manage-patients scope.
@@ -1095,9 +1131,14 @@ class AsyncHttpTransport:
         raw = await self._request("POST", f"/v1/ingestion/jobs/{job_id}/retry-backfill")
         return IngestionJob.model_validate(raw)
 
-    async def log_fhir(self, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+    async def log_fhir(
+        self, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None
+    ) -> BatchResult:
         """Submit a single FHIR R4 resource (POST /v1/fhir/resource). Requires sdk:event-log scope."""
-        raw = await self._request("POST", "/v1/fhir/resource", json={"patient_id": patient_id, "resource": resource})
+        body: dict[str, Any] = {"patient_id": patient_id, "resource": resource}
+        if idempotency_key:
+            body["idempotency_key"] = idempotency_key
+        raw = await self._request("POST", "/v1/fhir/resource", json=body, retryable=bool(idempotency_key))
         return BatchResult.model_validate(raw)
 
     # ------------------------------------------------------------------

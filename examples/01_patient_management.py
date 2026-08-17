@@ -20,7 +20,14 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
 
-from olira import DEFAULT_BASE_URL, CreatePatientRequest, ExternalIdentifier, OliraClient, OliraEnv  # noqa: E402
+from olira import (  # noqa: E402
+    DEFAULT_BASE_URL,
+    CreatePatientRequest,
+    ExternalIdentifier,
+    ExternalIdentifierMatcher,
+    OliraClient,
+    OliraEnv,
+)
 
 API_KEY = os.environ["OLIRA_API_KEY"]
 BASE_URL = os.environ.get("OLIRA_BASE_URL", DEFAULT_BASE_URL)
@@ -71,7 +78,65 @@ updated = client.update_patient(
 )
 print(f"Updated shell:  {updated.first_name} {updated.last_name}")
 
+# ── Add/remove external identifiers incrementally ────────────────────────────
+# update_patient(external_identifiers=...) is merge/append-only: it adds new
+# (system, value) pairs and never touches what's already stored. But when you only
+# want to attach your own identifier to a patient — without reading and re-sending
+# every identifier the patient already has (including ones an EHR integration
+# owns) — add_patient_external_identifiers() is the direct way to do it.
+mutation = client.add_patient_external_identifiers(
+    patient_id=shell.id,
+    identifiers=[ExternalIdentifier(system="my-crm", value="CRM-4471")],
+)
+print(f"Added identifier: added={mutation.added} skipped={mutation.skipped}")
+
+# remove_patient_external_identifiers() is the only way to remove one, and every
+# entry is a MATCHER, not just an exact identifier — it removes whatever it matches:
+#
+#   system + value              -> exactly one identifier (the common case, shown here)
+#   system only                 -> every identifier for that system. system="epic"
+#                                   unlinks every connected Epic instance — use
+#                                   integration_id alone to drop one hospital
+#   integration_id only         -> every identifier owned by that specific instance
+#   system + integration_id     -> that system on that instance only
+#
+# It can match ANY identifier — including one owned by a platform integration, which
+# is a deliberate, irreversible unlink (the patient stops receiving further data from
+# that integration under linked_only import mode). Only remove an integration's
+# identifier when you mean to sever that link.
+mutation = client.remove_patient_external_identifiers(
+    patient_id=shell.id,
+    identifiers=[ExternalIdentifierMatcher(system="my-crm", value="CRM-4471")],
+)
+print(f"Removed one identifier: removed={mutation.removed} skipped={mutation.skipped}")
+
+# System-only matcher: drop every "my-crm" identifier this patient has, whatever
+# their values, in one call.
+client.add_patient_external_identifiers(
+    patient_id=shell.id,
+    identifiers=[
+        ExternalIdentifier(system="my-crm", value="CRM-1"),
+        ExternalIdentifier(system="my-crm", value="CRM-2"),
+    ],
+)
+mutation = client.remove_patient_external_identifiers(
+    patient_id=shell.id,
+    identifiers=[ExternalIdentifierMatcher(system="my-crm")],
+)
+print(f"Removed all my-crm identifiers: removed={mutation.removed}")
+
+# integration_id-only matcher: fully unlink a patient from one specific EHR
+# integration instance without knowing which system/value it used — useful for
+# correcting a bad patient match without a full re-sync.
+# mutation = client.remove_patient_external_identifiers(
+#     patient_id=shell.id,
+#     identifiers=[ExternalIdentifierMatcher(integration_id="<integration-id>")],
+# )
+
 # ── Look up by external identifier ───────────────────────────────────────────
+# Same filter shapes work for list_patients(): system + value for one exact
+# identifier, system alone for every patient with that system, or integration_id
+# alone for every patient linked to a specific integration instance.
 result = client.list_patients(external_system="epic", external_value="MRN-10001")
 if result.patients:
     found = result.patients[0]

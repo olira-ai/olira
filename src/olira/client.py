@@ -38,6 +38,8 @@ from .models import (
     ExportJob,
     ExportJobListResult,
     ExternalIdentifier,
+    ExternalIdentifierMatcher,
+    ExternalIdentifierMutationResult,
     IngestDocument,
     IngestionJob,
     IngestionJobListResult,
@@ -254,7 +256,7 @@ class OliraClient:
             write_back_integration_id=write_back_integration_id,
         )
 
-    def log_fhir(self, *, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+    def log_fhir(self, *, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None) -> BatchResult:
         """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
 
         Olira maps the resource to one or more platform log types via the FHIR absorber
@@ -262,10 +264,17 @@ class OliraClient:
         immediately for the patient. You do not choose log_type or build Olira-shaped
         payloads — the absorber handles the mapping.
 
+        idempotency_key makes the call safe to retry after a network error or 5xx: the
+        same key + resource returns the same accepted/failed counts without re-applying
+        graph updates. One resource can map to several Olira events (for example a
+        treatment plan from an EHR can produce both a follow-up item and a
+        treatment-phase update). Pass one key for the call; Olira applies it to
+        each mapped event.
+
         Raises ValidationError if the resource could not be mapped to any Olira events
         (unsupported type, unrecognized fields, or missing resourceType).
         """
-        result = self._transport.log_fhir(patient_id, resource)
+        result = self._transport.log_fhir(patient_id, resource, idempotency_key)
         if result.accepted == 0:
             msg = result.errors[0].message if result.errors else "FHIR resource produced no accepted events"
             raise ValidationError(msg)
@@ -355,13 +364,24 @@ class OliraClient:
         offset: int = 0,
         external_system: str | None = None,
         external_value: str | None = None,
+        integration_id: str | None = None,
     ) -> PatientListResult:
-        """List patients in your organisation. Requires api:manage-patients scope."""
+        """List patients in your organisation. Requires api:manage-patients scope.
+
+        Filters compose as AND on the same identifier: ``external_system`` alone finds
+        every patient with an identifier for that system (e.g. every Epic patient);
+        ``external_system`` + ``external_value`` finds the one patient with that exact
+        identifier; ``integration_id`` alone finds every patient linked to that specific
+        integration instance, regardless of system or value. ``external_value`` requires
+        ``external_system``.
+        """
         params: dict[str, Any] = {"limit": limit, "offset": offset}
         if external_system is not None:
             params["external_system"] = external_system
         if external_value is not None:
             params["external_value"] = external_value
+        if integration_id is not None:
+            params["integration_id"] = integration_id
         return self._transport.list_patients(params)
 
     def update_patient(
@@ -383,7 +403,10 @@ class OliraClient:
         """Update a patient. Requires api:manage-patients scope.
 
         Only supplied fields are changed; omitted fields are left as-is.
-        Pass ``external_identifiers=[]`` to clear all external identifiers.
+        ``external_identifiers`` is merge/append-only: it adds any (system, value) pair
+        not already stored, and never modifies or removes one that is — including one a
+        platform integration owns. An empty list is rejected; use
+        ``remove_patient_external_identifiers()`` to remove one.
         Pass ``metadata={}`` to clear metadata.
         """
         req = UpdatePatientRequest(
@@ -400,6 +423,36 @@ class OliraClient:
             metadata=metadata,
         )
         return self._transport.update_patient(patient_id, req.model_dump(exclude_none=True))
+
+    def add_patient_external_identifiers(
+        self, *, patient_id: str, identifiers: list[ExternalIdentifier]
+    ) -> ExternalIdentifierMutationResult:
+        """Add one or more external identifiers to a patient. Requires api:manage-patients scope.
+
+        Idempotent — an identifier already present (matched on system + value) is
+        skipped, not modified. Only ``system`` and ``value`` are sent; ``integration_id``
+        is platform-owned and stripped from the request even if set on the objects you pass in.
+        """
+        body = {"identifiers": [{"system": i.system, "value": i.value} for i in identifiers]}
+        return self._transport.add_patient_external_identifiers(patient_id, body)
+
+    def remove_patient_external_identifiers(
+        self, *, patient_id: str, identifiers: list[ExternalIdentifierMatcher]
+    ) -> ExternalIdentifierMutationResult:
+        """Remove one or more external identifiers from a patient. Requires api:manage-patients scope.
+
+        The only way to remove an external identifier — ``update_patient()`` never removes.
+        Each entry is a matcher, not just an exact identifier: ``system`` + ``value`` targets
+        one identifier; ``system`` alone removes every identifier for that system (e.g. every
+        Epic identifier across every connected Epic instance); ``integration_id`` alone
+        removes every identifier owned by that specific integration instance. Can match ANY
+        identifier, including one owned by a platform integration: doing so is a deliberate,
+        irreversible unlink. Under ``linked_only`` import mode the patient immediately stops
+        receiving further data from that integration. Idempotent — a matcher matching
+        nothing is skipped, not an error.
+        """
+        body = {"identifiers": [m.model_dump(exclude_none=True) for m in identifiers]}
+        return self._transport.remove_patient_external_identifiers(patient_id, body)
 
     def delete_patient(self, *, patient_id: str, permanent: bool = False) -> None:
         """Delete a patient. Requires api:manage-patients scope.
@@ -1597,7 +1650,9 @@ class AsyncOliraClient:
             write_back_integration_id=write_back_integration_id,
         )
 
-    async def log_fhir(self, *, patient_id: str, resource: dict[str, Any]) -> BatchResult:
+    async def log_fhir(
+        self, *, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None
+    ) -> BatchResult:
         """Submit a single FHIR R4 resource for immediate ingestion. Requires sdk:event-log scope.
 
         Olira maps the resource to one or more platform log types via the FHIR absorber
@@ -1605,11 +1660,18 @@ class AsyncOliraClient:
         immediately for the patient. You do not choose log_type or build Olira-shaped
         payloads — the absorber handles the mapping.
 
+        idempotency_key makes the call safe to retry after a network error or 5xx: the
+        same key + resource returns the same accepted/failed counts without re-applying
+        graph updates. One resource can map to several Olira events (for example a
+        treatment plan from an EHR can produce both a follow-up item and a
+        treatment-phase update). Pass one key for the call; Olira applies it to
+        each mapped event.
+
         Raises ValidationError if the resource could not be mapped to any Olira events
         (unsupported type, unrecognized fields, or missing resourceType).
         """
         transport = self._require_transport("log_fhir")
-        result = await transport.log_fhir(patient_id, resource)
+        result = await transport.log_fhir(patient_id, resource, idempotency_key)
         if result.accepted == 0:
             msg = result.errors[0].message if result.errors else "FHIR resource produced no accepted events"
             raise ValidationError(msg)
@@ -1715,8 +1777,17 @@ class AsyncOliraClient:
         offset: int = 0,
         external_system: str | None = None,
         external_value: str | None = None,
+        integration_id: str | None = None,
     ) -> PatientListResult:
-        """List patients in your organisation. Requires api:manage-patients scope."""
+        """List patients in your organisation. Requires api:manage-patients scope.
+
+        Filters compose as AND on the same identifier: ``external_system`` alone finds
+        every patient with an identifier for that system (e.g. every Epic patient);
+        ``external_system`` + ``external_value`` finds the one patient with that exact
+        identifier; ``integration_id`` alone finds every patient linked to that specific
+        integration instance, regardless of system or value. ``external_value`` requires
+        ``external_system``.
+        """
         if self._transport is None:
             raise ValidationError(
                 "AsyncOliraClient must be used as an async context manager before calling list_patients()"
@@ -1726,6 +1797,8 @@ class AsyncOliraClient:
             params["external_system"] = external_system
         if external_value is not None:
             params["external_value"] = external_value
+        if integration_id is not None:
+            params["integration_id"] = integration_id
         return await self._transport.list_patients(params)
 
     async def update_patient(
@@ -1747,7 +1820,10 @@ class AsyncOliraClient:
         """Update a patient. Requires api:manage-patients scope.
 
         Only supplied fields are changed; omitted fields are left as-is.
-        Pass ``external_identifiers=[]`` to clear all external identifiers.
+        ``external_identifiers`` is merge/append-only: it adds any (system, value) pair
+        not already stored, and never modifies or removes one that is — including one a
+        platform integration owns. An empty list is rejected; use
+        ``remove_patient_external_identifiers()`` to remove one.
         Pass ``metadata={}`` to clear metadata.
         """
         if self._transport is None:
@@ -1768,6 +1844,40 @@ class AsyncOliraClient:
             metadata=metadata,
         )
         return await self._transport.update_patient(patient_id, req.model_dump(exclude_none=True))
+
+    async def add_patient_external_identifiers(
+        self, *, patient_id: str, identifiers: list[ExternalIdentifier]
+    ) -> ExternalIdentifierMutationResult:
+        """Add one or more external identifiers to a patient. Requires api:manage-patients scope.
+
+        Idempotent — an identifier already present (matched on system + value) is
+        skipped, not modified. Only ``system`` and ``value`` are sent; ``integration_id``
+        is platform-owned and stripped from the request even if set on the objects you pass in.
+        """
+        body = {"identifiers": [{"system": i.system, "value": i.value} for i in identifiers]}
+        return await self._require_transport("add_patient_external_identifiers").add_patient_external_identifiers(
+            patient_id, body
+        )
+
+    async def remove_patient_external_identifiers(
+        self, *, patient_id: str, identifiers: list[ExternalIdentifierMatcher]
+    ) -> ExternalIdentifierMutationResult:
+        """Remove one or more external identifiers from a patient. Requires api:manage-patients scope.
+
+        The only way to remove an external identifier — ``update_patient()`` never removes.
+        Each entry is a matcher, not just an exact identifier: ``system`` + ``value`` targets
+        one identifier; ``system`` alone removes every identifier for that system (e.g. every
+        Epic identifier across every connected Epic instance); ``integration_id`` alone
+        removes every identifier owned by that specific integration instance. Can match ANY
+        identifier, including one owned by a platform integration: doing so is a deliberate,
+        irreversible unlink. Under ``linked_only`` import mode the patient immediately stops
+        receiving further data from that integration. Idempotent — a matcher matching
+        nothing is skipped, not an error.
+        """
+        body = {"identifiers": [m.model_dump(exclude_none=True) for m in identifiers]}
+        return await self._require_transport("remove_patient_external_identifiers").remove_patient_external_identifiers(
+            patient_id, body
+        )
 
     async def delete_patient(self, *, patient_id: str, permanent: bool = False) -> None:
         """Delete a patient. Requires api:manage-patients scope.

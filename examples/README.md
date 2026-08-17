@@ -28,6 +28,7 @@ python 00_quickstart.py
 | `11_signals.py`              | Passive accelerometer Parquet via `OliraClient.send_signals`, wait for absorb                                                                                                                                                                                                   | `sdk:event-log`, `api:manage-patients` (+ `pip install olira[signals]`)             |
 | `12_document_resource_ingestion.ipynb` | Document resource ingestion: live `upload_document()` / OCR poll, plus historical `create_ingestion_job(documents=[IngestDocument(…)])` package path                                                                                                                      | `sdk:event-log`, `sdk:historical-ingest`, `api:manage-patients`                     |
 | `13_outbound_actions.py`     | Outbound actions (webhooks) end-to-end: create a destination, list, trigger an event, poll the delivery ledger, inspect a delivery's attempt history + payload, rotate the signing secret, verify the HMAC signature, clean up                                             | `sdk:actions`, `api:manage-patients`, `sdk:event-log`                               |
+| `14_idempotent_retries.py`   | `idempotency_key` on `log_batch()` and `log_fhir()` — send, retry, confirm no duplicate; `log_fhir()` when one resource becomes several Olira events                                                                                                                          | `sdk:event-log`, `api:manage-patients`                                              |
 
 ## Working with projects
 
@@ -35,7 +36,7 @@ A **project** is an isolated workspace within your org (its own patients, logs, 
 
 ```python
 # module-level
-olira.init(api_key=API_KEY, project="dev-sandbox")   # or set OLIRA_PROJECT
+olira.init(api_key=API_KEY, project="dev-sandbox")  # or set OLIRA_PROJECT
 
 # or with the client class
 client = OliraClient(api_key=API_KEY, project="dev-sandbox")
@@ -46,6 +47,7 @@ Omit `project` and a project-locked key uses its own project, while an org-wide 
 ## Notes
 
 - Examples `04` and `05` both demonstrate historical ingestion; `05` covers the specific case where patients already exist in your org.
+- `02_event_logging.py` sets `idempotency_key` on every `LogSpec` but only as parameter usage, not a retry demonstration; `14_idempotent_retries.py` shows the actual send-retry-confirm-no-duplicate flow for both `log_batch()` and `log_fhir()`.
 - `12_document_resource_ingestion.ipynb` is a Jupyter notebook (`uv sync` installs `ipykernel`). Set `DOCUMENT_PATH` in `.env` to a real PDF/image for end-to-end OCR; otherwise the notebook writes a tiny stub PDF (upload works; OCR may fail on the stub).
 - `10_project_management.py` needs an **org-wide** key with `api:manage-projects` (a project-locked key is confined to its own workspace); it creates, duplicates, and deletes throwaway projects and cleans them up.
 - `06_read_patient_state.py` and `07_patient_token.py` require an existing patient id — run `00_quickstart.py` or `02_event_logging.py` first, then pass the printed id or set `PATIENT_ID` in `.env`.

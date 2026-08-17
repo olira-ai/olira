@@ -8,7 +8,7 @@ managing patients, backfilling historical data, uploading passive sensor
 Parquet, reading Patient State, and minting patient-scoped tokens for use with
 the [Olira MCP Patient State server](https://docs.olira.ai/mcp-server).
 
-**Package:** `olira` — **Version:** `1.15.0`
+**Package:** `olira` — **Version:** `1.16.0`
 
 ## Related docs
 
@@ -116,6 +116,7 @@ olira.init(api_key="YOUR_KEY", project="dev-sandbox")
 
 # Or with the client class
 from olira import OliraClient
+
 client = OliraClient(api_key="YOUR_KEY", project="dev-sandbox")
 ```
 
@@ -227,7 +228,7 @@ olira.log(
     },
     trace=OliraTrace(
         object_type="conversation",
-        object_id="conv-abc-123",   # your conversation ID
+        object_id="conv-abc-123",  # your conversation ID
     ),
 )
 ```
@@ -433,12 +434,22 @@ patient = olira.create_patient(
 #### `list_patients`
 
 ```python
-list_patients(*, limit: int = 100, offset: int = 0, external_system: str | None = None, external_value: str | None = None) -> PatientListResult
+list_patients(*, limit: int = 100, offset: int = 0, external_system: str | None = None, external_value: str | None = None, integration_id: str | None = None) -> PatientListResult
 ```
 
 List patients in your organisation. Module-level proxy to the singleton client.
 
 Requires an API key with the api:manage-patients scope.
+
+Filters compose as AND on the **same** identifier: `external_system` alone finds every
+patient with an identifier for that system (e.g. every Epic patient);
+`external_system` + `external_value` finds every patient with that exact identifier —
+usually one, but not guaranteed: two integration instances of the same system can
+share a value (e.g. Hospital A and Hospital B both using FHIR id `MRN-12345`), so the
+same `(system, value)` pair can resolve to more than one patient. Add `integration_id`
+when you need exactly the row for one specific instance. `integration_id` alone finds
+every patient linked to that specific integration instance. `external_value` requires
+`external_system`.
 
 | Parameter         | Required | Type            | Default |
 | ----------------- | -------- | --------------- | ------- |
@@ -446,6 +457,7 @@ Requires an API key with the api:manage-patients scope.
 | `offset`          | No       | `int`           | `0`     |
 | `external_system` | No       | `Optional[str]` | `None`  |
 | `external_value`  | No       | `Optional[str]` | `None`  |
+| `integration_id`  | No       | `Optional[str]` | `None`  |
 
 **Example:**
 
@@ -453,6 +465,12 @@ Requires an API key with the api:manage-patients scope.
 result = olira.list_patients(limit=20, offset=0)
 for patient in result.patients:
     print(patient.id, patient.first_name, patient.last_name)
+
+# Every patient with an Epic identifier, without knowing the FHIR id:
+epic_patients = olira.list_patients(external_system="epic")
+
+# Every patient linked to one Epic instance:
+linked = olira.list_patients(integration_id="66f0a1...")
 ```
 
 ### Get a patient
@@ -490,6 +508,12 @@ Update a patient. Module-level proxy to the singleton client.
 Requires an API key with the api:manage-patients scope.
 Only supplied fields are changed; omitted fields are left as-is.
 
+`external_identifiers` is **merge/append-only**: any `(system, value)` pair not already
+stored is added, and anything already stored — including an identifier a platform
+integration owns — is left untouched, whether or not you include it in the list. An
+empty list is rejected (422); use [`remove_patient_external_identifiers`](#remove_patient_external_identifiers)
+to remove one.
+
 | Parameter              | Required | Type                                 | Default |
 | ---------------------- | -------- | ------------------------------------ | ------- |
 | `patient_id`           | Yes      | `str`                                | —       |
@@ -518,7 +542,9 @@ olira.update_patient(
 
 ### External Identifiers
 
-Link a patient to their ID in another system using `ExternalIdentifier`:
+Link a patient to their ID in another system using `ExternalIdentifier`. On `update_patient`,
+new identifiers are **added**, not swapped in — this call attaches two identifiers to a
+patient that has none yet:
 
 ```python
 from olira import ExternalIdentifier
@@ -532,13 +558,150 @@ olira.update_patient(
 )
 ```
 
-> **Identifier namespaces are scoped per integration instance.** Identifiers created by an
-> integration sync carry the specific integration's id and belong to that instance's
-> namespace; identifiers you supply through the SDK (MRNs, SSNs) live in their own
-> namespace. The two never collide — an SDK-supplied `("epic", "MRN-12345")` is not
-> rejected just because an Epic instance assigned the same value to another patient, and
-> duplicate checks apply only within each namespace. See
-> [Integrations & Instances](#integrations--instances).
+> **Identifier uniqueness is per project, and a plain SDK id shares a namespace with
+> integration-owned ids of the same `(system, value)`.** Identifiers created by an
+> integration sync carry that instance's id. Identifiers you supply through the SDK
+> (your CRM id, an SSN) have `integration_id: None`. Two Epic *instances* may share a
+> value — Hospital A and Hospital B can both use the same FHIR id. But an SDK-supplied
+> `("epic", "MRN-12345")` **does** conflict with an integration-owned
+> `("epic", "MRN-12345")` on another patient in the same project (409). That stops a
+> roster patient and an SDK patient from splitting the same chart. Duplicate checks do
+> not cross projects. See [Integrations & Instances](#integrations--instances).
+
+**`ExternalIdentifier.integration_id`** is the platform-assigned id of the integration that
+owns an identifier (e.g. an Epic sync). It's read-only — Olira sets it, never you — and is
+`None` for identifiers you supply yourself. It's included on every `get_patient()` /
+`list_patients()` response. You never need to set it: `update_patient()` never clears a
+stored `integration_id`, whether you omit the identifier entirely or echo it back without
+the field. Its main use is telling you what removing an identifier will *do*: any
+identifier can be removed via `remove_patient_external_identifiers()` regardless of
+`integration_id`, but removing one that's non-`None` unlinks the patient from that
+integration — see [`remove_patient_external_identifiers`](#remove_patient_external_identifiers)
+for the full flow.
+
+> **Don't hand-roll a GET → append → PUT.** If you only want to attach your own identifier
+> to a patient — without reading back and re-sending every identifier it already has —
+> use `add_patient_external_identifiers()` below instead of reconstructing the full list
+> yourself:
+>
+> ```python
+> # ✅ Direct — adds one identifier, leaves everything else untouched.
+> olira.add_patient_external_identifiers(
+>     patient_id="patient-uuid",
+>     identifiers=[ExternalIdentifier(system="my-crm", value="CRM-4471")],
+> )
+> ```
+
+#### `add_patient_external_identifiers`
+
+```python
+add_patient_external_identifiers(*, patient_id: str, identifiers: list[ExternalIdentifier]) -> ExternalIdentifierMutationResult
+```
+
+Add one or more external identifiers to a patient. Module-level proxy to the singleton client.
+
+Requires an API key with the api:manage-patients scope. Idempotent — an identifier already
+present (matched on `system` + `value`) is skipped, not modified. Only `system` and `value`
+are sent; `integration_id` is platform-owned and stripped even if set on the objects you
+pass in — you cannot use this call to claim ownership of an identifier on behalf of an
+integration.
+
+| Parameter     | Required | Type                       | Default |
+| ------------- | -------- | --------------------------- | ------- |
+| `patient_id`  | Yes      | `str`                       | —       |
+| `identifiers` | Yes      | `list[ExternalIdentifier]`  | —       |
+
+**Example:**
+
+```python
+result = olira.add_patient_external_identifiers(
+    patient_id="patient-uuid",
+    identifiers=[ExternalIdentifier(system="my-crm", value="CRM-4471")],
+)
+print(result.added, result.skipped)
+```
+
+#### `remove_patient_external_identifiers`
+
+```python
+remove_patient_external_identifiers(*, patient_id: str, identifiers: list[ExternalIdentifierMatcher]) -> ExternalIdentifierMutationResult
+```
+
+Remove one or more external identifiers from a patient. Module-level proxy to the singleton client.
+
+Requires an API key with the api:manage-patients scope. This is the **only** way to remove
+an external identifier — `update_patient()` never removes. Each entry is a
+[`ExternalIdentifierMatcher`](#externalidentifiermatcher), not a full identifier: rows
+are removed if they match every field you set.
+
+- `system` + `value` — exactly one identifier (the common case).
+- `system` only — every identifier for that system. `system="epic"` unlinks the
+  patient from **every** connected Epic instance; use `integration_id` alone to drop
+  one hospital.
+- `integration_id` only — every identifier owned by that specific integration instance.
+- `system` + `integration_id` — that system on that instance only.
+
+It can match **any** identifier, including one owned by a platform integration: doing so
+is a deliberate, irreversible unlink. Under `linked_only` import mode, the patient
+immediately stops receiving further data from that integration. Idempotent — a matcher
+that matches nothing is skipped, not an error. `value` without `system` is rejected.
+
+> **How to find the identifier you're about to delete — and know what removing it does.**
+> Call `get_patient` first. Check `integration_id` for the **consequence**, not for
+> permission: `None` means you supplied the identifier yourself. A non-`None` value
+> means an EHR integration owns it — removing it unlinks the patient from that
+> integration. If you want the human-readable name of that integration, resolve it
+> with `GET /v1/integrations/{integration_id}` (`sdk:integrations` scope) — that's a
+> different API surface than patient management and isn't exposed by this SDK version.
+>
+> ```python
+> from olira import ExternalIdentifierMatcher
+>
+> patient = olira.get_patient(patient_id="patient-uuid")
+> for ident in patient.external_identifiers:
+>     print(ident.system, ident.value, "owned by integration:", ident.integration_id)
+> # epic       MRN-12345   owned by integration: 66f0a1...   ← a platform integration link
+> # my-crm     CRM-4471    owned by integration: None        ← yours
+>
+> # Remove the identifier you added yourself:
+> olira.remove_patient_external_identifiers(
+>     patient_id="patient-uuid",
+>     identifiers=[ExternalIdentifierMatcher(system="my-crm", value="CRM-4471")],
+> )
+>
+> # Drop this patient from one Epic instance (leave other hospitals and your ids):
+> olira.remove_patient_external_identifiers(
+>     patient_id="patient-uuid",
+>     identifiers=[ExternalIdentifierMatcher(integration_id="66f0a1...")],
+> )
+> ```
+
+| Parameter     | Required | Type                              | Default |
+| ------------- | -------- | --------------------------------- | ------- |
+| `patient_id`  | Yes      | `str`                             | —       |
+| `identifiers` | Yes      | `list[ExternalIdentifierMatcher]` | —       |
+
+**Example:**
+
+```python
+from olira import ExternalIdentifierMatcher
+
+result = olira.remove_patient_external_identifiers(
+    patient_id="patient-uuid",
+    identifiers=[ExternalIdentifierMatcher(system="my-crm", value="CRM-4471")],
+)
+print(result.removed, result.skipped)
+```
+
+#### `ExternalIdentifierMutationResult`
+
+| Field                   | Type                       | Notes                                          |
+| ----------------------- | -------------------------- | ----------------------------------------------- |
+| `patient_id`            | `str`                       |                                                  |
+| `added`                 | `int`                       | Defaults to `0`                                 |
+| `removed`               | `int`                       | Defaults to `0`                                 |
+| `skipped`               | `int`                       | Already present (add) or matchers that hit nothing (remove) |
+| `external_identifiers`  | `list[ExternalIdentifier]`  | Full list after the mutation                    |
 
 ### Delete a patient
 
@@ -599,18 +762,20 @@ Returns a `PatientBatchResult` with items (successes) and errors (failures).
 ```python
 from olira import CreatePatientRequest, ExternalIdentifier
 
-result = olira.create_patients_batch([
-    CreatePatientRequest(
-        first_name="Alice",
-        last_name="Jones",
-        date_of_birth="1990-01-15T00:00:00Z",
-        sex="female",
-        timezone="UTC",
-    ),
-    CreatePatientRequest(
-        external_identifiers=[ExternalIdentifier(system="epic", value="Patient/shell-1")],
-    ),
-])
+result = olira.create_patients_batch(
+    [
+        CreatePatientRequest(
+            first_name="Alice",
+            last_name="Jones",
+            date_of_birth="1990-01-15T00:00:00Z",
+            sex="female",
+            timezone="UTC",
+        ),
+        CreatePatientRequest(
+            external_identifiers=[ExternalIdentifier(system="epic", value="Patient/shell-1")],
+        ),
+    ]
+)
 print(f"Created {result.count}, errors: {len(result.errors)}")
 ```
 
@@ -620,10 +785,21 @@ print(f"Created {result.count}, errors: {len(result.errors)}")
 
 Links a patient to their ID in an external system (e.g. Epic MRN, Flatiron ID, FHIR resource ID).
 
-| Field    | Required | Type  | Description                                  |
-| -------- | -------- | ----- | -------------------------------------------- |
-| `system` | Yes      | `str` | System name, e.g. 'epic', 'flatiron', 'fhir' |
-| `value`  | Yes      | `str` | Patient ID in that system                    |
+| Field            | Required | Type            | Description                                                                 |
+| ---------------- | -------- | --------------- | ---------------------------------------------------------------------------- |
+| `system`         | Yes      | `str`           | System name, e.g. 'epic', 'flatiron', 'fhir'                                 |
+| `value`          | Yes      | `str`           | Patient ID in that system                                                     |
+| `integration_id` | No       | `Optional[str]` | Read-only. Platform-assigned id of the owning integration; `None` if you supplied the identifier yourself. |
+
+### `ExternalIdentifierMatcher`
+
+Selects one or more stored identifiers to remove. Every field is optional; rows match if they satisfy every field you set. At least one field is required. `value` without `system` is rejected.
+
+| Field            | Required | Type            | Description |
+| ---------------- | -------- | --------------- | ----------- |
+| `system`         | No       | `Optional[str]` | System name. Alone: every identifier for that system. `system="epic"` unlinks every connected Epic instance. |
+| `value`          | No       | `Optional[str]` | Value. Requires `system`. With `system`: exactly one identifier. |
+| `integration_id` | No       | `Optional[str]` | Integration instance id. Alone: every identifier owned by that instance. With `system`: that system on that instance only. |
 
 ### `CreatePatientRequest`
 
@@ -661,7 +837,7 @@ Only the fields you set are changed; omitted fields are left as-is.
 | `timezone`             | No       | `Optional[str]`                      | — (default: `None`) |
 | `primary_disease_site` | No       | `Optional[str]`                      | — (default: `None`) |
 | `disease_stage`        | No       | `Optional[str]`                      | — (default: `None`) |
-| `external_identifiers` | No       | `Optional[list[ExternalIdentifier]]` | — (default: `None`) |
+| `external_identifiers` | No       | `Optional[list[ExternalIdentifier]]` | Merge/append-only — see [External Identifiers](#external-identifiers). An empty list is rejected. |
 | `metadata`             | No       | `Optional[dict[str, Any]]`           | — (default: `None`) |
 
 ### `Patient`
@@ -884,7 +1060,7 @@ Reactivate a deprecated project, fully intact.
 
 ```python
 client.deprecate_project(project="dev-sandbox")  # must be deprecated first
-client.delete_project(project="dev-sandbox")     # permanent, no recovery
+client.delete_project(project="dev-sandbox")  # permanent, no recovery
 ```
 
 Permanently delete a **deprecated** project and its scoped configuration (cohorts, view templates, pipelines, config). **Irreversible.**
@@ -1195,7 +1371,11 @@ for v in detail.versions:
 result = client.check_schema(
     examples=[{"reading_value": 42, "unit": "lux"}],
     schema={"type": "object", "required": ["reading_value"], "properties": {"reading_value": {"type": "number"}}},
-    mapping={"targets": [{"target_subtype": "heart_rate_data", "field_mappings": [{"target": "avg_bpm", "source": "reading_value"}]}]},
+    mapping={
+        "targets": [
+            {"target_subtype": "heart_rate_data", "field_mappings": [{"target": "avg_bpm", "source": "reading_value"}]}
+        ]
+    },
 )
 print(result.ok)
 ```
@@ -1301,7 +1481,7 @@ All log functions require `sdk:event-log` scope.
 
 Use `log()` and `log_batch()` for **ongoing operational traffic**—applications, integrations, and moderate batch sizes where each submission should update patient state through Olira's immediate graph-update path.
 
-Use `log_fhir()` when your source data is already in **FHIR R4 format**. Olira maps the resource to one or more platform log types via the same absorber used by Epic/Cerner integrations, so you don't need to choose a `log_type` or build Olira-shaped payloads yourself.
+Use `log_fhir()` when your source data is already in **FHIR R4 format**. Olira maps the resource to one or more platform log types via the same absorber used by Epic/Cerner integrations, so you don't need to choose a `log_type` or build Olira-shaped payloads yourself. Pass `idempotency_key` on `log_batch()` / `log_fhir()` if you might retry the call.
 
 For **bulk historical data** (e.g. months or years at once, or onboarding backfills before go-live), use **[Historical Data Ingestion](#historical-data-ingestion)** with `create_ingestion_job()` and the **`sdk:historical-ingest`** scope. That pipeline stages rows, replays them in chronological order, and backfills summary views — not `log_batch` at volume.
 
@@ -1398,28 +1578,35 @@ Send a batch of events directly. Module-level proxy to the singleton client.
 ```python
 from olira import LogSpec, OliraLogType
 
-result = olira.log_batch([
-    LogSpec(
-        log_type=OliraLogType.VITALS_MEASUREMENT,
-        patient_id="patient-uuid",
-        payload={
-            "measurements": {"systolic_bp_mmhg": 128, "diastolic_bp_mmhg": 82,
-                               "heart_rate_bpm": 72, "spo2_percent": None,
-                               "weight_kg": None, "temperature_celsius": None,
-                               "respiratory_rate_bpm": None},
-            "context": {"position": "sitting", "fasting": None},
-            "source": "manual_entry",
-            "collection_datetime": "2026-03-18T09:00:00Z",
-        },
-    ),
-    LogSpec(
-        log_type=OliraLogType.MEDICATION_DOSE_UPDATE,
-        patient_id="patient-uuid",
-        payload={
-            "medication_adherence": [{"status": "taken", "medication_name": "Ondansetron 4mg"}],
-        },
-    ),
-])
+result = olira.log_batch(
+    [
+        LogSpec(
+            log_type=OliraLogType.VITALS_MEASUREMENT,
+            patient_id="patient-uuid",
+            payload={
+                "measurements": {
+                    "systolic_bp_mmhg": 128,
+                    "diastolic_bp_mmhg": 82,
+                    "heart_rate_bpm": 72,
+                    "spo2_percent": None,
+                    "weight_kg": None,
+                    "temperature_celsius": None,
+                    "respiratory_rate_bpm": None,
+                },
+                "context": {"position": "sitting", "fasting": None},
+                "source": "manual_entry",
+                "collection_datetime": "2026-03-18T09:00:00Z",
+            },
+        ),
+        LogSpec(
+            log_type=OliraLogType.MEDICATION_DOSE_UPDATE,
+            patient_id="patient-uuid",
+            payload={
+                "medication_adherence": [{"status": "taken", "medication_name": "Ondansetron 4mg"}],
+            },
+        ),
+    ]
+)
 print(f"Accepted: {result.accepted}, Failed: {result.failed}")
 ```
 
@@ -1428,7 +1615,7 @@ print(f"Accepted: {result.accepted}, Failed: {result.failed}")
 #### `log_fhir`
 
 ```python
-log_fhir(*, patient_id: str, resource: dict[str, Any]) -> BatchResult
+log_fhir(*, patient_id: str, resource: dict[str, Any], idempotency_key: str | None = None) -> BatchResult
 ```
 
 Submit a single FHIR R4 resource for immediate ingestion. Module-level proxy to the singleton client.
@@ -1437,17 +1624,41 @@ Olira maps the resource to one or more platform log types via the FHIR absorber 
 
 Requires `sdk:event-log` scope.
 
-| Parameter    | Required | Type             | Default |
-| ------------ | -------- | ---------------- | ------- |
-| `patient_id` | Yes      | `str`            | —       |
-| `resource`   | Yes      | `dict[str, Any]` | —       |
+| Parameter         | Required | Type             | Default |
+| ----------------- | -------- | ---------------- | ------- |
+| `patient_id`       | Yes      | `str`            | —       |
+| `resource`         | Yes      | `dict[str, Any]` | —       |
+| `idempotency_key`  | No       | `Optional[str]`  | `None`  |
 
 `resource` must be a valid FHIR R4 JSON object with a `resourceType` field. Supported types include `Condition`, `MedicationRequest`, `MedicationStatement`, `MedicationAdministration`, `AllergyIntolerance`, `Appointment`, `Encounter`, `Procedure`, `Immunization`, `DiagnosticReport`, `DocumentReference`, `CarePlan`, `CareTeam`, `FamilyMemberHistory`, `Goal`, `Observation` (vital-signs), and `Patient`.
+
+`idempotency_key` makes a retry after a network error or 5xx safe: send the same key and the same resource again and Olira will not create a second event. Pass a key whenever you plan to retry — without one, `log_fhir()` does not reliably treat a resend as a duplicate. If the FHIR resource has no date the absorber can use, Olira timestamps the event at processing time, so two calls without a key are stored separately. Because of this, the SDK's own transport does not automatically retry a `log_fhir()` call on a network error or 5xx unless you pass `idempotency_key` — without one, an automatic retry could itself create the duplicate this parameter exists to prevent.
+
+One FHIR resource can map to several Olira events. For example, a treatment plan from an EHR can produce both a follow-up item and a treatment-phase update. Pass **one** key for the call; do not add a log type or a key per event. Olira records `your-key:clinical_plan_item` and `your-key:treatment_phase` internally so each mapped event can be retried on its own. A patient demographics update is recorded as `your-key:demographics`. `log_batch()` keeps the key you send unchanged, so the same string on both methods does not collide.
 
 **Raises `ValidationError`** if:
 
 - `resourceType` is missing (HTTP 422 from the API)
 - The resource maps to zero Olira events — unsupported type, unrecognized fields, or (for `Observation`) unrecognized category/LOINC code. The exception message explains why.
+
+**Example — safe retry:**
+
+```python
+import olira
+
+olira.init(api_key="YOUR_API_KEY")
+
+resource = {
+    "resourceType": "Condition",
+    "id": "condition-1",
+    "code": {"coding": [{"system": "http://snomed.info/sct", "code": "254837009"}]},
+    "subject": {"reference": "Patient/example"},
+}
+
+# If this call's response is lost to a network error, retry it verbatim —
+# the same idempotency_key guarantees no duplicate event is created.
+result = olira.log_fhir(patient_id="patient-uuid", resource=resource, idempotency_key="condition-2026-01-10")
+```
 
 **Example — ingest a Condition:**
 
@@ -1471,6 +1682,7 @@ result = olira.log_fhir(
         "subject": {"reference": "Patient/example"},
         "onsetDateTime": "2025-01-10T00:00:00Z",
     },
+    idempotency_key="condition-2026-01-10",
 )
 print(f"Accepted: {result.accepted}")
 ```
@@ -1502,7 +1714,7 @@ Lightweight event specification for log_batch(). Not persisted internally.
 | `payload`                   | No       | `Optional[dict[str, Any]]` | — (default: `None`)                                                                                                                       |
 | `trace`                     | No       | `Optional[OliraTrace]`     | — (default: `None`)                                                                                                                       |
 | `timestamp`                 | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
-| `idempotency_key`           | No       | `Optional[str]`            | — (default: `None`)                                                                                                                       |
+| `idempotency_key`           | No       | `Optional[str]`            | Optional key so a retry of the same log is not stored twice. (default: `None`)                                                            |
 | `metadata`                  | No       | `Optional[dict[str, Any]]` | Arbitrary key/value context stored separately from the typed payload. Surfaced in the Olira Console event detail panel. (default: `None`) |
 | `write_back`                | No       | `bool`                     | Request write-back of this log into the org's connected system — see [`log`](#log). (default: `False`)                                       |
 | `write_back_integration_id` | No       | `Optional[str]`            | Target integration instance for `write_back` when several are write-configured. (default: `None`)                                         |
@@ -1883,8 +2095,8 @@ from olira import DigestSchedule
 client.update_action_destination(
     destination_id="dest_123",
     digest_schedule=DigestSchedule(
-        time_of_day="09:00",             # "HH:MM", on a :00 or :30 boundary; defaults to "09:00"
-        timezone="America/New_York",     # IANA name; defaults to "UTC" if you don't set it
+        time_of_day="09:00",  # "HH:MM", on a :00 or :30 boundary; defaults to "09:00"
+        timezone="America/New_York",  # IANA name; defaults to "UTC" if you don't set it
         triggers=["patient.state.changed"],  # must be a subset of subscribed_triggers
     ),
 )
@@ -2023,7 +2235,7 @@ token = olira.get_patient_token(patient_id="patient-uuid")
 
 print(token.access_token)  # forward to the agent or device
 print(f"Expires in {token.expires_in}s")  # 900
-print(token.scopes)        # e.g. ["sdk:state-read", "sdk:event-log"]
+print(token.scopes)  # e.g. ["sdk:state-read", "sdk:event-log"]
 ```
 
 **Forwarding to an MCP client (httpx example):**
@@ -2033,9 +2245,11 @@ import httpx, olira
 
 olira.init(api_key="YOUR_API_KEY")
 
+
 def get_fresh_token(patient_id: str) -> str:
     tok = olira.get_patient_token(patient_id=patient_id)
     return tok.access_token
+
 
 # Mint per session — tokens expire in 15 minutes
 bearer = get_fresh_token("patient-uuid")
@@ -2054,6 +2268,7 @@ import time, olira
 from olira import AuthError
 
 olira.init(api_key="YOUR_API_KEY")
+
 
 class PatientSession:
     def __init__(self, patient_id: str) -> None:
@@ -2559,11 +2774,11 @@ olira.init(api_key="YOUR_API_KEY")
 # Filter + order + limit
 rows = (
     olira.logs("patient-uuid")
-        .eq("type", "symptom_report")
-        .gt("payload.score", 4)
-        .order("timestamp", desc=True)
-        .limit(25)
-        .execute()
+    .eq("type", "symptom_report")
+    .gt("payload.score", 4)
+    .order("timestamp", desc=True)
+    .limit(25)
+    .execute()
 )
 for row in rows:
     print(row["timestamp"], row["payload"])
@@ -2571,60 +2786,40 @@ for row in rows:
 # ilike + IN
 rows = (
     olira.logs("patient-uuid")
-        .ilike("payload.metric_type", "%pain%")
-        .in_("type", ["symptom_report", "health_metric_reported"])
-        .limit(10)
-        .execute()
+    .ilike("payload.metric_type", "%pain%")
+    .in_("type", ["symptom_report", "health_metric_reported"])
+    .limit(10)
+    .execute()
 )
 
 # OR boolean group via F()
-rows = (
-    olira.logs("patient-uuid")
-        .or_(F("payload.score").gt(7), F("type").eq("mood_reported"))
-        .limit(10)
-        .execute()
-)
+rows = olira.logs("patient-uuid").or_(F("payload.score").gt(7), F("type").eq("mood_reported")).limit(10).execute()
 
 # Projection with alias
 rows = (
     olira.logs("patient-uuid")
-        .eq("type", "health_metric_reported")
-        .select("timestamp", score="payload.score")
-        .limit(10)
-        .execute()
+    .eq("type", "health_metric_reported")
+    .select("timestamp", score="payload.score")
+    .limit(10)
+    .execute()
 )
 
 # Count only
 n = olira.logs("patient-uuid").eq("type", "symptom_report").count()
 
 # Aggregation
-agg = (
-    olira.logs("patient-uuid")
-        .group_by("type")
-        .count_agg("n")
-        .avg("payload.score", "avg_score")
-        .execute()
-)
+agg = olira.logs("patient-uuid").group_by("type").count_agg("n").avg("payload.score", "avg_score").execute()
 
 # maybe_single — returns None if empty, raises if > 1 row
 row = (
-    olira.logs("patient-uuid")
-        .eq("type", "demographics_updated")
-        .order("timestamp", desc=True)
-        .limit(1)
-        .maybe_single()
+    olira.logs("patient-uuid").eq("type", "demographics_updated").order("timestamp", desc=True).limit(1).maybe_single()
 )
 
 # Poll for everything the platform has ingested since your last check — use ingested_at,
 # not timestamp: a backfill or delayed integration sync can insert old-timestamp rows at
 # any time, so timestamp alone can silently skip events a timestamp-based cursor already
 # passed. ingested_at only ever moves forward.
-new_rows = (
-    olira.logs("patient-uuid")
-        .gt("ingested_at", last_poll_iso)
-        .order("ingested_at")
-        .execute()
-)
+new_rows = olira.logs("patient-uuid").gt("ingested_at", last_poll_iso).order("ingested_at").execute()
 ```
 
 #### `population_logs`
@@ -2643,29 +2838,13 @@ Returns a builder scoped to the whole organisation (`patient_ids=None`) or an ex
 
 ```python
 # Whole org — recent health_metric_reported events
-rows = (
-    olira.population_logs()
-        .eq("type", "health_metric_reported")
-        .order("timestamp", desc=True)
-        .limit(50)
-        .execute()
-)
+rows = olira.population_logs().eq("type", "health_metric_reported").order("timestamp", desc=True).limit(50).execute()
 
 # Explicit cohort
-rows = (
-    olira.population_logs(patient_ids=["pid-1", "pid-2"])
-        .gt("payload.score", 6)
-        .limit(100)
-        .execute()
-)
+rows = olira.population_logs(patient_ids=["pid-1", "pid-2"]).gt("payload.score", 6).limit(100).execute()
 
 # Org-wide aggregation
-agg = (
-    olira.population_logs()
-        .group_by("type")
-        .count_agg("n")
-        .execute()
-)
+agg = olira.population_logs().group_by("type").count_agg("n").execute()
 ```
 
 #### `F` — field expression helper
@@ -2963,6 +3142,7 @@ All methods are available on `AsyncOliraClient` as coroutines. Use it as an asyn
 import asyncio
 from olira import AsyncOliraClient, OliraLogType
 
+
 async def main():
     async with AsyncOliraClient(api_key="YOUR_API_KEY") as client:
         patient = await client.create_patient(first_name="Ada", last_name="Lovelace")
@@ -2973,6 +3153,7 @@ async def main():
             payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
         )
         await client.flush()
+
 
 asyncio.run(main())
 ```
@@ -3240,7 +3421,7 @@ olira.init(api_key="YOUR_sdk:historical-ingest_KEY")
 # Create the job — SDK streams the file to S3 automatically
 job = olira.create_ingestion_job(
     file="patients_and_logs.jsonl",
-    idempotency_key="initial-onboarding-2026",   # optional but recommended
+    idempotency_key="initial-onboarding-2026",  # optional but recommended
 )
 
 # Phase 1 — poll every 10 s until paused for review (typically seconds to minutes)
@@ -3278,25 +3459,29 @@ from olira import IngestRecord, IngestLogSpec, CreatePatientRequest, ExternalIde
 
 job = olira.create_ingestion_job(
     records=[
-        IngestRecord.patient(CreatePatientRequest(
-            first_name="Jane",
-            last_name="Smith",
-            date_of_birth="1980-03-22T00:00:00Z",
-            external_identifiers=[ExternalIdentifier(system="epic", value="MRN-12345")],
-        )),
-        IngestRecord.log(IngestLogSpec(
-            event_type="symptom_report",
-            # patient_id can be an external_identifier value (any system) or an Olira patient UUID
-            patient_id="MRN-12345",
-            # timestamp backdates the event — this is how historical events are placed correctly
-            # in the patient timeline. Use ISO 8601 with timezone offset or trailing 'Z'.
-            timestamp="2025-01-15T09:00:00Z",
-            payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
-            idempotency_key="report-001",    # strongly recommended — prevents duplicates on retry
-        )),
+        IngestRecord.patient(
+            CreatePatientRequest(
+                first_name="Jane",
+                last_name="Smith",
+                date_of_birth="1980-03-22T00:00:00Z",
+                external_identifiers=[ExternalIdentifier(system="epic", value="MRN-12345")],
+            )
+        ),
+        IngestRecord.log(
+            IngestLogSpec(
+                event_type="symptom_report",
+                # patient_id can be an external_identifier value (any system) or an Olira patient UUID
+                patient_id="MRN-12345",
+                # timestamp backdates the event — this is how historical events are placed correctly
+                # in the patient timeline. Use ISO 8601 with timezone offset or trailing 'Z'.
+                timestamp="2025-01-15T09:00:00Z",
+                payload={"instrument": "esas_r", "symptoms": [{"name": "pain", "score": 3}]},
+                idempotency_key="report-001",  # strongly recommended — prevents duplicates on retry
+            )
+        ),
     ],
     idempotency_key="lab-backfill-batch-1",
-    require_confirmation=False,              # run straight through without review pause
+    require_confirmation=False,  # run straight through without review pause
 )
 ```
 
