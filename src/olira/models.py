@@ -832,7 +832,15 @@ class IngestDocument:
     path: str  # local filesystem path
     patient_id: str
     log_type: str  # unstructured_report | clinical_note
-    timestamp: str
+    # Required under single_document. Omit under segmented_notes, where the file is a
+    # container spanning many encounters and each emitted note is dated from the content.
+    timestamp: str | None = None
+    processing_mode: str = "single_document"  # single_document | segmented_notes
+    # segmented_notes only. date_hints bounds and disambiguates the inferred dates
+    # ({"from": "2018-03", "to": "2025-01", "day_first": True}); layout_hints says what each
+    # page holds ({"pages": [{"left": ..., "right": ...}]}).
+    date_hints: dict[str, Any] | None = None
+    layout_hints: dict[str, Any] | None = None
     ref_id: str | None = None
     document_type: str | None = None
     note_type: str | None = None
@@ -895,8 +903,14 @@ class IngestRecord(BaseModel):
             "content_type": content_type,
             "s3_key": s3_key,
             "log_type": spec.log_type,
-            "timestamp": spec.timestamp,
+            "processing_mode": spec.processing_mode,
         }
+        if spec.timestamp:
+            data["timestamp"] = spec.timestamp
+        if spec.date_hints is not None:
+            data["date_hints"] = spec.date_hints
+        if spec.layout_hints is not None:
+            data["layout_hints"] = spec.layout_hints
         if spec.document_type:
             data["document_type"] = spec.document_type
         if spec.note_type:
