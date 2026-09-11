@@ -7,7 +7,13 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from .documents import DocumentHandle, DocumentLogType, DocumentResource, upload_document_via_transport
+from .documents import (
+    DocumentHandle,
+    DocumentLogType,
+    DocumentProcessingMode,
+    DocumentResource,
+    upload_document_via_transport,
+)
 from .exceptions import ValidationError
 from .http import AsyncHttpTransport, HttpTransport
 from .ingestion_confirm import confirm_ingestion_job_resilient, confirm_ingestion_job_resilient_async
@@ -1239,6 +1245,9 @@ class OliraClient:
                 patient_id=doc.patient_id,
                 log_type=doc.log_type,
                 timestamp=doc.timestamp,
+                processing_mode=doc.processing_mode,
+                date_hints=doc.date_hints,
+                layout_hints=doc.layout_hints,
                 ref_id=ref_id,
                 document_type=doc.document_type,
                 note_type=doc.note_type,
@@ -1408,8 +1417,11 @@ class OliraClient:
         patient_id: str,
         path: str | Path,
         log_type: DocumentLogType | str,
-        timestamp: datetime,
         idempotency_key: str,
+        timestamp: datetime | None = None,
+        processing_mode: DocumentProcessingMode | str = DocumentProcessingMode.SINGLE_DOCUMENT,
+        date_hints: dict[str, Any] | None = None,
+        layout_hints: dict[str, Any] | None = None,
         document_type: str | None = None,
         note_type: str | None = None,
         source: Any | None = None,
@@ -1422,8 +1434,24 @@ class OliraClient:
         ``log_type`` is ``unstructured_report`` (requires ``document_type``) or
         ``clinical_note`` (requires ``note_type`` + ``source``). Types are chosen
         by the caller — the platform does not infer them from the file.
+
+        ``processing_mode`` defaults to ``single_document``: one log for the whole file at
+        the ``timestamp`` you supply. Use ``segmented_notes`` for a file that spans many
+        encounters (a scanned paper folder, an external-records package). In that mode you
+        omit ``timestamp`` — the file is a container, not an event — and the platform emits
+        one ``clinical_note`` per detected visit entry, each dated from the content. Pass
+        ``date_hints`` (``{"from": "2018-03", "to": "2025-01", "day_first": True}``) to
+        bound and disambiguate those dates, and ``layout_hints``
+        (``{"pages": [{"left": ..., "right": ...}]}``) when you know what each page holds.
+
+        Add ``"reconstruct_year": True`` to ``date_hints`` to opt into year reconstruction:
+        when a handwritten two-digit year is impossible for the span — OCR reading ``23`` as
+        ``03`` is the common case — a year the span admits is substituted so the note is
+        emitted rather than dropped. The day and month stay as written, and every such note
+        is flagged ``year_reconstructed`` with a ``year_candidates`` count. Off by default,
+        because it trades a dropped note for a year that is plausible rather than read.
         """
-        if not isinstance(timestamp, datetime):
+        if timestamp is not None and not isinstance(timestamp, datetime):
             raise ValidationError("timestamp must be a datetime")
         handle = upload_document_via_transport(
             self._transport,
@@ -1431,6 +1459,9 @@ class OliraClient:
             path=path,
             log_type=log_type,
             timestamp=timestamp,
+            processing_mode=processing_mode,
+            date_hints=date_hints,
+            layout_hints=layout_hints,
             idempotency_key=idempotency_key,
             document_type=document_type,
             note_type=note_type,
@@ -2669,6 +2700,9 @@ class AsyncOliraClient:
                 patient_id=doc.patient_id,
                 log_type=doc.log_type,
                 timestamp=doc.timestamp,
+                processing_mode=doc.processing_mode,
+                date_hints=doc.date_hints,
+                layout_hints=doc.layout_hints,
                 ref_id=ref_id,
                 document_type=doc.document_type,
                 note_type=doc.note_type,

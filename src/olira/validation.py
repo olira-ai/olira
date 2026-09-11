@@ -290,13 +290,47 @@ _DOC_LOG_TYPES = frozenset({"unstructured_report", "clinical_note"})
 
 def _validate_document_row(data: dict[str, Any], line: int, known_patient_ids: set[str]) -> list[IngestionRowError]:
     errors: list[IngestionRowError] = []
-    for field in ("ref_id", "patient_id", "s3_key", "log_type", "timestamp"):
+    mode = data.get("processing_mode") or "single_document"
+    # Under segmented_notes the file is a container spanning many encounters: it carries no
+    # timestamp of its own, and each emitted note is dated from the document's content.
+    required = ["ref_id", "patient_id", "s3_key", "log_type"]
+    if mode == "single_document":
+        required.append("timestamp")
+    for field in required:
         if not data.get(field):
             errors.append(
                 IngestionRowError(
                     line=line,
                     code=f"missing_{field}",
                     message=f"Document record must have a '{field}' field",
+                )
+            )
+    if mode not in ("single_document", "segmented_notes"):
+        errors.append(
+            IngestionRowError(
+                line=line,
+                code="invalid_processing_mode",
+                message="processing_mode must be 'single_document' or 'segmented_notes'",
+            )
+        )
+    elif mode == "segmented_notes":
+        if data.get("timestamp"):
+            errors.append(
+                IngestionRowError(
+                    line=line,
+                    code="unexpected_timestamp",
+                    message=(
+                        "timestamp must be omitted for processing_mode='segmented_notes' — each "
+                        "emitted note is dated from the document's own content"
+                    ),
+                )
+            )
+        if data.get("log_type") and data.get("log_type") != "clinical_note":
+            errors.append(
+                IngestionRowError(
+                    line=line,
+                    code="invalid_log_type",
+                    message="processing_mode='segmented_notes' requires log_type='clinical_note'",
                 )
             )
     log_type = data.get("log_type")
