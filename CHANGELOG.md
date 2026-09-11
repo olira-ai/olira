@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-09-11
+
+### Added
+- `DocumentProcessingMode` — controls how a `clinical_note`/`unstructured_report` upload's OCR
+  text becomes event logs. `single_document` (default) is the existing behavior: one log at
+  the `timestamp` you supply. New `segmented_notes` treats the file as a container spanning
+  many encounters (a scanned paper folder, an external-records package) — you omit
+  `timestamp`, and the platform emits one `clinical_note` per detected visit entry, each
+  dated from the document's own content. Requires `log_type=clinical_note`.
+- `date_hints` / `layout_hints` on `upload_document()` (sync + async), scoped to
+  `segmented_notes`: `date_hints` (`{"from": ..., "to": ..., "day_first": ...}`) bounds and
+  disambiguates detected dates; `layout_hints` (`{"pages": [...]}`) can be passed when you
+  know what each page holds. `date_hints["reconstruct_year"]` opts into substituting a
+  span-plausible year for an unreadable handwritten two-digit year rather than dropping the
+  note — off by default.
+- `DocumentSegment` model — one detected encounter entry in a `segmented_notes` document,
+  including `status`/`hold_reason` for segments detected but not emitted, and
+  `year_reconstructed`/`year_candidates` when year reconstruction applied.
+- `DocumentResource` gained `processing_mode`, `event_log_ids`, `ocr_method`, and per-document
+  segmentation counters (`segments_detected`, `segments_emitted`, `segments_held`,
+  `segments_year_reconstructed`, `unassigned_chars`, `segments`).
+- New `DocumentStatus` values for the `segmented_notes` path: `segmenting`, `logs_emitted`,
+  `segmentation_failed`.
+
+### Changed
+- `upload_document()` / `upload_document_via_transport()`: `timestamp` is now optional
+  (required for `single_document`, must be omitted for `segmented_notes`) and reordered after
+  `idempotency_key` in the signature.
+
 ## [1.16.0] - 2026-08-17
 
 ### Added
